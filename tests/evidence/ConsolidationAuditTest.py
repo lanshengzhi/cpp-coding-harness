@@ -968,8 +968,9 @@ class ReanchoredLedgerTest(unittest.TestCase):
         # whole-row and left StdinBuffer.flush validated but bounded on the
         # combined flush+callback seam: 609.
         # #1245 promotes ProcessTerminal.clearScreen: 566; the #1240
-        # negative-control pilot promotes strict JSON validation: 567.
-        self.assertEqual(len(delivered), 567)
+        # negative-control pilot promotes strict JSON validation: 567. The
+        # remaining #1240 discriminators promote ten further Chord rows: 577.
+        self.assertEqual(len(delivered), 577)
         for row in self.ledger["rows"]:
             if row["verification"] == "verified":
                 self.assertIn(row["id"], delivered)
@@ -1012,18 +1013,33 @@ class ReanchoredLedgerTest(unittest.TestCase):
         records = load(ROOT / "docs/research/pi-v1.3.0/1058-deliveries.json")["records"]
         claims = {claim["id"]: claim for record in records for claim in record["rows"]}
         rows = {row["id"]: row for row in self.ledger["rows"]}
+        promoted_1240 = {
+            "cch_chord:context:without-abort-signal",
+            "cch_chord:delta:batch-application",
+            "cch_chord:delta:immutable-application",
+            "cch_chord:delta:mutable-application",
+            "cch_chord:delta:prepare-replace",
+            "cch_chord:state:attached-hydration",
+            "cch_chord:state:dispose",
+            "cch_chord:Chord:draft",
+            "cch_chord:json:copy-json",
+            "cch_chord:json:json-value",
+            "cch_chord:json:strict-validation",
+        }
         for row_id, ticket in expected.items():
             with self.subTest(row=row_id):
                 claim = claims[row_id]
                 self.assertTrue(claim["comparisons"])
-                if row_id == "cch_chord:json:strict-validation":
-                    self.assertEqual(claim["remainingBoundary"], [])
-                    self.assertIn("negativeControl", claim["discriminatingCase"])
-                    self.assertEqual(rows[row_id]["verification"], "verified")
-                else:
+                if row_id not in promoted_1240:
+                    self.assertTrue(claim["remainingBoundary"])
                     self.assertTrue(any(f"#{ticket}" in boundary for boundary in claim["remainingBoundary"]))
                     self.assertNotEqual(rows[row_id]["verification"], "verified")
                     self.assertNotIn("delivery", rows[row_id])
+                else:
+                    self.assertEqual(claim["remainingBoundary"], [])
+                    self.assertIn("negativeControl", claim["discriminatingCase"])
+                    self.assertEqual(rows[row_id]["verification"], "verified")
+                    self.assertIn("delivery", rows[row_id])
 
     def test_committed_ledger_matches_a_fresh_build(self) -> None:
         plan = load(PLAN)
@@ -1274,12 +1290,7 @@ class TicketMappedLedgerTest(unittest.TestCase):
     WITHDRAWN_UNREFERENCED = [
         "cch_agent_core:Agent:prompt-busy",
         "cch_agent_core:Agent:reset",
-        "cch_chord:context:without-abort-signal",
-        "cch_chord:delta:batch-application",
-        "cch_chord:delta:immutable-application",
         "cch_chord:delta:overlap",
-        "cch_chord:json:copy-json",
-        "cch_chord:json:json-value",
         "cch_codemode:codemode-execute-outcome",
         "cch_codemode:codemode-portable-entry",
         "cch_coding_agent:codemode-models-description-gate",
@@ -1290,7 +1301,6 @@ class TicketMappedLedgerTest(unittest.TestCase):
         "cch_mcp:mcp-request-auth",
     ]
     UNREFERENCED_1058_DRAFT = [
-        "cch_chord:Chord:draft",
         "cch_chord:Chord:json",
         "cch_durable:Storage:jsonl:ordering",
         "cch_durable:Storage:jsonl:sidecar",

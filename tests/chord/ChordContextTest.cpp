@@ -43,6 +43,22 @@ void check_frozen_state(
     CHECK(context.abort_reason() == frozen_reason);
 }
 
+[[nodiscard]] bool matches_frozen_masked_state(
+        const support::JsonValue::object_t& frozen, const Context& context, const ContextKey<std::string>& key) {
+    const auto value = support::json_string_member(frozen, "value");
+    const auto present = support::json_bool_member(frozen, "present");
+    const auto aborted = support::json_bool_member(frozen, "aborted");
+    REQUIRE(value.has_value());
+    REQUIRE(present.has_value());
+    REQUIRE(aborted.has_value());
+    const auto reason = support::json_string_member(frozen, "reason");
+    const std::optional<std::string> expected_reason =
+            reason.has_value() ? std::optional<std::string>{std::string{*reason}} : std::nullopt;
+    return context.value(key) == std::optional<std::string>{std::string{*value}} &&
+           context.stop_token().stop_possible() == *present && context.aborted() == *aborted &&
+           context.abort_reason() == expected_reason;
+}
+
 } // namespace
 
 TEST_CASE("background and todo contexts are distinct empty roots", "[chord][context][issue1060][spec]") {
@@ -214,6 +230,7 @@ TEST_CASE("without abort signal masks cancellation while preserving typed values
     // Frozen masked: the frozen typed value survives with no signal, no abort, no reason.
     const auto masked = without_abort_signal(context);
     check_frozen_state(*frozen_masked, masked, key);
+    CHECK(matches_frozen_masked_state(*frozen_masked, masked, key));
 
     // Frozen plainBackground: no abort signal, not aborted, no reason.
     check_frozen_state(*frozen_plain_background, background_context(), key);
@@ -221,6 +238,26 @@ TEST_CASE("without abort signal masks cancellation while preserving typed values
     // Frozen withUndefinedSignal: an un-aborted signal is present.
     const auto visible = with_abort_signal(std::stop_token{}, std::string{"unused"}, background_context());
     check_frozen_state(*frozen_with_signal, visible, key);
+}
+
+TEST_CASE("frozen masked context rejects pass-through and value-dropping controls",
+        "[chord][context][cancellation][issue1240][spec]") {
+    const auto frozen =
+            context_cancellation_scenario("withoutAbortSignal removes cancellation while preserving typed values");
+    const auto* expected = frozen.object_member("masked");
+    const auto value = frozen.inputs_string("value");
+    REQUIRE(expected != nullptr);
+    REQUIRE(value.has_value());
+
+    const auto key = create_context_key<std::string>("value");
+    auto parent = with_cancel(background_context());
+    const auto context = with_context_value(key, *value, parent.context());
+    parent.cancel("cleanup-cancel");
+
+    // A pass-through retains cancellation; an empty root discards the value.
+    CHECK_FALSE(matches_frozen_masked_state(*expected, context, key));
+    CHECK_FALSE(matches_frozen_masked_state(*expected, background_context(), key));
+    CHECK(matches_frozen_masked_state(*expected, without_abort_signal(context), key));
 }
 
 // The masked context must remain detached when cancellation happens after it is created.

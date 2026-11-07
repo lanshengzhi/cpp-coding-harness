@@ -346,6 +346,93 @@ void record_delivery(
     into.push_back(DeliveryEvent{.kind = kind, .sequence = sequence, .value = value});
 }
 
+[[nodiscard]] bool matches_frozen_hydration(const cch::tests::FrozenChordScenario& frozen,
+        const std::vector<DeliveryEvent>& actual,
+        const std::vector<Json>& actual_values,
+        const Json& final_value) {
+    const auto* expected = frozen.array_member("deliveries");
+    const auto* expected_final = frozen.member("finalValue");
+    REQUIRE(expected != nullptr);
+    REQUIRE(expected_final != nullptr);
+    const auto final_json = Json::from_support(*expected_final);
+    REQUIRE(final_json);
+    if (actual.size() != expected->size() || actual_values.size() != actual.size() || final_value != *final_json)
+        return false;
+    for (std::size_t index = 0; index < actual.size(); ++index) {
+        const auto* record = expected->at(index).get_if<support::JsonValue::object_t>();
+        REQUIRE(record != nullptr);
+        const auto kind = support::json_string_member(*record, "kind");
+        const auto sequence = support::json_integer_member(*record, "sequence");
+        const auto* value = support::json_member(*record, "value");
+        REQUIRE(kind.has_value());
+        REQUIRE(sequence.has_value());
+        REQUIRE(value != nullptr);
+        const auto expected_value = Json::from_support(*value);
+        REQUIRE(expected_value);
+        if (actual[index].kind != (*kind == "hydrate" ? ReplicatedStateDeliveryKind::Hydrate
+                                                      : ReplicatedStateDeliveryKind::Update) ||
+                actual[index].sequence != *sequence || actual_values[index] != *expected_value)
+            return false;
+    }
+    return true;
+}
+
+struct FrozenDisposalObservation {
+    std::size_t after_attach;
+    std::size_t after_first;
+    std::size_t after_second;
+    Json first_value;
+    Json second_value;
+};
+
+[[nodiscard]] bool matches_frozen_disposal(
+        const cch::tests::FrozenChordScenario& frozen, const FrozenDisposalObservation& actual) {
+    const auto after_attach = frozen.number_member("attachmentCountAfterAttach");
+    const auto after_first = frozen.number_member("attachmentCountAfterFirstDispose");
+    const auto after_second = frozen.number_member("attachmentCountAfterSecondDispose");
+    const auto* first_value = frozen.member("firstValueAfterDisposeAndLaterCommit");
+    const auto* second_value = frozen.member("secondValueAfterLaterCommit");
+    REQUIRE(after_attach.has_value());
+    REQUIRE(after_first.has_value());
+    REQUIRE(after_second.has_value());
+    REQUIRE(first_value != nullptr);
+    REQUIRE(second_value != nullptr);
+    const auto first_json = Json::from_support(*first_value);
+    const auto second_json = Json::from_support(*second_value);
+    REQUIRE(first_json);
+    REQUIRE(second_json);
+    REQUIRE(std::cmp_less_equal(actual.after_attach, std::uint64_t{1} << 53));
+    REQUIRE(std::cmp_less_equal(actual.after_first, std::uint64_t{1} << 53));
+    REQUIRE(std::cmp_less_equal(actual.after_second, std::uint64_t{1} << 53));
+    return static_cast<double>(actual.after_attach) == *after_attach &&
+           static_cast<double>(actual.after_first) == *after_first &&
+           static_cast<double>(actual.after_second) == *after_second && actual.first_value == *first_json &&
+           actual.second_value == *second_json;
+}
+
+[[nodiscard]] bool matches_frozen_late_rejection(const cch::tests::FrozenChordScenario& frozen,
+        const std::vector<std::string>& errors,
+        const std::vector<double>& received) {
+    const auto* expected_errors = frozen.array_member("reportedErrors");
+    const auto* expected_received = frozen.array_member("received");
+    REQUIRE(expected_errors != nullptr);
+    REQUIRE(expected_received != nullptr);
+    if (errors.size() != expected_errors->size() || received.size() != expected_received->size()) return false;
+    for (std::size_t index = 0; index < errors.size(); ++index) {
+        const auto* record = expected_errors->at(index).get_if<support::JsonValue::object_t>();
+        REQUIRE(record != nullptr);
+        const auto message = support::json_string_member(*record, "message");
+        REQUIRE(message.has_value());
+        if (errors[index] != *message) return false;
+    }
+    for (std::size_t index = 0; index < received.size(); ++index) {
+        const auto* number = expected_received->at(index).get_if<double>();
+        REQUIRE(number != nullptr);
+        if (received[index] != *number) return false;
+    }
+    return true;
+}
+
 } // namespace
 
 // Frozen evidence: fixtures/pi-v1.3.0/audit-1062/ordered-frames.json
@@ -435,10 +522,14 @@ TEST_CASE("attachment captures the snapshot before activation and drains buffere
     REQUIRE(attached.has_value());
 
     std::vector<DeliveryEvent> deliveries;
-    auto unsubscribe = attached->subscribe([&deliveries](Json value, Context, ReplicatedStateDelivery delivery) {
-        record_delivery(deliveries, delivery.kind, delivery.sequence, number_of(value));
-        return ready();
-    });
+    std::vector<Json> delivered_values;
+    // The subscription is removed before either captured vector leaves scope.
+    auto unsubscribe = attached->subscribe(
+            [&deliveries, &delivered_values](Json value, Context, ReplicatedStateDelivery delivery) {
+                record_delivery(deliveries, delivery.kind, delivery.sequence, number_of(value));
+                delivered_values.push_back(value);
+                return ready();
+            });
 
     const auto* frozen_deliveries = frozen.array_member("deliveries");
     REQUIRE(frozen_deliveries != nullptr);
@@ -446,6 +537,90 @@ TEST_CASE("attachment captures the snapshot before activation and drains buffere
     auto final_value = Json::from_support(*frozen.member("finalValue"));
     REQUIRE(final_value.has_value());
     CHECK(number_of(attached->value()) == number_of(*final_value));
+    CHECK(matches_frozen_hydration(frozen, deliveries, delivered_values, attached->value()));
+    unsubscribe();
+}
+
+TEST_CASE("frozen attachment rejects dropping frames buffered during attach",
+        "[chord][replicated_state][issue1240][spec]") {
+    const auto frozen = ordered_frames_scenario(
+            "attachment captures the snapshot before activation and drains buffered frames in commit order");
+    const auto* snapshot = frozen.inputs_member("snapshot");
+    const auto* commits = frozen.inputs_member("commitsDuringAttach");
+    REQUIRE(snapshot != nullptr);
+    REQUIRE(commits != nullptr);
+    const auto* snapshot_object = snapshot->get_if<support::JsonValue::object_t>();
+    const auto* records = commits->get_if<support::JsonValue::array_t>();
+    REQUIRE(snapshot_object != nullptr);
+    REQUIRE(records != nullptr);
+    const auto initial = support::json_number_member(*snapshot_object, "value");
+    const auto cursor = support::json_integer_member(*snapshot_object, "cursor");
+    REQUIRE(initial.has_value());
+    REQUIRE(cursor.has_value());
+    std::vector<std::pair<double, std::int64_t>> frames;
+    for (const auto& record : *records) {
+        const auto* object = record.get_if<support::JsonValue::object_t>();
+        REQUIRE(object != nullptr);
+        const auto value = support::json_number_member(*object, "value");
+        const auto sequence = support::json_integer_member(*object, "cursor");
+        REQUIRE(value.has_value());
+        REQUIRE(sequence.has_value());
+        frames.emplace_back(*value, *sequence);
+    }
+
+    TestSource shallow_source{revision(*initial), *cursor};
+    // attach invokes this callback synchronously; the source and frames outlive that call.
+    shallow_source.on_attach = [&shallow_source, &frames] {
+        for (const auto& [value, sequence] : frames)
+            shallow_source.commit_at(revision(value), sequence);
+    };
+    // This state attaches and activates normally, but its frame handler ignores every update.
+    struct ShallowState {
+        std::unique_ptr<ReplicatedStateSourceAttachment> attachment;
+        Json value;
+        std::int64_t sequence{0};
+        std::size_t ignored{0};
+        explicit ShallowState(std::unique_ptr<ReplicatedStateSourceAttachment> source_attachment)
+            : attachment(std::move(source_attachment)), value(attachment->snapshot().value) {
+            // The fixture settles activation synchronously and the state outlives its attachment.
+            attachment->activate([this](const ReplicatedStateSourceFrame&) { ++ignored; });
+        }
+        ~ShallowState() { attachment->dispose(); }
+        void subscribe(const std::function<void(Json, ReplicatedStateDelivery)>& listener) const {
+            listener(
+                    value, ReplicatedStateDelivery{.kind = ReplicatedStateDeliveryKind::Hydrate, .sequence = sequence});
+        }
+    };
+    auto source_attachment = shallow_source.attach();
+    REQUIRE(source_attachment);
+    ShallowState shallow{std::move(*source_attachment)};
+    std::vector<DeliveryEvent> shallow_deliveries;
+    std::vector<Json> shallow_values;
+    shallow.subscribe([&shallow_deliveries, &shallow_values](Json value, ReplicatedStateDelivery delivery) {
+        record_delivery(shallow_deliveries, delivery.kind, delivery.sequence, number_of(value));
+        shallow_values.push_back(value);
+    });
+    CHECK(shallow.ignored == frames.size());
+    CHECK_FALSE(matches_frozen_hydration(frozen, shallow_deliveries, shallow_values, shallow.value));
+
+    TestSource source{revision(*initial), *cursor};
+    // attach invokes this callback synchronously; the source and frames outlive that call.
+    source.on_attach = [&source, &frames] {
+        for (const auto& [value, sequence] : frames)
+            source.commit_at(revision(value), sequence);
+    };
+    auto attached = AttachedReplicatedState::attach(source);
+    REQUIRE(attached);
+    std::vector<DeliveryEvent> deliveries;
+    std::vector<Json> delivered_values;
+    // The subscription is removed before the captured vectors leave scope.
+    auto unsubscribe = attached->subscribe(
+            [&deliveries, &delivered_values](Json value, Context, ReplicatedStateDelivery delivery) {
+                record_delivery(deliveries, delivery.kind, delivery.sequence, number_of(value));
+                delivered_values.push_back(value);
+                return ready();
+            });
+    CHECK(matches_frozen_hydration(frozen, deliveries, delivered_values, attached->value()));
     unsubscribe();
 }
 
@@ -641,6 +816,7 @@ TEST_CASE("independent attachments converge separately and dispose idempotently"
     REQUIRE(first.has_value());
     REQUIRE(second.has_value());
     CHECK(source.attachment_count() == static_cast<std::size_t>(*count_after_attach));
+    const auto observed_after_attach = source.attachment_count();
 
     std::vector<DeliveryEvent> second_deliveries;
     auto second_unsubscribe =
@@ -660,6 +836,7 @@ TEST_CASE("independent attachments converge separately and dispose idempotently"
     first->dispose();
     first->dispose();
     CHECK(source.attachment_count() == static_cast<std::size_t>(*count_after_first_dispose));
+    const auto observed_after_first = source.attachment_count();
 
     source.commit_at(revision(commit_values[1]), commit_cursors[1]);
     CHECK(number_of(first->value()) == number_of(*first_after_dispose));
@@ -679,8 +856,111 @@ TEST_CASE("independent attachments converge separately and dispose idempotently"
 
     second->dispose();
     CHECK(source.attachment_count() == static_cast<std::size_t>(*count_after_second_dispose));
+    CHECK(matches_frozen_disposal(frozen,
+            FrozenDisposalObservation{.after_attach = observed_after_attach,
+                    .after_first = observed_after_first,
+                    .after_second = source.attachment_count(),
+                    .first_value = first->value(),
+                    .second_value = second->value()}));
     CHECK(number_of(first->value()) == number_of(*first_after_dispose));
     second_unsubscribe();
+}
+
+TEST_CASE("frozen attachment comparison rejects coupled disposal", "[chord][replicated_state][issue1240][spec]") {
+    const auto frozen = ordered_frames_scenario(
+            "independent attachments converge separately and dispose idempotently without affecting each other");
+    const auto* snapshot = frozen.inputs_member("snapshot");
+    const auto* commits = frozen.inputs_member("commits");
+    REQUIRE(snapshot != nullptr);
+    REQUIRE(commits != nullptr);
+    const auto* snapshot_object = snapshot->get_if<support::JsonValue::object_t>();
+    const auto* commit_array = commits->get_if<support::JsonValue::array_t>();
+    REQUIRE(snapshot_object != nullptr);
+    REQUIRE(commit_array != nullptr);
+    REQUIRE(commit_array->size() == 2);
+    const auto* first_commit = commit_array->at(0).get_if<support::JsonValue::object_t>();
+    const auto* second_commit = commit_array->at(1).get_if<support::JsonValue::object_t>();
+    REQUIRE(first_commit != nullptr);
+    REQUIRE(second_commit != nullptr);
+    const auto initial = support::json_number_member(*snapshot_object, "value");
+    const auto cursor = support::json_integer_member(*snapshot_object, "cursor");
+    const auto value = support::json_number_member(*first_commit, "value");
+    const auto sequence = support::json_integer_member(*first_commit, "cursor");
+    const auto later_value = support::json_number_member(*second_commit, "value");
+    const auto later_sequence = support::json_integer_member(*second_commit, "cursor");
+    REQUIRE(initial.has_value());
+    REQUIRE(cursor.has_value());
+    REQUIRE(value.has_value());
+    REQUIRE(sequence.has_value());
+    REQUIRE(later_value.has_value());
+    REQUIRE(later_sequence.has_value());
+
+    // This shallow attached-state implementation couples disposal across its group.
+    struct CoupledGroup {
+        // The source outlives the group, and the states outlive every group disposal.
+        TestSource& source;
+        // Each attachment is owned by a state that outlives every group disposal.
+        std::vector<ReplicatedStateSourceAttachment*> attachments;
+        struct State {
+            // The group outlives this state, and the attachment is disposed before destruction.
+            CoupledGroup& group;
+            std::unique_ptr<ReplicatedStateSourceAttachment> attachment;
+            Json value;
+            State(CoupledGroup& owner, std::unique_ptr<ReplicatedStateSourceAttachment> acquired)
+                : group(owner), attachment(std::move(acquired)), value(attachment->snapshot().value) {
+                // The state outlives the callback and disposes its source attachment.
+                attachment->activate([this](const ReplicatedStateSourceFrame& frame) { value = frame.value; });
+            }
+            ~State() { attachment->dispose(); }
+            void dispose() {
+                for (auto* attachment_pointer : group.attachments)
+                    attachment_pointer->dispose();
+            }
+        };
+        std::unique_ptr<State> attach() {
+            auto attachment = source.attach();
+            REQUIRE(attachment);
+            auto state = std::make_unique<State>(*this, std::move(*attachment));
+            attachments.push_back(state->attachment.get());
+            return state;
+        }
+    };
+    TestSource shallow_source{revision(*initial), *cursor};
+    CoupledGroup shallow{.source = shallow_source, .attachments = {}};
+    auto shallow_first = shallow.attach();
+    auto shallow_second = shallow.attach();
+    const auto shallow_after_attach = shallow_source.attachment_count();
+    shallow_source.commit_at(revision(*value), *sequence);
+    shallow_first->dispose();
+    shallow_first->dispose();
+    const auto shallow_after_first = shallow_source.attachment_count();
+    shallow_source.commit_at(revision(*later_value), *later_sequence);
+    shallow_second->dispose();
+    CHECK_FALSE(matches_frozen_disposal(frozen,
+            FrozenDisposalObservation{.after_attach = shallow_after_attach,
+                    .after_first = shallow_after_first,
+                    .after_second = shallow_source.attachment_count(),
+                    .first_value = shallow_first->value,
+                    .second_value = shallow_second->value}));
+
+    TestSource source{revision(*initial), *cursor};
+    auto first = AttachedReplicatedState::attach(source);
+    auto second = AttachedReplicatedState::attach(source);
+    REQUIRE(first);
+    REQUIRE(second);
+    const auto after_attach = source.attachment_count();
+    source.commit_at(revision(*value), *sequence);
+    first->dispose();
+    first->dispose();
+    const auto after_first = source.attachment_count();
+    source.commit_at(revision(*later_value), *later_sequence);
+    second->dispose();
+    CHECK(matches_frozen_disposal(frozen,
+            FrozenDisposalObservation{.after_attach = after_attach,
+                    .after_first = after_first,
+                    .after_second = source.attachment_count(),
+                    .first_value = first->value(),
+                    .second_value = second->value()}));
 }
 
 // Frozen evidence: fixtures/pi-v1.3.0/audit-1057/replicated-state.json
@@ -1434,6 +1714,89 @@ TEST_CASE("a callback rejection that settles after unsubscribe is still reported
     const auto* frozen_received = frozen.array_member("received");
     REQUIRE(frozen_received != nullptr);
     check_frozen_numbers(received, *frozen_received);
+    CHECK(matches_frozen_late_rejection(frozen, errors, received));
+}
+
+TEST_CASE("frozen late rejection rejects suppressing errors after unsubscribe",
+        "[chord][replicated_state][issue1240][spec]") {
+    const auto frozen =
+            observer_delivery_scenario("a callback rejection that settles after unsubscribe is still reported");
+    const auto* snapshot = frozen.inputs_member("snapshot");
+    const auto rejection = frozen.inputs_string("lateRejection");
+    REQUIRE(snapshot != nullptr);
+    REQUIRE(rejection.has_value());
+    const auto* snapshot_object = snapshot->get_if<support::JsonValue::object_t>();
+    REQUIRE(snapshot_object != nullptr);
+    const auto value = support::json_number_member(*snapshot_object, "value");
+    const auto cursor = support::json_integer_member(*snapshot_object, "cursor");
+    REQUIRE(value.has_value());
+    REQUIRE(cursor.has_value());
+
+    // The faulty dispatcher drops errors from pending listeners after unsubscribe.
+    struct ShallowDispatcher {
+        bool subscribed{false};
+        bool pending{false};
+        std::move_only_function<void(const support::Error&)> on_error;
+        std::move_only_function<support::AsyncResult<void>(Json)> listener;
+        std::optional<Json> queued;
+        void subscribe(Json initial, std::move_only_function<support::AsyncResult<void>(Json)> callback) {
+            subscribed = true;
+            listener = std::move(callback);
+            pending = true;
+            auto result = listener(std::move(initial));
+            // The test settles this completion before destroying the dispatcher.
+            std::move(result).start([this](std::expected<void, support::Error> outcome) noexcept {
+                pending = false;
+                if (!outcome && subscribed) on_error(outcome.error());
+            });
+        }
+        void commit(Json next) {
+            if (subscribed && pending) queued = std::move(next);
+        }
+        void unsubscribe() {
+            subscribed = false;
+            queued.reset();
+        }
+    };
+    std::vector<std::string> shallow_errors;
+    std::vector<double> shallow_received;
+    std::optional<Completion> shallow_hydration;
+    // The recorded vectors and completion outlive the dispatcher and its callbacks.
+    ShallowDispatcher shallow{
+            .on_error = [&shallow_errors](const support::Error& error) { shallow_errors.push_back(error.message); },
+            .listener = {},
+            .queued = {}};
+    shallow.subscribe(revision(*value), [&shallow_received, &shallow_hydration](Json current) {
+        shallow_received.push_back(number_of(current));
+        return hold(shallow_hydration);
+    });
+    shallow.commit(revision(1));
+    shallow.unsubscribe();
+    REQUIRE(shallow_hydration.has_value());
+    settle_failure(shallow_hydration, *rejection);
+    const auto* expected_received = frozen.array_member("received");
+    REQUIRE(expected_received != nullptr);
+    check_frozen_numbers(shallow_received, *expected_received);
+    CHECK(shallow_errors.empty());
+    CHECK_FALSE(matches_frozen_late_rejection(frozen, shallow_errors, shallow_received));
+
+    TestSource source{revision(*value), *cursor};
+    std::vector<std::string> errors;
+    std::vector<double> received;
+    // Both vectors outlive the attached state; the pending listener is settled below.
+    auto attached = AttachedReplicatedState::attach(source,
+            ReplicatedStateSourceOptions{
+                    .onError = [&errors](const support::Error& error) { errors.push_back(error.message); }});
+    REQUIRE(attached);
+    std::optional<Completion> hydration;
+    auto unsubscribe = attached->subscribe([&received, &hydration](Json current, Context, ReplicatedStateDelivery) {
+        received.push_back(number_of(current));
+        return hold(hydration);
+    });
+    source.commit(revision(1));
+    unsubscribe();
+    settle_failure(hydration, *rejection);
+    CHECK(matches_frozen_late_rejection(frozen, errors, received));
 }
 
 // Frozen evidence: fixtures/pi-v1.3.0/audit-1057/replicated-state.json

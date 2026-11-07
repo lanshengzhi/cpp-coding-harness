@@ -1,0 +1,1155 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="(empty)"
+	tests="104"
+	failures="0"
+	disabled="0"
+	skipped="0"
+	hostname=""
+	time="0"
+	timestamp="2026-11-07T18:51:17"
+	>
+	<testcase name="UTF-8 byte length and character-end boundaries match the frozen output helpers" classname="UTF-8 byte length and character-end boundaries match the frozen output helpers" time="0.00350673" status="run">
+		<properties>
+			<property name="cmake_labels" value="chord;issue1060;output;spec;utf8"/>
+		</properties>
+		<system-out>Filters: "UTF-8 byte length and character-end boundaries match the frozen output helpers"
+Randomness seeded to: 3397729455
+===============================================================================
+All tests passed (21 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a backward cursor reports one ordering gap and retains the last good value" classname="a backward cursor reports one ordering gap and retains the last good value" time="0.00320438" status="run">
+		<properties>
+			<property name="cmake_labels" value="chord;issue1062;replicated_state;spec"/>
+		</properties>
+		<system-out>Filters: "a backward cursor reports one ordering gap and retains the last good value"
+Randomness seeded to: 658017919
+===============================================================================
+All tests passed (13 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a callback rejection that settles after unsubscribe is still reported" classname="a callback rejection that settles after unsubscribe is still reported" time="0.00487327" status="run">
+		<properties>
+			<property name="cmake_labels" value="chord;issue1062;replicated_state;spec"/>
+		</properties>
+		<system-out>Filters: "a callback rejection that settles after unsubscribe is still reported"
+Randomness seeded to: 4045210321
+===============================================================================
+All tests passed (17 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a child cancellation is isolated while parent cancellation reaches an already-created context" classname="a child cancellation is isolated while parent cancellation reaches an already-created context" time="0.00426908" status="run">
+		<properties>
+			<property name="cmake_labels" value="cancellation;chord;context;issue1060;spec"/>
+		</properties>
+		<system-out>Filters: "a child cancellation is isolated while parent cancellation reaches an already-created context"
+Randomness seeded to: 421719298
+===============================================================================
+All tests passed (85 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a committed watch frame&apos;s frozen delta vocabulary matches the tracker draft and value" classname="a committed watch frame&apos;s frozen delta vocabulary matches the tracker draft and value" time="0.00435735" status="run">
+		<properties>
+			<property name="cmake_labels" value="chord;decode;delta;issue1185;spec;vocabulary"/>
+		</properties>
+		<system-out>Filters: "a committed watch frame's frozen delta vocabulary matches the tracker draft and value"
+Randomness seeded to: 529457553
+===============================================================================
+All tests passed (16 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a context wait delivers the work result when the caller is not cancelled" classname="a context wait delivers the work result when the caller is not cancelled" time="0.00265722" status="run">
+		<properties>
+			<property name="cmake_labels" value="cancellation;chord;context;discriminating;issue1184"/>
+		</properties>
+		<system-out>Filters: "a context wait delivers the work result when the caller is not cancelled"
+Randomness seeded to: 2578964210
+===============================================================================
+All tests passed (6 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a context wait rejects with the caller abort reason while the underlying work still completes" classname="a context wait rejects with the caller abort reason while the underlying work still completes" time="0.00289608" status="run">
+		<properties>
+			<property name="cmake_labels" value="cancellation;chord;context;issue1184;spec"/>
+		</properties>
+		<system-out>Filters: "a context wait rejects with the caller abort reason while the underlying work still completes"
+Randomness seeded to: 3265306807
+===============================================================================
+All tests passed (16 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a cursor gap is reported once and leaves the last good replicated value" classname="a cursor gap is reported once and leaves the last good replicated value" time="0.00409597" status="run">
+		<properties>
+			<property name="cmake_labels" value="chord;issue1062;replicated_state;spec"/>
+		</properties>
+		<system-out>Filters: "a cursor gap is reported once and leaves the last good replicated value"
+Randomness seeded to: 3876198961
+===============================================================================
+All tests passed (20 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a failing listener is reported in isolation and keeps receiving later deliveries" classname="a failing listener is reported in isolation and keeps receiving later deliveries" time="0.00411235" status="run">
+		<properties>
+			<property name="cmake_labels" value="chord;issue1062;replicated_state;spec"/>
+		</properties>
+		<system-out>Filters: "a failing listener is reported in isolation and keeps receiving later deliveries"
+Randomness seeded to: 633267502
+===============================================================================
+All tests passed (65 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a failing state listener is reported through onError without stopping another subscription" classname="a failing state listener is reported through onError without stopping another subscription" time="0.00293904" status="run">
+		<properties>
+			<property name="cmake_labels" value="chord;issue1062;replicated_state;spec"/>
+		</properties>
+		<system-out>Filters: "a failing state listener is reported through onError without stopping another subscription"
+Randomness seeded to: 5092959
+===============================================================================
+All tests passed (39 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a frame cursor outside the safe integer range fails the attachment and keeps the last good value" classname="a frame cursor outside the safe integer range fails the attachment and keeps the last good value" time="0.00359478" status="run">
+		<properties>
+			<property name="cmake_labels" value="chord;issue1062;replicated_state;review"/>
+		</properties>
+		<system-out>Filters: "a frame cursor outside the safe integer range fails the attachment and keeps the last good value"
+Randomness seeded to: 3533605622
+===============================================================================
+All tests passed (25 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a gap while draining buffered activation stops dispatch without touching a disposed listener" classname="a gap while draining buffered activation stops dispatch without touching a disposed listener" time="0.00340888" status="run">
+		<properties>
+			<property name="cmake_labels" value="chord;issue1062;replicated_state;review"/>
+		</properties>
+		<system-out>Filters: "a gap while draining buffered activation stops dispatch without touching a disposed listener"
+Randomness seeded to: 420985080
+===============================================================================
+All tests passed (27 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a held listener serializes its own updates while another subscription converges independently" classname="a held listener serializes its own updates while another subscription converges independently" time="0.00457222" status="run">
+		<properties>
+			<property name="cmake_labels" value="chord;issue1062;replicated_state;spec"/>
+		</properties>
+		<system-out>Filters: "a held listener serializes its own updates while another subscription converges independently"
+Randomness seeded to: 2330111215
+===============================================================================
+All tests passed (57 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a listener failure without an onError hook writes the exact default diagnostic and delivery continues" classname="a listener failure without an onError hook writes the exact default diagnostic and delivery continues" time="0.00315474" status="run">
+		<properties>
+			<property name="cmake_labels" value="chord;issue1062;replicated_state;review"/>
+		</properties>
+		<system-out>Filters: "a listener failure without an onError hook writes the exact default diagnostic and delivery continues"
+Randomness seeded to: 2226795425
+===============================================================================
+All tests passed (3 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a masked context retains its value when its parent is cancelled later" classname="a masked context retains its value when its parent is cancelled later" time="0.00330263" status="run">
+		<properties>
+			<property name="cmake_labels" value="cancellation;chord;context;issue1240;spec"/>
+		</properties>
+		<system-out>Filters: "a masked context retains its value when its parent is cancelled later"
+Randomness seeded to: 1550226003
+===============================================================================
+All tests passed (11 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a moved-from attached state can only be disposed or destroyed" classname="a moved-from attached state can only be disposed or destroyed" time="0.00297589" status="run">
+		<properties>
+			<property name="cmake_labels" value="chord;issue1062;replicated_state;review"/>
+		</properties>
+		<system-out>Filters: "a moved-from attached state can only be disposed or destroyed"
+Randomness seeded to: 2758179340
+===============================================================================
+All tests passed (4 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a multi-byte character is cut only on a character boundary" classname="a multi-byte character is cut only on a character boundary" time="0.00368278" status="run">
+		<properties>
+			<property name="cmake_labels" value="chord;issue1060;output;spec;utf8"/>
+		</properties>
+		<system-out>Filters: "a multi-byte character is cut only on a character boundary"
+Randomness seeded to: 1659921333
+===============================================================================
+All tests passed (20 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a repeated cursor is reported once as a gap and keeps the last good value" classname="a repeated cursor is reported once as a gap and keeps the last good value" time="0.00404893" status="run">
+		<properties>
+			<property name="cmake_labels" value="chord;issue1062;replicated_state;spec"/>
+		</properties>
+		<system-out>Filters: "a repeated cursor is reported once as a gap and keeps the last good value"
+Randomness seeded to: 572210836
+===============================================================================
+All tests passed (31 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a retained value reference keeps the revision it was read at" classname="a retained value reference keeps the revision it was read at" time="0.00328516" status="run">
+		<properties>
+			<property name="cmake_labels" value="chord;issue1062;replicated_state;review"/>
+		</properties>
+		<system-out>Filters: "a retained value reference keeps the revision it was read at"
+Randomness seeded to: 3184625013
+===============================================================================
+All tests passed (6 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a root replacement keeps the preceding incremental write and adopts a new root" classname="a root replacement keeps the preceding incremental write and adopts a new root" time="0.00300878" status="run">
+		<properties>
+			<property name="cmake_labels" value="apply;chord;delta;issue1185;replacement;spec"/>
+		</properties>
+		<system-out>Filters: "a root replacement keeps the preceding incremental write and adopts a new root"
+Randomness seeded to: 773869929
+===============================================================================
+All tests passed (4 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a same-base preparation becomes stale after another preparation is adopted" classname="a same-base preparation becomes stale after another preparation is adopted" time="0.00529415" status="run">
+		<properties>
+			<property name="cmake_labels" value="chord;delta;issue1061;revision;spec;stale"/>
+		</properties>
+		<system-out>Filters: "a same-base preparation becomes stale after another preparation is adopted"
+Randomness seeded to: 2981015251
+===============================================================================
+All tests passed (41 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a snapshot cursor outside the safe integer range fails attach and disposes the attachment once" classname="a snapshot cursor outside the safe integer range fails attach and disposes the attachment once" time="0.00350045" status="run">
+		<properties>
+			<property name="cmake_labels" value="chord;issue1062;replicated_state;review"/>
+		</properties>
+		<system-out>Filters: "a snapshot cursor outside the safe integer range fails attach and disposes the attachment once"
+Randomness seeded to: 2303997935
+===============================================================================
+All tests passed (10 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a source gap without an onError hook writes the exact default diagnostic once and keeps the last good value" classname="a source gap without an onError hook writes the exact default diagnostic once and keeps the last good value" time="0.00483373" status="run">
+		<properties>
+			<property name="cmake_labels" value="chord;issue1062;replicated_state;review"/>
+		</properties>
+		<system-out>Filters: "a source gap without an onError hook writes the exact default diagnostic once and keeps the last good value"
+Randomness seeded to: 514872565
+===============================================================================
+All tests passed (23 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a structural no-op emits splice operations while an untouched change emits none" classname="a structural no-op emits splice operations while an untouched change emits none" time="0.00386513" status="run">
+		<properties>
+			<property name="cmake_labels" value="chord;delta;issue1061;noop;revision;spec"/>
+		</properties>
+		<system-out>Filters: "a structural no-op emits splice operations while an untouched change emits none"
+Randomness seeded to: 51413146
+===============================================================================
+All tests passed (21 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a subscriber destroying its own attached state inside a callback does not disturb other subscribers" classname="a subscriber destroying its own attached state inside a callback does not disturb other subscribers" time="0.00305022" status="run">
+		<properties>
+			<property name="cmake_labels" value="chord;issue1062;replicated_state;review"/>
+		</properties>
+		<system-out>Filters: "a subscriber destroying its own attached state inside a callback does not disturb other subscribers"
+Randomness seeded to: 906002826
+===============================================================================
+All tests passed (5 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a synchronous hydration failure is reported without removing the subscription" classname="a synchronous hydration failure is reported without removing the subscription" time="0.00431263" status="run">
+		<properties>
+			<property name="cmake_labels" value="chord;issue1062;replicated_state;spec"/>
+		</properties>
+		<system-out>Filters: "a synchronous hydration failure is reported without removing the subscription"
+Randomness seeded to: 2292942513
+===============================================================================
+All tests passed (14 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a watch acquired before start buffers frames and serializes callbacks" classname="a watch acquired before start buffers frames and serializes callbacks" time="0.00299956" status="run">
+		<properties>
+			<property name="cmake_labels" value="chord;issue1188;replicated_state;spec"/>
+		</properties>
+		<system-out>Filters: "a watch acquired before start buffers frames and serializes callbacks"
+Randomness seeded to: 2703974646
+===============================================================================
+All tests passed (39 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a whole-root replacement is not the delta a committed watch frame delivers" classname="a whole-root replacement is not the delta a committed watch frame delivers" time="0.00451705" status="run">
+		<properties>
+			<property name="cmake_labels" value="chord;decode;delta;issue1185;spec;vocabulary"/>
+		</properties>
+		<system-out>Filters: "a whole-root replacement is not the delta a committed watch frame delivers"
+Randomness seeded to: 1378524542
+===============================================================================
+All tests passed (12 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="aborting a prepared change revokes escaped draft handles" classname="aborting a prepared change revokes escaped draft handles" time="0.00371792" status="run">
+		<properties>
+			<property name="cmake_labels" value="abort;chord;delta;issue1061;revision;spec"/>
+		</properties>
+		<system-out>Filters: "aborting a prepared change revokes escaped draft handles"
+Randomness seeded to: 2577707033
+===============================================================================
+All tests passed (36 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="adoption immediately revokes escaped competing draft handles" classname="adoption immediately revokes escaped competing draft handles" time="0.00483679" status="run">
+		<properties>
+			<property name="cmake_labels" value="adopt;chord;delta;draft;issue1061;revision;spec"/>
+		</properties>
+		<system-out>Filters: "adoption immediately revokes escaped competing draft handles"
+Randomness seeded to: 2033216585
+===============================================================================
+All tests passed (24 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="an aborted or foreign whole-root preparation cannot be adopted" classname="an aborted or foreign whole-root preparation cannot be adopted" time="0.00413274" status="run">
+		<properties>
+			<property name="cmake_labels" value="abort;chord;delta;issue1061;prepare-replace;revision;spec"/>
+		</properties>
+		<system-out>Filters: "an aborted or foreign whole-root preparation cannot be adopted"
+Randomness seeded to: 1788053136
+===============================================================================
+All tests passed (28 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="an already cancelled context wait still starts and completes the underlying work" classname="an already cancelled context wait still starts and completes the underlying work" time="0.00290354" status="run">
+		<properties>
+			<property name="cmake_labels" value="cancellation;chord;context;discriminating;issue1184"/>
+		</properties>
+		<system-out>Filters: "an already cancelled context wait still starts and completes the underlying work"
+Randomness seeded to: 1385730675
+===============================================================================
+All tests passed (12 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="an explicit onError hook suppresses the default diagnostic" classname="an explicit onError hook suppresses the default diagnostic" time="0.00308762" status="run">
+		<properties>
+			<property name="cmake_labels" value="chord;issue1062;replicated_state;review"/>
+		</properties>
+		<system-out>Filters: "an explicit onError hook suppresses the default diagnostic"
+Randomness seeded to: 899765838
+===============================================================================
+All tests passed (3 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="application follows frozen sequential validation and replacement semantics" classname="application follows frozen sequential validation and replacement semantics" time="0.00520087" status="run">
+		<properties>
+			<property name="cmake_labels" value="chord;delta;issue1061;spec;validation"/>
+		</properties>
+		<system-out>Filters: "application follows frozen sequential validation and replacement semantics"
+Randomness seeded to: 3625377978
+===============================================================================
+All tests passed (56 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="at most 100 deliveries pend behind one held listener while a commit fits the bound" classname="at most 100 deliveries pend behind one held listener while a commit fits the bound" time="0.00499492" status="run">
+		<properties>
+			<property name="cmake_labels" value="chord;issue1062;replicated_state;spec"/>
+		</properties>
+		<system-out>Filters: "at most 100 deliveries pend behind one held listener while a commit fits the bound"
+Randomness seeded to: 33907070
+===============================================================================
+All tests passed (210 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="attached replicated state hydrates at cursor zero and then delivers exact frames in sequence order" classname="attached replicated state hydrates at cursor zero and then delivers exact frames in sequence order" time="0.00289683" status="run">
+		<properties>
+			<property name="cmake_labels" value="chord;issue1062;replicated_state;spec"/>
+		</properties>
+		<system-out>Filters: "attached replicated state hydrates at cursor zero and then delivers exact frames in sequence order"
+Randomness seeded to: 1543076401
+===============================================================================
+All tests passed (34 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="attached state restores the latest committed revision when subscribing after existing commits" classname="attached state restores the latest committed revision when subscribing after existing commits" time="0.00353603" status="run">
+		<properties>
+			<property name="cmake_labels" value="chord;issue1062;replicated_state;spec"/>
+		</properties>
+		<system-out>Filters: "attached state restores the latest committed revision when subscribing after existing commits"
+Randomness seeded to: 3074571469
+===============================================================================
+All tests passed (23 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="attachment captures the snapshot before activation and drains buffered frames in commit order" classname="attachment captures the snapshot before activation and drains buffered frames in commit order" time="0.00342083" status="run">
+		<properties>
+			<property name="cmake_labels" value="chord;issue1062;replicated_state;spec"/>
+		</properties>
+		<system-out>Filters: "attachment captures the snapshot before activation and drains buffered frames in commit order"
+Randomness seeded to: 3822441121
+===============================================================================
+All tests passed (33 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="background and todo contexts are distinct empty roots" classname="background and todo contexts are distinct empty roots" time="0.00394827" status="run">
+		<properties>
+			<property name="cmake_labels" value="chord;context;issue1060;spec"/>
+		</properties>
+		<system-out>Filters: "background and todo contexts are distinct empty roots"
+Randomness seeded to: 3017440832
+===============================================================================
+All tests passed (8 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="bound output keeps the configured head or tail and reports exact dropped counts" classname="bound output keeps the configured head or tail and reports exact dropped counts" time="0.00315849" status="run">
+		<properties>
+			<property name="cmake_labels" value="bound;chord;issue1060;output;spec"/>
+		</properties>
+		<system-out>Filters: "bound output keeps the configured head or tail and reports exact dropped counts"
+Randomness seeded to: 146945649
+===============================================================================
+All tests passed (36 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="bound output keeps the exact unsanitized slice" classname="bound output keeps the exact unsanitized slice" time="0.00270111" status="run">
+		<properties>
+			<property name="cmake_labels" value="bound;chord;issue1044;output;sanitize;spec"/>
+		</properties>
+		<system-out>Filters: "bound output keeps the exact unsanitized slice"
+Randomness seeded to: 452291707
+===============================================================================
+All tests passed (5 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="chord JSON admission detaches the support value and preserves immutable ownership" classname="chord JSON admission detaches the support value and preserves immutable ownership" time="0.00299103" status="run">
+		<properties>
+			<property name="cmake_labels" value="chord;issue1186;json;spec"/>
+		</properties>
+		<system-out>Filters: "chord JSON admission detaches the support value and preserves immutable ownership"
+Randomness seeded to: 2967073482
+===============================================================================
+All tests passed (20 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="chord JSON admission rejects a non-finite support value at any depth" classname="chord JSON admission rejects a non-finite support value at any depth" time="0.00376902" status="run">
+		<properties>
+			<property name="cmake_labels" value="chord;issue1186;json;spec"/>
+		</properties>
+		<system-out>Filters: "chord JSON admission rejects a non-finite support value at any depth"
+Randomness seeded to: 1855656822
+===============================================================================
+All tests passed (11 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="combined cancellation keeps the first reason and reaches existing children" classname="combined cancellation keeps the first reason and reaches existing children" time="0.00430066" status="run">
+		<properties>
+			<property name="cmake_labels" value="cancellation;chord;context;issue1060;ordering;spec"/>
+		</properties>
+		<system-out>Filters: "combined cancellation keeps the first reason and reaches existing children"
+Randomness seeded to: 3992951751
+===============================================================================
+All tests passed (8 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="context values layer without modifying their parents" classname="context values layer without modifying their parents" time="0.00309691" status="run">
+		<properties>
+			<property name="cmake_labels" value="chord;context;issue1060;spec"/>
+		</properties>
+		<system-out>Filters: "context values layer without modifying their parents"
+Randomness seeded to: 978399233
+===============================================================================
+All tests passed (13 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="copy strict JSON keeps equal sibling members independent of the source" classname="copy strict JSON keeps equal sibling members independent of the source" time="0.00301816" status="run">
+		<properties>
+			<property name="cmake_labels" value="chord;issue1186;json;spec"/>
+		</properties>
+		<system-out>Filters: "copy strict JSON keeps equal sibling members independent of the source"
+Randomness seeded to: 3948527176
+===============================================================================
+All tests passed (25 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="copy strict JSON preserves an own __proto__ data member" classname="copy strict JSON preserves an own __proto__ data member" time="0.00274017" status="run">
+		<properties>
+			<property name="cmake_labels" value="chord;issue1186;json;spec"/>
+		</properties>
+		<system-out>Filters: "copy strict JSON preserves an own __proto__ data member"
+Randomness seeded to: 2850810546
+===============================================================================
+All tests passed (15 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="copy strict JSON rejects the frozen nested non-finite value" classname="copy strict JSON rejects the frozen nested non-finite value" time="0.00331103" status="run">
+		<properties>
+			<property name="cmake_labels" value="chord;issue1186;issue1240;json;spec"/>
+		</properties>
+		<system-out>Filters: "copy strict JSON rejects the frozen nested non-finite value"
+Randomness seeded to: 3320948336
+===============================================================================
+All tests passed (14 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="copy strict JSON returns a detached copy of the frozen value" classname="copy strict JSON returns a detached copy of the frozen value" time="0.00322726" status="run">
+		<properties>
+			<property name="cmake_labels" value="chord;issue1060;issue1186;json;spec"/>
+		</properties>
+		<system-out>Filters: "copy strict JSON returns a detached copy of the frozen value"
+Randomness seeded to: 1148284308
+===============================================================================
+All tests passed (30 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="decoded application keeps the preceding mutable write when a later tuple is rejected" classname="decoded application keeps the preceding mutable write when a later tuple is rejected" time="0.00709305" status="run">
+		<properties>
+			<property name="cmake_labels" value="chord;decode;delta;issue1185;ordering;spec;validation"/>
+		</properties>
+		<system-out>Filters: "decoded application keeps the preceding mutable write when a later tuple is rejected"
+Randomness seeded to: 1487276489
+===============================================================================
+All tests passed (60 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="decoded ingestion rejects every reserved segment and never yields a partial batch" classname="decoded ingestion rejects every reserved segment and never yields a partial batch" time="0.0045007" status="run">
+		<properties>
+			<property name="cmake_labels" value="chord;decode;delta;issue1185;spec;validation"/>
+		</properties>
+		<system-out>Filters: "decoded ingestion rejects every reserved segment and never yields a partial batch"
+Randomness seeded to: 3091167372
+===============================================================================
+All tests passed (13 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="decoded operation ingestion rejects the frozen malformed shapes before any target access" classname="decoded operation ingestion rejects the frozen malformed shapes before any target access" time="0.00631083" status="run">
+		<properties>
+			<property name="cmake_labels" value="chord;decode;delta;issue1185;spec;validation"/>
+		</properties>
+		<system-out>Filters: "decoded operation ingestion rejects the frozen malformed shapes before any target access"
+Randomness seeded to: 919837432
+===============================================================================
+All tests passed (105 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="draft paths reject unsafe empty and out-of-range mutations before recording" classname="draft paths reject unsafe empty and out-of-range mutations before recording" time="0.00285156" status="run">
+		<properties>
+			<property name="cmake_labels" value="chord;delta;issue1061;revision;spec;validation"/>
+		</properties>
+		<system-out>Filters: "draft paths reject unsafe empty and out-of-range mutations before recording"
+Randomness seeded to: 3096171073
+===============================================================================
+All tests passed (13 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="draft reads distinguish absent leaves nulls and invalid traversal" classname="draft reads distinguish absent leaves nulls and invalid traversal" time="0.00316297" status="run">
+		<properties>
+			<property name="cmake_labels" value="chord;delta;draft;issue1061;read;revision;spec"/>
+		</properties>
+		<system-out>Filters: "draft reads distinguish absent leaves nulls and invalid traversal"
+Randomness seeded to: 1190774067
+===============================================================================
+All tests passed (19 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="draft reads see writes while the committed revision stays unchanged" classname="draft reads see writes while the committed revision stays unchanged" time="0.0033397" status="run">
+		<properties>
+			<property name="cmake_labels" value="chord;delta;draft;issue1061;revision;spec"/>
+		</properties>
+		<system-out>Filters: "draft reads see writes while the committed revision stays unchanged"
+Randomness seeded to: 3884145226
+===============================================================================
+All tests passed (14 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="draft writes fold to the final leaf while delete and readd stays explicit" classname="draft writes fold to the final leaf while delete and readd stays explicit" time="0.00386279" status="run">
+		<properties>
+			<property name="cmake_labels" value="chord;delta;issue1061;ordering;revision;spec"/>
+		</properties>
+		<system-out>Filters: "draft writes fold to the final leaf while delete and readd stays explicit"
+Randomness seeded to: 1119535289
+===============================================================================
+All tests passed (34 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="erasing a newly added key prepares an empty batch over the unchanged base" classname="erasing a newly added key prepares an empty batch over the unchanged base" time="0.00301182" status="run">
+		<properties>
+			<property name="cmake_labels" value="chord;delta;issue1061;normalize;ordering;revision;spec"/>
+		</properties>
+		<system-out>Filters: "erasing a newly added key prepares an empty batch over the unchanged base"
+Randomness seeded to: 368716738
+===============================================================================
+All tests passed (10 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="exact source values are published without applying or re-diffing frame operations" classname="exact source values are published without applying or re-diffing frame operations" time="0.00453156" status="run">
+		<properties>
+			<property name="cmake_labels" value="chord;issue1062;replicated_state;spec"/>
+		</properties>
+		<system-out>Filters: "exact source values are published without applying or re-diffing frame operations"
+Randomness seeded to: 85958978
+===============================================================================
+All tests passed (20 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="frozen JSON copy mutation rejects a retained source alias" classname="frozen JSON copy mutation rejects a retained source alias" time="0.00295283" status="run">
+		<properties>
+			<property name="cmake_labels" value="chord;issue1240;json;spec"/>
+		</properties>
+		<system-out>Filters: "frozen JSON copy mutation rejects a retained source alias"
+Randomness seeded to: 1955156305
+===============================================================================
+All tests passed (22 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="frozen attachment comparison rejects coupled disposal" classname="frozen attachment comparison rejects coupled disposal" time="0.00322177" status="run">
+		<properties>
+			<property name="cmake_labels" value="chord;issue1240;replicated_state;spec"/>
+		</properties>
+		<system-out>Filters: "frozen attachment comparison rejects coupled disposal"
+Randomness seeded to: 2559892862
+===============================================================================
+All tests passed (40 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="frozen attachment rejects dropping frames buffered during attach" classname="frozen attachment rejects dropping frames buffered during attach" time="0.00307372" status="run">
+		<properties>
+			<property name="cmake_labels" value="chord;issue1240;replicated_state;spec"/>
+		</properties>
+		<system-out>Filters: "frozen attachment rejects dropping frames buffered during attach"
+Randomness seeded to: 1184059573
+===============================================================================
+All tests passed (29 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="frozen draft comparison rejects an escaped mutable overlay after abort" classname="frozen draft comparison rejects an escaped mutable overlay after abort" time="0.00425378" status="run">
+		<properties>
+			<property name="cmake_labels" value="chord;delta;issue1240;spec"/>
+		</properties>
+		<system-out>Filters: "frozen draft comparison rejects an escaped mutable overlay after abort"
+Randomness seeded to: 3708802022
+===============================================================================
+All tests passed (29 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="frozen immutable application rejects copying untouched containers" classname="frozen immutable application rejects copying untouched containers" time="0.00413293" status="run">
+		<properties>
+			<property name="cmake_labels" value="chord;delta;issue1240;spec"/>
+		</properties>
+		<system-out>Filters: "frozen immutable application rejects copying untouched containers"
+Randomness seeded to: 798368154
+===============================================================================
+All tests passed (16 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="frozen late rejection rejects suppressing errors after unsubscribe" classname="frozen late rejection rejects suppressing errors after unsubscribe" time="0.00415702" status="run">
+		<properties>
+			<property name="cmake_labels" value="chord;issue1240;replicated_state;spec"/>
+		</properties>
+		<system-out>Filters: "frozen late rejection rejects suppressing errors after unsubscribe"
+Randomness seeded to: 3837453946
+===============================================================================
+All tests passed (22 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="frozen masked context rejects pass-through and value-dropping controls" classname="frozen masked context rejects pass-through and value-dropping controls" time="0.00314429" status="run">
+		<properties>
+			<property name="cmake_labels" value="cancellation;chord;context;issue1240;spec"/>
+		</properties>
+		<system-out>Filters: "frozen masked context rejects pass-through and value-dropping controls"
+Randomness seeded to: 3940968281
+===============================================================================
+All tests passed (15 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="frozen mutable application rejects whole-batch decoding before writes" classname="frozen mutable application rejects whole-batch decoding before writes" time="0.00332482" status="run">
+		<properties>
+			<property name="cmake_labels" value="chord;delta;issue1240;spec"/>
+		</properties>
+		<system-out>Filters: "frozen mutable application rejects whole-batch decoding before writes"
+Randomness seeded to: 2203942840
+===============================================================================
+All tests passed (16 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="frozen nested JSON comparison rejects a root-only validator" classname="frozen nested JSON comparison rejects a root-only validator" time="0.00332309" status="run">
+		<properties>
+			<property name="cmake_labels" value="chord;issue1240;json;spec"/>
+		</properties>
+		<system-out>Filters: "frozen nested JSON comparison rejects a root-only validator"
+Randomness seeded to: 4283771525
+===============================================================================
+All tests passed (15 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="frozen ordered batches reject a first-batch-only implementation" classname="frozen ordered batches reject a first-batch-only implementation" time="0.00426906" status="run">
+		<properties>
+			<property name="cmake_labels" value="chord;delta;issue1240;spec"/>
+		</properties>
+		<system-out>Filters: "frozen ordered batches reject a first-batch-only implementation"
+Randomness seeded to: 75891035
+===============================================================================
+All tests passed (28 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="frozen overlap comparison rejects an unbounded suffix search" classname="frozen overlap comparison rejects an unbounded suffix search" time="0.00412957" status="run">
+		<properties>
+			<property name="cmake_labels" value="chord;delta;issue1240;spec"/>
+		</properties>
+		<system-out>Filters: "frozen overlap comparison rejects an unbounded suffix search"
+Randomness seeded to: 3087720906
+===============================================================================
+All tests passed (46 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="frozen replacement comparison rejects ignoring preparation abort" classname="frozen replacement comparison rejects ignoring preparation abort" time="0.00336145" status="run">
+		<properties>
+			<property name="cmake_labels" value="chord;delta;issue1240;spec"/>
+		</properties>
+		<system-out>Filters: "frozen replacement comparison rejects ignoring preparation abort"
+Randomness seeded to: 2157733727
+===============================================================================
+All tests passed (18 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="immutable application reproduces a revision while sharing untouched containers" classname="immutable application reproduces a revision while sharing untouched containers" time="0.00371767" status="run">
+		<properties>
+			<property name="cmake_labels" value="apply;chord;delta;issue1061;spec"/>
+		</properties>
+		<system-out>Filters: "immutable application reproduces a revision while sharing untouched containers"
+Randomness seeded to: 283820865
+===============================================================================
+All tests passed (29 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="independent attachments converge separately and dispose idempotently" classname="independent attachments converge separately and dispose idempotently" time="0.00368902" status="run">
+		<properties>
+			<property name="cmake_labels" value="chord;issue1062;replicated_state;spec"/>
+		</properties>
+		<system-out>Filters: "independent attachments converge separately and dispose idempotently"
+Randomness seeded to: 2802341684
+===============================================================================
+All tests passed (43 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="is strict JSON checks a direct JsonValue model without normalizing it" classname="is strict JSON checks a direct JsonValue model without normalizing it" time="0.00364538" status="run">
+		<properties>
+			<property name="cmake_labels" value="chord;issue1186;json;spec"/>
+		</properties>
+		<system-out>Filters: "is strict JSON checks a direct JsonValue model without normalizing it"
+Randomness seeded to: 545582200
+===============================================================================
+All tests passed (14 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="mutable application mutates in place while a root replacement returns a new value" classname="mutable application mutates in place while a root replacement returns a new value" time="0.00398322" status="run">
+		<properties>
+			<property name="cmake_labels" value="apply;chord;delta;issue1185;replacement;spec"/>
+		</properties>
+		<system-out>Filters: "mutable application mutates in place while a root replacement returns a new value"
+Randomness seeded to: 2222665315
+===============================================================================
+All tests passed (30 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="negative safe integer cursors are accepted for the snapshot and later frames" classname="negative safe integer cursors are accepted for the snapshot and later frames" time="0.00413562" status="run">
+		<properties>
+			<property name="cmake_labels" value="chord;issue1062;replicated_state;review"/>
+		</properties>
+		<system-out>Filters: "negative safe integer cursors are accepted for the snapshot and later frames"
+Randomness seeded to: 1289264292
+===============================================================================
+All tests passed (12 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="one subscription serializes reentrant hydration and update callbacks in publication order" classname="one subscription serializes reentrant hydration and update callbacks in publication order" time="0.00306304" status="run">
+		<properties>
+			<property name="cmake_labels" value="chord;issue1062;replicated_state;spec"/>
+		</properties>
+		<system-out>Filters: "one subscription serializes reentrant hydration and update callbacks in publication order"
+Randomness seeded to: 3374228565
+===============================================================================
+All tests passed (17 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="ordered immutable batches produce one final revision without changing the base" classname="ordered immutable batches produce one final revision without changing the base" time="0.00423522" status="run">
+		<properties>
+			<property name="cmake_labels" value="apply;batch;chord;delta;issue1061;spec"/>
+		</properties>
+		<system-out>Filters: "ordered immutable batches produce one final revision without changing the base"
+Randomness seeded to: 1834212412
+===============================================================================
+All tests passed (30 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="output buffer keeps whole-stream dropped line counts across a tail window" classname="output buffer keeps whole-stream dropped line counts across a tail window" time="0.00362252" status="run">
+		<properties>
+			<property name="cmake_labels" value="buffer;chord;issue1060;output;spec"/>
+		</properties>
+		<system-out>Filters: "output buffer keeps whole-stream dropped line counts across a tail window"
+Randomness seeded to: 2512048699
+===============================================================================
+All tests passed (17 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="output buffer retains the frozen tail window and exact whole-stream totals" classname="output buffer retains the frozen tail window and exact whole-stream totals" time="0.00380096" status="run">
+		<properties>
+			<property name="cmake_labels" value="buffer;chord;issue1060;output;spec"/>
+		</properties>
+		<system-out>Filters: "output buffer retains the frozen tail window and exact whole-stream totals"
+Randomness seeded to: 3421251982
+===============================================================================
+All tests passed (21 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="output buffer snapshot matches the frozen sanitize output case" classname="output buffer snapshot matches the frozen sanitize output case" time="0.00270079" status="run">
+		<properties>
+			<property name="cmake_labels" value="buffer;chord;issue1044;output;sanitize;spec"/>
+		</properties>
+		<system-out>Filters: "output buffer snapshot matches the frozen sanitize output case"
+Randomness seeded to: 2937721871
+===============================================================================
+All tests passed (2 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="output buffer snapshot removes interlinear controls and preserves multibyte text" classname="output buffer snapshot removes interlinear controls and preserves multibyte text" time="0.00280195" status="run">
+		<properties>
+			<property name="cmake_labels" value="buffer;chord;issue1044;output;sanitize;spec"/>
+		</properties>
+		<system-out>Filters: "output buffer snapshot removes interlinear controls and preserves multibyte text"
+Randomness seeded to: 2622988922
+===============================================================================
+All tests passed (8 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="output buffer snapshot sanitizes control characters without changing raw accounting" classname="output buffer snapshot sanitizes control characters without changing raw accounting" time="0.0036961" status="run">
+		<properties>
+			<property name="cmake_labels" value="buffer;chord;issue1044;output;sanitize;spec"/>
+		</properties>
+		<system-out>Filters: "output buffer snapshot sanitizes control characters without changing raw accounting"
+Randomness seeded to: 2984363506
+===============================================================================
+All tests passed (10 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="output buffer snapshot sanitizes each retained window while counting the raw stream" classname="output buffer snapshot sanitizes each retained window while counting the raw stream" time="0.00300678" status="run">
+		<properties>
+			<property name="cmake_labels" value="buffer;chord;issue1044;output;sanitize;spec"/>
+		</properties>
+		<system-out>Filters: "output buffer snapshot sanitizes each retained window while counting the raw stream"
+Randomness seeded to: 2671800456
+===============================================================================
+All tests passed (8 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="overflow at the 100-pending bound keeps the newest pending delivery" classname="overflow at the 100-pending bound keeps the newest pending delivery" time="0.00635228" status="run">
+		<properties>
+			<property name="cmake_labels" value="chord;issue1062;replicated_state;spec"/>
+		</properties>
+		<system-out>Filters: "overflow at the 100-pending bound keeps the newest pending delivery"
+Randomness seeded to: 2138174518
+===============================================================================
+All tests passed (14 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="overflow keeps only the newest pending delivery with its exact value context and delivery" classname="overflow keeps only the newest pending delivery with its exact value context and delivery" time="0.00515388" status="run">
+		<properties>
+			<property name="cmake_labels" value="chord;issue1062;replicated_state;spec"/>
+		</properties>
+		<system-out>Filters: "overflow keeps only the newest pending delivery with its exact value context and delivery"
+Randomness seeded to: 2416804295
+===============================================================================
+All tests passed (41 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="overlap returns the bounded common run" classname="overlap returns the bounded common run" time="0.00423953" status="run">
+		<properties>
+			<property name="cmake_labels" value="chord;delta;issue1061;overlap;spec"/>
+		</properties>
+		<system-out>Filters: "overlap returns the bounded common run"
+Randomness seeded to: 72957955
+===============================================================================
+All tests passed (38 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pending overflow keeps the newest frame while fast observers follow every publication" classname="pending overflow keeps the newest frame while fast observers follow every publication" time="0.00597905" status="run">
+		<properties>
+			<property name="cmake_labels" value="chord;issue1062;replicated_state;spec"/>
+		</properties>
+		<system-out>Filters: "pending overflow keeps the newest frame while fast observers follow every publication"
+Randomness seeded to: 1323547567
+===============================================================================
+All tests passed (326 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="prepare replace keeps the checkpoint base immutable and stales same-base preparations" classname="prepare replace keeps the checkpoint base immutable and stales same-base preparations" time="0.00405326" status="run">
+		<properties>
+			<property name="cmake_labels" value="chord;delta;issue1061;prepare-replace;revision;spec"/>
+		</properties>
+		<system-out>Filters: "prepare replace keeps the checkpoint base immutable and stales same-base preparations"
+Randomness seeded to: 696360749
+===============================================================================
+All tests passed (57 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="prepare replace of a deeply equal root emits no operations and stales a competitor" classname="prepare replace of a deeply equal root emits no operations and stales a competitor" time="0.0029674" status="run">
+		<properties>
+			<property name="cmake_labels" value="chord;delta;issue1061;noop;prepare-replace;revision;spec"/>
+		</properties>
+		<system-out>Filters: "prepare replace of a deeply equal root emits no operations and stales a competitor"
+Randomness seeded to: 3639245207
+===============================================================================
+All tests passed (29 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="progress commits the first change at once then paces later commits by their written bytes" classname="progress commits the first change at once then paces later commits by their written bytes" time="0.00311002" status="run">
+		<properties>
+			<property name="cmake_labels" value="chord;issue1187;output;progress;spec"/>
+		</properties>
+		<system-out>Filters: "progress commits the first change at once then paces later commits by their written bytes"
+Randomness seeded to: 2549702764
+===============================================================================
+All tests passed (8 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="progress keeps the exact fractional byte-rate pause instead of rounding it" classname="progress keeps the exact fractional byte-rate pause instead of rounding it" time="0.00345361" status="run">
+		<properties>
+			<property name="cmake_labels" value="chord;issue1187;output;progress;spec"/>
+		</properties>
+		<system-out>Filters: "progress keeps the exact fractional byte-rate pause instead of rounding it"
+Randomness seeded to: 97762461
+===============================================================================
+All tests passed (5 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="progress pacing separates a byte-rate pause from a constant interval and rounded bytes" classname="progress pacing separates a byte-rate pause from a constant interval and rounded bytes" time="0.00295465" status="run">
+		<properties>
+			<property name="cmake_labels" value="chord;discriminating;issue1187;output;progress"/>
+		</properties>
+		<system-out>Filters: "progress pacing separates a byte-rate pause from a constant interval and rounded bytes"
+Randomness seeded to: 2176854138
+===============================================================================
+All tests passed (10 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="reentrant commits buffer in order and a late subscriber hydrates at the latest sequence" classname="reentrant commits buffer in order and a late subscriber hydrates at the latest sequence" time="0.00453975" status="run">
+		<properties>
+			<property name="cmake_labels" value="chord;issue1062;replicated_state;spec"/>
+		</properties>
+		<system-out>Filters: "reentrant commits buffer in order and a late subscriber hydrates at the latest sequence"
+Randomness seeded to: 1151454833
+===============================================================================
+All tests passed (26 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="repeated overflow at the 100-pending bound keeps the newest pending delivery" classname="repeated overflow at the 100-pending bound keeps the newest pending delivery" time="0.00553263" status="run">
+		<properties>
+			<property name="cmake_labels" value="chord;issue1062;replicated_state;spec"/>
+		</properties>
+		<system-out>Filters: "repeated overflow at the 100-pending bound keeps the newest pending delivery"
+Randomness seeded to: 1188536074
+===============================================================================
+All tests passed (14 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="strict JSON accepts every representable JSON value" classname="strict JSON accepts every representable JSON value" time="0.00267636" status="run">
+		<properties>
+			<property name="cmake_labels" value="chord;issue1060;json;spec"/>
+		</properties>
+		<system-out>Filters: "strict JSON accepts every representable JSON value"
+Randomness seeded to: 3192763172
+===============================================================================
+All tests passed (14 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="strict JSON rejects non-finite numbers at any depth" classname="strict JSON rejects non-finite numbers at any depth" time="0.00322528" status="run">
+		<properties>
+			<property name="cmake_labels" value="chord;issue1060;issue1186;json;spec"/>
+		</properties>
+		<system-out>Filters: "strict JSON rejects non-finite numbers at any depth"
+Randomness seeded to: 2986369500
+===============================================================================
+All tests passed (37 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="strict JSON rejects the frozen root infinity case" classname="strict JSON rejects the frozen root infinity case" time="0.00360981" status="run">
+		<properties>
+			<property name="cmake_labels" value="chord;issue1240;json;spec"/>
+		</properties>
+		<system-out>Filters: "strict JSON rejects the frozen root infinity case"
+Randomness seeded to: 737149960
+===============================================================================
+All tests passed (8 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="subscribers are delivered in registration order with reentrant unsubscribe and subscribe" classname="subscribers are delivered in registration order with reentrant unsubscribe and subscribe" time="0.00346132" status="run">
+		<properties>
+			<property name="cmake_labels" value="chord;issue1062;replicated_state;review"/>
+		</properties>
+		<system-out>Filters: "subscribers are delivered in registration order with reentrant unsubscribe and subscribe"
+Randomness seeded to: 2767176359
+===============================================================================
+All tests passed (34 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="subscribers registered after released registrations keep insertion order" classname="subscribers registered after released registrations keep insertion order" time="0.00394534" status="run">
+		<properties>
+			<property name="cmake_labels" value="chord;issue1062;replicated_state;review"/>
+		</properties>
+		<system-out>Filters: "subscribers registered after released registrations keep insertion order"
+Randomness seeded to: 2558642374
+===============================================================================
+All tests passed (2 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="the progress byte rate is the frozen 100 KiB/s constant" classname="the progress byte rate is the frozen 100 KiB/s constant" time="0.00372672" status="run">
+		<properties>
+			<property name="cmake_labels" value="chord;issue1187;output;progress;spec"/>
+		</properties>
+		<system-out>Filters: "the progress byte rate is the frozen 100 KiB/s constant"
+Randomness seeded to: 2541274242
+===============================================================================
+All tests passed (3 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="tracker drafts emit the frozen set append splice permutation delete truncate and replace vocabulary" classname="tracker drafts emit the frozen set append splice permutation delete truncate and replace vocabulary" time="0.0155645" status="run">
+		<properties>
+			<property name="cmake_labels" value="chord;delta;issue1061;spec;tracker;vocabulary"/>
+		</properties>
+		<system-out>Filters: "tracker drafts emit the frozen set append splice permutation delete truncate and replace vocabulary"
+Randomness seeded to: 453722714
+===============================================================================
+All tests passed (109 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="two subscriptions of the same listener behavior are delivered independently" classname="two subscriptions of the same listener behavior are delivered independently" time="0.00426122" status="run">
+		<properties>
+			<property name="cmake_labels" value="chord;issue1062;replicated_state;spec"/>
+		</properties>
+		<system-out>Filters: "two subscriptions of the same listener behavior are delivered independently"
+Randomness seeded to: 3976384891
+===============================================================================
+All tests passed (10 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="unsubscribe discards queued deliveries without aborting the running callback" classname="unsubscribe discards queued deliveries without aborting the running callback" time="0.00429283" status="run">
+		<properties>
+			<property name="cmake_labels" value="chord;issue1062;replicated_state;spec"/>
+		</properties>
+		<system-out>Filters: "unsubscribe discards queued deliveries without aborting the running callback"
+Randomness seeded to: 215243866
+===============================================================================
+All tests passed (28 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="without abort signal masks cancellation while preserving typed values" classname="without abort signal masks cancellation while preserving typed values" time="0.00441122" status="run">
+		<properties>
+			<property name="cmake_labels" value="cancellation;chord;context;issue1060;spec"/>
+		</properties>
+		<system-out>Filters: "without abort signal masks cancellation while preserving typed values"
+Randomness seeded to: 1565115338
+===============================================================================
+All tests passed (27 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+</testsuite>

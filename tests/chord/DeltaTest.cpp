@@ -7,7 +7,9 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <cstddef>
+#include <cstdint>
 #include <format>
+#include <limits>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -77,6 +79,47 @@ namespace {
     return *json;
 }
 
+[[nodiscard]] std::vector<OpBatch> frozen_input_batches(const cch::tests::FrozenChordScenario& frozen) {
+    const auto* value = frozen.inputs_member("batches");
+    REQUIRE(value != nullptr);
+    const auto* arrays = value->get_if<support::JsonValue::array_t>();
+    REQUIRE(arrays != nullptr);
+    std::vector<OpBatch> batches;
+    for (const auto& batch : *arrays)
+        batches.push_back(decode_frozen_ops(batch));
+    return batches;
+}
+
+[[nodiscard]] bool matches_frozen_batch_result(
+        const cch::tests::FrozenChordScenario& frozen, const Json& base, const Json& final, const Json& empty_target) {
+    return base == frozen_expected_json(frozen, "baseAfter") && final == frozen_expected_json(frozen, "final") &&
+           empty_target == frozen_expected_json(frozen, "emptyTarget");
+}
+
+[[nodiscard]] bool matches_frozen_overlap(std::size_t actual, const support::JsonValue& expected) {
+    const auto* number = expected.get_if<double>();
+    REQUIRE(number != nullptr);
+    REQUIRE(std::cmp_less_equal(actual, std::uint64_t{1} << 53));
+    return static_cast<double>(actual) == *number;
+}
+
+[[nodiscard]] std::size_t frozen_overlap_bound(double bound) {
+    REQUIRE(bound >= 0);
+    REQUIRE(bound < static_cast<double>(std::numeric_limits<std::size_t>::max()));
+    const auto converted = static_cast<std::size_t>(bound);
+    REQUIRE(static_cast<double>(converted) == bound);
+    return converted;
+}
+
+[[nodiscard]] bool matches_frozen_partial_failure(
+        const cch::tests::FrozenChordScenario& frozen, const Json& target, const support::Expected<Json>& result) {
+    const auto* error = frozen.object_member("error");
+    REQUIRE(error != nullptr);
+    const auto message = support::json_string_member(*error, "message");
+    REQUIRE(message.has_value());
+    return !result && result.error().message == *message && target == frozen_expected_json(frozen, "targetAfter");
+}
+
 /// Compare one frozen `{name, message}` error field with the observed error.
 void check_frozen_error(const support::JsonValue::object_t& frozen, const support::Error& error) {
     const auto message = support::json_string_member(frozen, "message");
@@ -99,6 +142,17 @@ void check_frozen_error(const support::JsonValue::object_t& frozen, const suppor
 [[nodiscard]] Json array(std::initializer_list<Json> entries) { return Json{Json::Array{entries}}; }
 
 [[nodiscard]] const Json& member(const Json& value, const char* key) { return value.as_object()->at(key); }
+
+[[nodiscard]] bool matches_frozen_retained_sharing(
+        const cch::tests::FrozenChordScenario& frozen, const Json& base, const Json& next) {
+    const auto root = frozen.boolean_member("retainedRootShared");
+    const auto nested = frozen.boolean_member("retainedNestedShared");
+    REQUIRE(root.has_value());
+    REQUIRE(nested.has_value());
+    return member(next, "retained").shares_container_with(member(base, "retained")) == *root &&
+           member(member(next, "nested"), "retained")
+                           .shares_container_with(member(member(base, "nested"), "retained")) == *nested;
+}
 
 template <typename Operation> [[nodiscard]] const Operation* operation_at(const OpBatch& ops, std::size_t index) {
     if (index >= ops.size()) return nullptr;
@@ -135,6 +189,7 @@ TEST_CASE("immutable application reproduces a revision while sharing untouched c
     CHECK(member(*next, "retained").shares_container_with(member(base, "retained")) == *retained_root_shared);
     CHECK(member(member(*next, "nested"), "retained")
                     .shares_container_with(member(member(base, "nested"), "retained")) == *retained_nested_shared);
+    CHECK(matches_frozen_retained_sharing(frozen, base, *next));
 
     auto next_again = apply_immutable(*next, OpBatch{SetOp{.path = keys({"value"}), .value = Json{3}}});
     REQUIRE(next_again);
@@ -146,6 +201,21 @@ TEST_CASE("immutable application reproduces a revision while sharing untouched c
     CHECK(*next_again == frozen_expected_json(frozen, "nextAgain"));
 }
 
+TEST_CASE("frozen immutable application rejects copying untouched containers", "[chord][delta][issue1240][spec]") {
+    const auto frozen = delta_revisions_scenario(
+            "immutable application reproduces each revision without mutating the base and shares untouched subtrees");
+    const Json base = frozen_input_json(frozen, "base");
+    const auto next = apply_immutable(base, frozen_input_ops(frozen, "ops"));
+    REQUIRE(next);
+    CHECK(matches_frozen_retained_sharing(frozen, base, *next));
+
+    // A deep-copy implementation has the same value but loses retained identity.
+    const auto shallow = Json::from_support(next->to_support());
+    REQUIRE(shallow);
+    CHECK(*shallow == *next);
+    CHECK_FALSE(matches_frozen_retained_sharing(frozen, base, *shallow));
+}
+
 // Frozen evidence: fixtures/pi-v1.3.0/audit-1057/delta-revisions.json
 // "batched immutable application applies ordered batches and returns only the final revision".
 // The frozen batches drive the application and the frozen baseAfter/final/emptyTarget fields are
@@ -155,14 +225,7 @@ TEST_CASE("ordered immutable batches produce one final revision without changing
     const auto frozen = delta_revisions_scenario(
             "batched immutable application applies ordered batches and returns only the final revision");
     const Json base = frozen_input_json(frozen, "base");
-    const auto* frozen_batches = frozen.inputs_member("batches");
-    REQUIRE(frozen_batches != nullptr);
-    const auto* batch_arrays = frozen_batches->get_if<support::JsonValue::array_t>();
-    REQUIRE(batch_arrays != nullptr);
-    std::vector<OpBatch> batches;
-    for (const auto& batch_value : *batch_arrays) {
-        batches.push_back(decode_frozen_ops(batch_value));
-    }
+    const auto batches = frozen_input_batches(frozen);
     REQUIRE(batches.size() == 2);
 
     auto final = apply_immutable_batches(base, batches);
@@ -174,6 +237,30 @@ TEST_CASE("ordered immutable batches produce one final revision without changing
             apply_immutable_batches(Json{}, {OpBatch{ReplaceOp{.value = frozen_expected_json(frozen, "emptyTarget")}}});
     REQUIRE(created);
     CHECK(*created == frozen_expected_json(frozen, "emptyTarget"));
+    CHECK(matches_frozen_batch_result(frozen, base, *final, *created));
+}
+
+TEST_CASE("frozen ordered batches reject a first-batch-only implementation", "[chord][delta][issue1240][spec]") {
+    const auto frozen = delta_revisions_scenario(
+            "batched immutable application applies ordered batches and returns only the final revision");
+    const Json base = frozen_input_json(frozen, "base");
+    const auto batches = frozen_input_batches(frozen);
+    REQUIRE(batches.size() == 2);
+
+    const auto first_batch_only = [](const Json& input, const std::vector<OpBatch>& operations) {
+        return apply_immutable(input, operations.front());
+    };
+    const auto shallow = first_batch_only(base, batches);
+    const std::vector<OpBatch> create_batches{OpBatch{ReplaceOp{.value = frozen_expected_json(frozen, "emptyTarget")}}};
+    const auto shallow_created = first_batch_only(Json{}, create_batches);
+    REQUIRE(shallow);
+    REQUIRE(shallow_created);
+    CHECK_FALSE(matches_frozen_batch_result(frozen, base, *shallow, *shallow_created));
+    const auto actual = apply_immutable_batches(base, batches);
+    const auto actual_created = apply_immutable_batches(Json{}, create_batches);
+    REQUIRE(actual);
+    REQUIRE(actual_created);
+    CHECK(matches_frozen_batch_result(frozen, base, *actual, *actual_created));
 }
 
 // Frozen evidence: fixtures/pi-v1.3.0/audit-1057/delta-revisions.json
@@ -548,6 +635,10 @@ TEST_CASE("application follows frozen sequential validation and replacement sema
     CHECK(replaced_then_failed.error().message.starts_with("unresolvable path"));
     CHECK(target == frozen_expected_json(frozen_empty_path, "targetAfter"));
 
+    Json frozen_target = frozen_input_json(frozen_empty_path, "initial");
+    const auto frozen_result = apply(frozen_target, frozen_input_json(frozen_empty_path, "ops"));
+    CHECK(matches_frozen_partial_failure(frozen_empty_path, frozen_target, frozen_result));
+
     const Json before_root_replace = target;
     const auto replaced_then_empty = apply(target,
             OpBatch{
@@ -557,6 +648,22 @@ TEST_CASE("application follows frozen sequential validation and replacement sema
     REQUIRE_FALSE(replaced_then_empty);
     check_frozen_error(*frozen_empty_path_error, replaced_then_empty.error());
     CHECK(target == before_root_replace);
+}
+
+TEST_CASE("frozen mutable application rejects whole-batch decoding before writes", "[chord][delta][issue1240][spec]") {
+    const auto frozen = validation_order_scenario(
+            "a later empty path keeps the preceding mutable write and reports the empty path");
+    const auto operations = frozen_input_json(frozen, "ops");
+    Json target = frozen_input_json(frozen, "initial");
+
+    // This implementation decodes the entire batch before attempting any write.
+    const auto decoded = decode_ops(operations);
+    REQUIRE_FALSE(decoded);
+    const support::Expected<Json> shallow = std::unexpected(decoded.error());
+    CHECK_FALSE(matches_frozen_partial_failure(frozen, target, shallow));
+
+    const auto actual = apply(target, operations);
+    CHECK(matches_frozen_partial_failure(frozen, target, actual));
 }
 
 // Frozen evidence: fixtures/pi-v1.3.0/audit-1057/delta-revisions.json
@@ -744,7 +851,44 @@ TEST_CASE("overlap returns the bounded common run", "[chord][delta][overlap][iss
         REQUIRE(first != nullptr);
         REQUIRE(second != nullptr);
         REQUIRE(bound != nullptr);
-        CHECK(overlap(*first, *second, static_cast<std::size_t>(*bound)) ==
-                static_cast<std::size_t>(frozen_results->at(index).get<double>()));
+        CHECK(matches_frozen_overlap(
+                overlap(*first, *second, frozen_overlap_bound(*bound)), frozen_results->at(index)));
     }
+}
+
+TEST_CASE("frozen overlap comparison rejects an unbounded suffix search", "[chord][delta][issue1240][spec]") {
+    const auto frozen = delta_revisions_scenario("overlap returns the bounded common run used to merge tool output");
+    const auto* inputs = frozen.inputs_member("cases");
+    const auto* results = frozen.array_member("results");
+    REQUIRE(inputs != nullptr);
+    REQUIRE(results != nullptr);
+    const auto* cases = inputs->get_if<support::JsonValue::array_t>();
+    REQUIRE(cases != nullptr);
+    REQUIRE(cases->size() == results->size());
+
+    const auto unbounded = [](std::string_view first, std::string_view second) {
+        std::size_t length = first.size() < second.size() ? first.size() : second.size();
+        while (length > 0 && first.substr(first.size() - length) != second.substr(0, length))
+            --length;
+        return length;
+    };
+    bool rejected = false;
+    bool accepted = false;
+    for (std::size_t index = 0; index < cases->size(); ++index) {
+        const auto* tuple = cases->at(index).get_if<support::JsonValue::array_t>();
+        REQUIRE(tuple != nullptr);
+        REQUIRE(tuple->size() == 3);
+        const auto* first = tuple->at(0).get_if<std::string>();
+        const auto* second = tuple->at(1).get_if<std::string>();
+        const auto* bound = tuple->at(2).get_if<double>();
+        REQUIRE(first != nullptr);
+        REQUIRE(second != nullptr);
+        REQUIRE(bound != nullptr);
+        const bool shallow_matches = matches_frozen_overlap(unbounded(*first, *second), results->at(index));
+        rejected = rejected || !shallow_matches;
+        accepted = accepted || shallow_matches;
+        CHECK(matches_frozen_overlap(overlap(*first, *second, frozen_overlap_bound(*bound)), results->at(index)));
+    }
+    CHECK(accepted);
+    CHECK(rejected);
 }

@@ -67,6 +67,40 @@ namespace {
     return *json;
 }
 
+[[nodiscard]] bool matches_frozen_settlement(const cch::tests::FrozenChordScenario& frozen,
+        std::string_view error_field,
+        const Json& value,
+        std::uint64_t actual_revision,
+        const support::ExpectedVoid& result) {
+    const auto* error = frozen.object_member(error_field);
+    const auto revision = frozen.number_member("revision");
+    REQUIRE(error != nullptr);
+    REQUIRE(revision.has_value());
+    const auto message = support::json_string_member(*error, "message");
+    REQUIRE(message.has_value());
+    REQUIRE(actual_revision <= (std::uint64_t{1} << 53));
+    return !result && result.error().message == *message && value == frozen_expected_json(frozen, "value") &&
+           static_cast<double>(actual_revision) == *revision;
+}
+
+[[nodiscard]] bool matches_frozen_aborted_draft(const cch::tests::FrozenChordScenario& frozen,
+        const Json& value,
+        std::uint64_t revision,
+        const support::ExpectedVoid& write,
+        const support::Expected<std::optional<Json>>& read,
+        const support::ExpectedVoid& adopt) {
+    const auto* escaped_error = frozen.object_member("escapedError");
+    const auto* adopt_error = frozen.object_member("adoptError");
+    REQUIRE(escaped_error != nullptr);
+    REQUIRE(adopt_error != nullptr);
+    const auto escaped_message = support::json_string_member(*escaped_error, "message");
+    const auto adopt_message = support::json_string_member(*adopt_error, "message");
+    REQUIRE(escaped_message.has_value());
+    REQUIRE(adopt_message.has_value());
+    return matches_frozen_settlement(frozen, "escapedError", value, revision, write) && !read &&
+           read.error().message == *escaped_message && !adopt && adopt.error().message == *adopt_message;
+}
+
 /// Compare one frozen `{name, message}` error field with the observed error.
 void check_frozen_error(const support::JsonValue::object_t& frozen, const support::Error& error) {
     const auto message = support::json_string_member(frozen, "message");
@@ -182,10 +216,81 @@ TEST_CASE("aborting a prepared change revokes escaped draft handles",
     const auto revision = frozen.number_member("revision");
     REQUIRE(revision.has_value());
     CHECK(tracker.revision() == static_cast<std::uint64_t>(*revision));
+    CHECK(matches_frozen_aborted_draft(
+            frozen, tracker.value(), tracker.revision(), escaped_write_result, escaped_read, abandoned));
 
     const auto settled = change.prepare();
     REQUIRE_FALSE(settled);
     CHECK(settled.error().message == "Change has already been settled");
+}
+
+TEST_CASE("frozen draft comparison rejects an escaped mutable overlay after abort", "[chord][delta][issue1240][spec]") {
+    const auto frozen = delta_revisions_scenario(
+            "aborting a changed draft revokes escaped handles and leaves the committed revision unchanged");
+    const auto drafted = frozen.inputs_number("draftedValue");
+    const auto escaped_write = frozen.inputs_number("escapedWrite");
+    REQUIRE(drafted.has_value());
+    REQUIRE(escaped_write.has_value());
+    const auto initial = frozen_input_json(frozen, "initial");
+
+    // This shallow change never revokes its overlay when prepared or aborted.
+    struct ShallowPrepared {
+        // The originating change outlives adoption of its prepared value.
+        const bool* aborted;
+        Json value;
+    };
+    struct ShallowChange {
+        Json overlay;
+        bool aborted{false};
+        ShallowChange& draft() { return *this; }
+        support::ExpectedVoid set(const Path& path, Json value) {
+            auto result = apply(overlay, OpBatch{SetOp{.path = path, .value = std::move(value)}});
+            if (!result) return std::unexpected(result.error());
+            return {};
+        }
+        support::Expected<std::optional<Json>> get(const Path&) const {
+            return std::optional<Json>{overlay.as_object()->at("value")};
+        }
+        support::Expected<ShallowPrepared> prepare() { return ShallowPrepared{.aborted = &aborted, .value = overlay}; }
+        void abort() { aborted = true; }
+    };
+    struct ShallowTracker {
+        Json value;
+        std::uint64_t revision{0};
+        ShallowChange begin_change() const { return ShallowChange{.overlay = value}; }
+        support::ExpectedVoid adopt(const ShallowPrepared& prepared) {
+            if (*prepared.aborted)
+                return std::unexpected(
+                        support::make_error(support::ErrorCode::Validation, "Prepared change has been aborted"));
+            value = prepared.value;
+            ++revision;
+            return {};
+        }
+    };
+    ShallowTracker shallow{.value = initial};
+    auto shallow_change = shallow.begin_change();
+    auto& shallow_draft = shallow_change.draft();
+    REQUIRE(shallow_draft.set(keys({"value"}), Json{*drafted}));
+    const auto shallow_prepared = shallow_change.prepare();
+    REQUIRE(shallow_prepared);
+    shallow_change.abort();
+    const auto shallow_result = shallow_draft.set(keys({"value"}), Json{*escaped_write});
+    const auto shallow_read = shallow_draft.get(keys({"value"}));
+    const auto shallow_adopt = shallow.adopt(*shallow_prepared);
+    CHECK_FALSE(matches_frozen_aborted_draft(
+            frozen, shallow.value, shallow.revision, shallow_result, shallow_read, shallow_adopt));
+
+    auto actual = track(initial);
+    auto change = actual.begin_change();
+    auto draft = change.draft();
+    REQUIRE(draft.set(keys({"value"}), Json{*drafted}));
+    const auto prepared = change.prepare();
+    REQUIRE(prepared);
+    change.abort();
+    const auto result = draft.set(keys({"value"}), Json{*escaped_write});
+    const auto read = draft.get(keys({"value"}));
+    const auto adopted = actual.adopt(*prepared);
+    CHECK(matches_frozen_aborted_draft(frozen, actual.value(), actual.revision(), result, read, adopted));
 }
 
 // Frozen evidence: fixtures/pi-v1.3.0/audit-1057/delta-revisions.json
@@ -351,6 +456,7 @@ TEST_CASE("an aborted or foreign whole-root preparation cannot be adopted",
     check_frozen_error(*frozen_aborted_error, aborted.error());
     CHECK(tracker.value() == frozen_expected_json(frozen, "value"));
     CHECK(tracker.revision() == static_cast<std::uint64_t>(*revision));
+    CHECK(matches_frozen_settlement(frozen, "abortedError", tracker.value(), tracker.revision(), aborted));
 
     auto other = track(object({{"value", Json{10}}}));
     auto foreign = other.prepare_replace(object({{"value", Json{11}}}));
@@ -359,6 +465,40 @@ TEST_CASE("an aborted or foreign whole-root preparation cannot be adopted",
     REQUIRE_FALSE(rejected);
     CHECK(rejected.error().message == "Prepared change belongs to a different tracker");
     CHECK(tracker.value() == frozen_expected_json(frozen, "value"));
+}
+
+TEST_CASE("frozen replacement comparison rejects ignoring preparation abort", "[chord][delta][issue1240][spec]") {
+    const auto frozen = prepare_replace_scenario("an aborted whole-root preparation cannot be adopted");
+    const auto initial = frozen_input_json(frozen, "initial");
+    const auto replacement = frozen_input_json(frozen, "replacement");
+
+    // This shallow preparation ignores its abort and can still be adopted.
+    struct ShallowPrepared {
+        Json replacement;
+        void abort() {}
+    };
+    struct ShallowTracker {
+        Json value;
+        std::uint64_t revision{0};
+        ShallowPrepared prepare_replace(Json next) { return ShallowPrepared{.replacement = std::move(next)}; }
+        support::ExpectedVoid adopt(const ShallowPrepared& prepared) {
+            value = prepared.replacement;
+            ++revision;
+            return {};
+        }
+    };
+    ShallowTracker shallow{.value = initial};
+    auto shallow_prepared = shallow.prepare_replace(replacement);
+    shallow_prepared.abort();
+    const auto shallow_result = shallow.adopt(shallow_prepared);
+    CHECK_FALSE(matches_frozen_settlement(frozen, "abortedError", shallow.value, shallow.revision, shallow_result));
+
+    auto actual = track(initial);
+    auto prepared = actual.prepare_replace(replacement);
+    REQUIRE(prepared);
+    prepared->abort();
+    const auto result = actual.adopt(*prepared);
+    CHECK(matches_frozen_settlement(frozen, "abortedError", actual.value(), actual.revision(), result));
 }
 
 // Frozen evidence: fixtures/pi-v1.3.0/audit-1061/draft-array-holes.json

@@ -56,6 +56,7 @@
 #include <stop_token>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <thread>
 #include <utility>
 #include <variant>
@@ -331,7 +332,10 @@ TEST_CASE("an MCP call errors explicitly when a dead server cannot reconnect", "
     const auto trace = workspace.path() / "trace.log";
 
     const auto server_copy = workspace.path() / "echo_server.py";
-    std::filesystem::copy_file(fixture_path("echo_server.py"), server_copy);
+    std::error_code filesystem_error;
+    const bool copied = std::filesystem::copy_file(fixture_path("echo_server.py"), server_copy, filesystem_error);
+    REQUIRE_FALSE(filesystem_error);
+    REQUIRE(copied);
     auto config = echo_server_config(trace, 5000ms);
     config.args = {server_copy.string()};
     auto connected = tests::run_awaitable(runtime, cch::mcp::StdioClient::connect(std::move(config)));
@@ -344,7 +348,9 @@ TEST_CASE("an MCP call errors explicitly when a dead server cannot reconnect", "
 
     // The running server already loaded the script. Removing its private copy
     // prevents a successful restart after the server exits.
-    REQUIRE(std::filesystem::remove(server_copy));
+    const bool removed = std::filesystem::remove(server_copy, filesystem_error);
+    REQUIRE_FALSE(filesystem_error);
+    REQUIRE(removed);
     const auto exited =
             tests::run_awaitable(runtime, support::detail::await_async_result(client->request("debug/exit")));
     REQUIRE(exited.has_value());

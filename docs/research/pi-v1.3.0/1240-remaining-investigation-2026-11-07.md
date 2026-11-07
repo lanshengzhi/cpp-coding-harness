@@ -1,5 +1,11 @@
 # #1240 remaining work: investigation, 2026-11-07
 
+> **Superseded.** This is the dated snapshot from the first half of the
+> session; the owner's floor was met later the same day. The promoted rows,
+> the remaining boundaries and the review outcome are in
+> [1240-remaining-discriminators.md](1240-remaining-discriminators.md). Read
+> this file for the investigation trail, not for current status.
+
 ## Scope and status
 
 The strict-JSON pilot remains the only one of the original 15 claims promoted.

@@ -3593,14 +3593,14 @@
             "chord",
             "--output-on-failure",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1240-pilot-chord.xml"
+            "../docs/research/pi-v1.3.0/deliveries/1240-remaining-chord.xml"
           ],
-          "testedRevision": "cde9255c41c3c575c6e9ce20b1432687869a36f7",
-          "recordedAt": "2026-11-07T07:06:07Z",
-          "selected": 92,
+          "testedRevision": "0e52577e3679167a7dd66db597066882b03378ae",
+          "recordedAt": "2026-11-07T09:51:28Z",
+          "selected": 104,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1240-pilot-chord.xml",
-            "sha256": "24e34050c9f175d4fc285909dd5e70b3419ca7672c1ab03c882754953411a3bc"
+            "path": "docs/research/pi-v1.3.0/deliveries/1240-remaining-chord.xml",
+            "sha256": "6bc16df2e57437a5100d915ce2c51a766ff4d270c8459402290bf15619e0e997"
           }
         },
         "rows": [
@@ -3674,10 +3674,7 @@
           },
           {
             "id": "cch_chord:context:without-abort-signal",
-            "remainingBoundary": [
-              "The discriminating case reuses a comparison test; #1240 owns an independent discriminating case.",
-              "No separate frozen-scenario CTest case has been established for this claim: it must mask a cancelled parent while retaining its typed value."
-            ],
+            "remainingBoundary": [],
             "comparisons": [
               {
                 "artifact": "audit-1057/context-cancellation.json",
@@ -3689,15 +3686,17 @@
             "discriminatingCase": {
               "test": "without abort signal masks cancellation while preserving typed values",
               "testSource": "tests/chord/ChordContextTest.cpp",
-              "reason": "The case separates a detached cleanup overlay from both a pass-through context (which would still report the caller abort) and a value-dropping copy (which would lose \"cleanup\"): the masked context has no signal and keeps the typed value."
+              "reason": "A pass-through retains the cancelled parent, while a fresh background drops its typed value; both fail the same frozen masked-state judgment.",
+              "negativeControl": {
+                "test": "frozen masked context rejects pass-through and value-dropping controls",
+                "testSource": "tests/chord/ChordContextTest.cpp",
+                "reason": "A pass-through retains the cancelled parent, while a fresh background drops its typed value; both fail the same frozen masked-state judgment."
+              }
             }
           },
           {
             "id": "cch_chord:delta:batch-application",
-            "remainingBoundary": [
-              "The discriminating case reuses a comparison test; #1240 owns an independent discriminating case.",
-              "No separate frozen-scenario CTest case has been established for this claim: it must apply multiple batches in order without mutating the base or returning an intermediate revision."
-            ],
+            "remainingBoundary": [],
             "comparisons": [
               {
                 "artifact": "audit-1057/delta-revisions.json",
@@ -3709,7 +3708,12 @@
             "discriminatingCase": {
               "test": "ordered immutable batches produce one final revision without changing the base",
               "testSource": "tests/chord/DeltaTest.cpp",
-              "reason": "An implementation that mutates the base, or that returns an intermediate batch revision, fails the base-equality and single-final-revision assertions."
+              "reason": "Applying only the first frozen batch preserves the base but fails the frozen final-revision judgment.",
+              "negativeControl": {
+                "test": "frozen ordered batches reject a first-batch-only implementation",
+                "testSource": "tests/chord/DeltaTest.cpp",
+                "reason": "Applying only the first frozen batch preserves the base but fails the frozen final-revision judgment."
+              }
             }
           },
           {
@@ -3731,10 +3735,7 @@
           },
           {
             "id": "cch_chord:delta:immutable-application",
-            "remainingBoundary": [
-              "The discriminating case reuses a comparison test; #1240 owns an independent discriminating case.",
-              "No separate frozen-scenario CTest case has been established for this claim: it must observe both base immutability and untouched subtree identity, which deep copying would break."
-            ],
+            "remainingBoundary": [],
             "comparisons": [
               {
                 "artifact": "audit-1057/delta-revisions.json",
@@ -3746,15 +3747,17 @@
             "discriminatingCase": {
               "test": "immutable application reproduces a revision while sharing untouched containers",
               "testSource": "tests/chord/DeltaTest.cpp",
-              "reason": "A deep-copy implementation returns the right value but shares no untouched container; a mutating implementation changes the base. The sharing and base-equality assertions separate both."
+              "reason": "A deep copy preserves the frozen result value but loses the frozen retained-container sharing.",
+              "negativeControl": {
+                "test": "frozen immutable application rejects copying untouched containers",
+                "testSource": "tests/chord/DeltaTest.cpp",
+                "reason": "A deep copy preserves the frozen result value but loses the frozen retained-container sharing."
+              }
             }
           },
           {
             "id": "cch_chord:delta:mutable-application",
-            "remainingBoundary": [
-              "The discriminating case reuses a comparison test; #1240 owns an independent discriminating case.",
-              "No separate frozen-scenario CTest case has been established for this claim: it must preserve a leading write when a later operation fails, which whole-batch prevalidation would suppress."
-            ],
+            "remainingBoundary": [],
             "comparisons": [
               {
                 "artifact": "audit-1061/validation-order.json",
@@ -3766,7 +3769,12 @@
             "discriminatingCase": {
               "test": "application follows frozen sequential validation and replacement semantics",
               "testSource": "tests/chord/DeltaTest.cpp",
-              "reason": "Whole-batch pre-validation leaves the target at its initial value after a later failing operation; the case requires the leading write to survive while the root replacement stays local."
+              "reason": "Decoding the entire frozen batch before writing reports the same empty-path error but fails to retain the leading write.",
+              "negativeControl": {
+                "test": "frozen mutable application rejects whole-batch decoding before writes",
+                "testSource": "tests/chord/DeltaTest.cpp",
+                "reason": "Decoding the entire frozen batch before writing reports the same empty-path error but fails to retain the leading write."
+              }
             }
           },
           {
@@ -3789,8 +3797,8 @@
           {
             "id": "cch_chord:delta:overlap",
             "remainingBoundary": [
-              "The discriminating case reuses a comparison test; #1240 owns an independent discriminating case.",
-              "No separate frozen-scenario CTest case has been established for this claim: it must enforce both the search cap and zero-scan boundary against an unbounded suffix search."
+              "The discriminating case reuses a comparison test; #1240 owns complete frozen-boundary evidence.",
+              "The frozen observation exists at audit-1057/delta-revisions.json / overlap returns the bounded common run used to merge tool output and tests a zero cap; no frozen observation establishes a positive cap that truncates a matching overlap."
             ],
             "comparisons": [
               {
@@ -3808,10 +3816,7 @@
           },
           {
             "id": "cch_chord:delta:prepare-replace",
-            "remainingBoundary": [
-              "The discriminating case reuses a comparison test; #1240 owns an independent discriminating case.",
-              "No separate frozen-scenario CTest case has been established for this claim: it must reject aborted and foreign prepared replacements instead of adopting them."
-            ],
+            "remainingBoundary": [],
             "comparisons": [
               {
                 "artifact": "audit-1061/prepare-replace.json",
@@ -3835,7 +3840,12 @@
             "discriminatingCase": {
               "test": "an aborted or foreign whole-root preparation cannot be adopted",
               "testSource": "tests/chord/TrackerTest.cpp",
-              "reason": "A tracker that adopts a prepared change without ownership and settlement checks accepts an aborted or foreign preparation instead of reporting the exact errors this case requires."
+              "reason": "An abort operation that does nothing permits adoption and fails the frozen error, value, and revision judgment.",
+              "negativeControl": {
+                "test": "frozen replacement comparison rejects ignoring preparation abort",
+                "testSource": "tests/chord/TrackerTest.cpp",
+                "reason": "An abort operation that does nothing permits adoption and fails the frozen error, value, and revision judgment."
+              }
             }
           },
           {
@@ -3942,10 +3952,7 @@
           },
           {
             "id": "cch_chord:state:attached-hydration",
-            "remainingBoundary": [
-              "The discriminating case reuses a comparison test; #1240 owns an independent discriminating case.",
-              "No separate frozen-scenario CTest case has been established for this claim: it must hydrate at the latest buffered sequence without replaying intermediate frames."
-            ],
+            "remainingBoundary": [],
             "comparisons": [
               {
                 "artifact": "audit-1057/replicated-state.json",
@@ -3987,7 +3994,12 @@
             "discriminatingCase": {
               "test": "attachment captures the snapshot before activation and drains buffered frames in commit order",
               "testSource": "tests/chord/ReplicatedStateTest.cpp",
-              "reason": "A subscriber that replays the intermediate buffered frames, or that hydrates at the acquisition sequence instead of the latest one, fails the single-hydrate-at-latest-sequence assertion."
+              "reason": "A shallow attached state that ignores frames from a conforming activated source hydrates at its old snapshot and fails the shared frozen delivery and final-value judgment.",
+              "negativeControl": {
+                "test": "frozen attachment rejects dropping frames buffered during attach",
+                "testSource": "tests/chord/ReplicatedStateTest.cpp",
+                "reason": "A shallow attached state that ignores frames from a conforming activated source hydrates at its old snapshot and fails the shared frozen delivery and final-value judgment."
+              }
             }
           },
           {
@@ -4033,10 +4045,7 @@
           },
           {
             "id": "cch_chord:state:dispose",
-            "remainingBoundary": [
-              "The discriminating case reuses a comparison test; #1240 owns an independent discriminating case.",
-              "No separate frozen-scenario CTest case has been established for this claim: it must observe separate attachment release counts across repeated disposal."
-            ],
+            "remainingBoundary": [],
             "comparisons": [
               {
                 "artifact": "audit-1057/replicated-state.json",
@@ -4066,14 +4075,19 @@
             "discriminatingCase": {
               "test": "independent attachments converge separately and dispose idempotently",
               "testSource": "tests/chord/ReplicatedStateTest.cpp",
-              "reason": "A non-idempotent dispose releases the source twice, and a shared attachment couples the two states; the case separates both."
+              "reason": "Disposing both attachments with the first one fails the frozen attachment count after repeated first disposal.",
+              "negativeControl": {
+                "test": "frozen attachment comparison rejects coupled disposal",
+                "testSource": "tests/chord/ReplicatedStateTest.cpp",
+                "reason": "Disposing both attachments with the first one fails the frozen attachment count after repeated first disposal."
+              }
             }
           },
           {
             "id": "cch_chord:state:listener-error",
             "remainingBoundary": [
-              "The discriminating case reuses a comparison test; #1240 owns an independent discriminating case.",
-              "No separate frozen-scenario CTest case has been established for this claim: it must report a listener failure after unsubscribe without changing deliveries."
+              "The discriminating case reuses a comparison test; #1240 owns complete frozen-boundary evidence.",
+              "The frozen observation exists at audit-1062/observer-delivery.json / a callback rejection that settles after unsubscribe is still reported. The control rejects suppression of the late error, but the comparison checks message strings and does not establish the captured error name or identity; the C++ support::Error value carrier does not represent JavaScript error identity."
             ],
             "comparisons": [
               {
@@ -4247,11 +4261,11 @@
           },
           {
             "path": "tests/chord/ChordContextTest.cpp",
-            "sha256": "1a549dc32585229809c4fe25481f561bff6f0b3d7fb4531384f85a6b91c61e51"
+            "sha256": "81d3a335c5c23f991b89acd3f4d7ab902b105fb09cca4a3fd0b89319f0d74de1"
           },
           {
             "path": "tests/chord/DeltaTest.cpp",
-            "sha256": "ba2dfd2eb1345c0c929c78508f40c505fef17c62bb8238616803f20445c6a505"
+            "sha256": "67223d7516d8764656c8e7e505925423ab4b43461063b9e4e3fe9239e39ba2f9"
           },
           {
             "path": "tests/chord/OutputTest.cpp",
@@ -4259,11 +4273,11 @@
           },
           {
             "path": "tests/chord/ReplicatedStateTest.cpp",
-            "sha256": "8d3718548057e537bf7aa635c94f2a10c07dcc7202cef65a681d33284e1f253c"
+            "sha256": "0308878ca84abb088fdb6ae6e3b6eb610c50a32507e7a0f0e26a160963c4662f"
           },
           {
             "path": "tests/chord/TrackerTest.cpp",
-            "sha256": "57cd3361fd6febea6c9c2accba156268601d06ce24016562d6cbfb01318c9092"
+            "sha256": "ecf5405e58dcd05fabed4866e7e94adbd10fa8fd7ea7e648df385bad91fad0fa"
           },
           {
             "path": "fixtures/pi-v1.3.0/audit-1057/manifest.json",
@@ -4327,7 +4341,7 @@
           },
           {
             "path": "tests/chord/StrictJsonTest.cpp",
-            "sha256": "c657149668e74e86e1488fd07227e94ad4e61e486ffe51efd9fd5eedf61ab299"
+            "sha256": "a067416b928c9429ac4e051cc4a249f0bb024e93fbb6a11ed96c992450949015"
           },
           {
             "path": "tests/support/ChordEvidence.hpp",
@@ -4585,6 +4599,35 @@
             "junit": {
               "path": "docs/research/pi-v1.3.0/deliveries/1240-nested-json-revalidation.xml",
               "sha256": "1befb47183f3accb13b75b8e6d0bc902e592faaeca0ac12ffecb4d8debdfb915"
+            }
+          }
+        },
+        "revalidation1240Remaining": {
+          "reason": "The reviewed frozen-scenario discriminators and their shared comparison judgments changed the pinned Chord test sources; the full prior selection was rerun.",
+          "changedInputs": [
+            "tests/chord/ChordContextTest.cpp",
+            "tests/chord/DeltaTest.cpp",
+            "tests/chord/ReplicatedStateTest.cpp",
+            "tests/chord/TrackerTest.cpp",
+            "tests/chord/StrictJsonTest.cpp"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-L",
+              "chord",
+              "--output-on-failure",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1240-pilot-chord.xml"
+            ],
+            "testedRevision": "cde9255c41c3c575c6e9ce20b1432687869a36f7",
+            "recordedAt": "2026-11-07T07:06:07Z",
+            "selected": 92,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1240-pilot-chord.xml",
+              "sha256": "24e34050c9f175d4fc285909dd5e70b3419ca7672c1ab03c882754953411a3bc"
             }
           }
         }
@@ -6001,14 +6044,14 @@
             "chord",
             "--output-on-failure",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1240-pilot-chord.xml"
+            "../docs/research/pi-v1.3.0/deliveries/1240-remaining-chord.xml"
           ],
-          "testedRevision": "cde9255c41c3c575c6e9ce20b1432687869a36f7",
-          "recordedAt": "2026-11-07T07:06:07Z",
-          "selected": 92,
+          "testedRevision": "0e52577e3679167a7dd66db597066882b03378ae",
+          "recordedAt": "2026-11-07T09:51:28Z",
+          "selected": 104,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1240-pilot-chord.xml",
-            "sha256": "24e34050c9f175d4fc285909dd5e70b3419ca7672c1ab03c882754953411a3bc"
+            "path": "docs/research/pi-v1.3.0/deliveries/1240-remaining-chord.xml",
+            "sha256": "6bc16df2e57437a5100d915ce2c51a766ff4d270c8459402290bf15619e0e997"
           }
         },
         "rows": [
@@ -6082,10 +6125,7 @@
           },
           {
             "id": "cch_chord:Chord:draft",
-            "remainingBoundary": [
-              "The discriminating case reuses a comparison test; #1240 owns an independent discriminating case.",
-              "No separate frozen-scenario CTest case has been established for this claim: it must revoke an escaped draft handle after abort while preserving the committed revision."
-            ],
+            "remainingBoundary": [],
             "comparisons": [
               {
                 "artifact": "audit-1057/delta-revisions.json",
@@ -6097,7 +6137,12 @@
             "discriminatingCase": {
               "test": "aborting a prepared change revokes escaped draft handles",
               "testSource": "tests/chord/TrackerTest.cpp",
-              "reason": "An implementation that refuses prepare but leaves an escaped draft handle usable would apply the escaped write and advance the revision; the case requires the settled overlay error, the aborted-preparation error, and the unchanged committed value and revision."
+              "reason": "An overlay that remains mutable after settlement accepts the frozen escaped write instead of reporting its frozen error.",
+              "negativeControl": {
+                "test": "frozen draft comparison rejects an escaped mutable overlay after abort",
+                "testSource": "tests/chord/TrackerTest.cpp",
+                "reason": "An overlay that remains mutable after settlement accepts the frozen escaped write instead of reporting its frozen error."
+              }
             }
           }
         ],
@@ -6168,11 +6213,11 @@
           },
           {
             "path": "tests/chord/DeltaTest.cpp",
-            "sha256": "ba2dfd2eb1345c0c929c78508f40c505fef17c62bb8238616803f20445c6a505"
+            "sha256": "67223d7516d8764656c8e7e505925423ab4b43461063b9e4e3fe9239e39ba2f9"
           },
           {
             "path": "tests/chord/TrackerTest.cpp",
-            "sha256": "57cd3361fd6febea6c9c2accba156268601d06ce24016562d6cbfb01318c9092"
+            "sha256": "ecf5405e58dcd05fabed4866e7e94adbd10fa8fd7ea7e648df385bad91fad0fa"
           },
           {
             "path": "fixtures/pi-v1.3.0/audit-1054/manifest.json",
@@ -6224,7 +6269,7 @@
           },
           {
             "path": "tests/chord/ChordContextTest.cpp",
-            "sha256": "1a549dc32585229809c4fe25481f561bff6f0b3d7fb4531384f85a6b91c61e51"
+            "sha256": "81d3a335c5c23f991b89acd3f4d7ab902b105fb09cca4a3fd0b89319f0d74de1"
           },
           {
             "path": "tests/chord/OutputTest.cpp",
@@ -6232,11 +6277,11 @@
           },
           {
             "path": "tests/chord/ReplicatedStateTest.cpp",
-            "sha256": "8d3718548057e537bf7aa635c94f2a10c07dcc7202cef65a681d33284e1f253c"
+            "sha256": "0308878ca84abb088fdb6ae6e3b6eb610c50a32507e7a0f0e26a160963c4662f"
           },
           {
             "path": "tests/chord/StrictJsonTest.cpp",
-            "sha256": "c657149668e74e86e1488fd07227e94ad4e61e486ffe51efd9fd5eedf61ab299"
+            "sha256": "a067416b928c9429ac4e051cc4a249f0bb024e93fbb6a11ed96c992450949015"
           },
           {
             "path": "tests/support/ChordEvidence.hpp",
@@ -6413,6 +6458,35 @@
               "sha256": "1befb47183f3accb13b75b8e6d0bc902e592faaeca0ac12ffecb4d8debdfb915"
             }
           }
+        },
+        "revalidation1240Remaining": {
+          "reason": "The reviewed frozen-scenario discriminators and their shared comparison judgments changed the pinned Chord test sources; the full prior selection was rerun.",
+          "changedInputs": [
+            "tests/chord/DeltaTest.cpp",
+            "tests/chord/TrackerTest.cpp",
+            "tests/chord/ChordContextTest.cpp",
+            "tests/chord/ReplicatedStateTest.cpp",
+            "tests/chord/StrictJsonTest.cpp"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-L",
+              "chord",
+              "--output-on-failure",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1240-pilot-chord.xml"
+            ],
+            "testedRevision": "cde9255c41c3c575c6e9ce20b1432687869a36f7",
+            "recordedAt": "2026-11-07T07:06:07Z",
+            "selected": 92,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1240-pilot-chord.xml",
+              "sha256": "24e34050c9f175d4fc285909dd5e70b3419ca7672c1ab03c882754953411a3bc"
+            }
+          }
         }
       },
       {
@@ -6433,14 +6507,14 @@
             "issue1184",
             "--output-on-failure",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1240-pilot-1184-chord-context-cancellation.xml"
+            "../docs/research/pi-v1.3.0/deliveries/1240-remaining-1184.xml"
           ],
-          "testedRevision": "cde9255c41c3c575c6e9ce20b1432687869a36f7",
-          "recordedAt": "2026-11-07T07:06:07Z",
+          "testedRevision": "0e52577e3679167a7dd66db597066882b03378ae",
+          "recordedAt": "2026-11-07T09:51:28Z",
           "selected": 10,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1240-pilot-1184-chord-context-cancellation.xml",
-            "sha256": "1e5a545a00488ca9071b4324a9122edda68d0f316a2e188b4f8c29c00edecfdc"
+            "path": "docs/research/pi-v1.3.0/deliveries/1240-remaining-1184.xml",
+            "sha256": "5210be29e5c022d3816d9cdfb9cb250238a6050c266aa31e336cdabe751cd111"
           }
         },
         "rows": [
@@ -6589,7 +6663,7 @@
           },
           {
             "path": "tests/chord/ChordContextTest.cpp",
-            "sha256": "1a549dc32585229809c4fe25481f561bff6f0b3d7fb4531384f85a6b91c61e51"
+            "sha256": "81d3a335c5c23f991b89acd3f4d7ab902b105fb09cca4a3fd0b89319f0d74de1"
           },
           {
             "path": "tests/durable/DocumentLifecycleTest.cpp",
@@ -6870,6 +6944,31 @@
               "sha256": "5472d33b8c2b6516b44a264d10c437035758ba7f82e588e88f9d34111acca88d"
             }
           }
+        },
+        "revalidation1240Remaining": {
+          "reason": "The reviewed frozen-scenario discriminators and their shared comparison judgments changed the pinned Chord test sources; the full prior selection was rerun.",
+          "changedInputs": [
+            "tests/chord/ChordContextTest.cpp"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-L",
+              "issue1184",
+              "--output-on-failure",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1240-pilot-1184-chord-context-cancellation.xml"
+            ],
+            "testedRevision": "cde9255c41c3c575c6e9ce20b1432687869a36f7",
+            "recordedAt": "2026-11-07T07:06:07Z",
+            "selected": 10,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1240-pilot-1184-chord-context-cancellation.xml",
+              "sha256": "1e5a545a00488ca9071b4324a9122edda68d0f316a2e188b4f8c29c00edecfdc"
+            }
+          }
         }
       },
       {
@@ -6908,23 +7007,20 @@
             "chord",
             "--output-on-failure",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1240-pilot-chord.xml"
+            "../docs/research/pi-v1.3.0/deliveries/1240-remaining-chord.xml"
           ],
-          "testedRevision": "cde9255c41c3c575c6e9ce20b1432687869a36f7",
-          "recordedAt": "2026-11-07T07:06:07Z",
-          "selected": 92,
+          "testedRevision": "0e52577e3679167a7dd66db597066882b03378ae",
+          "recordedAt": "2026-11-07T09:51:28Z",
+          "selected": 104,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1240-pilot-chord.xml",
-            "sha256": "24e34050c9f175d4fc285909dd5e70b3419ca7672c1ab03c882754953411a3bc"
+            "path": "docs/research/pi-v1.3.0/deliveries/1240-remaining-chord.xml",
+            "sha256": "6bc16df2e57437a5100d915ce2c51a766ff4d270c8459402290bf15619e0e997"
           }
         },
         "rows": [
           {
             "id": "cch_chord:json:copy-json",
-            "remainingBoundary": [
-              "The discriminating case reuses a comparison test; #1240 owns an independent discriminating case.",
-              "No separate frozen-scenario CTest case has been established for this claim: it must mutate a copy and check that both its source and sibling remain unchanged."
-            ],
+            "remainingBoundary": [],
             "comparisons": [
               {
                 "artifact": "audit-1057/json-output-support.json",
@@ -6948,7 +7044,12 @@
             "discriminatingCase": {
               "test": "copy strict JSON keeps equal sibling members independent of the source",
               "testSource": "tests/chord/StrictJsonTest.cpp",
-              "reason": "A copy that retained an alias would change the sibling and source when the copy's left value is mutated; the case requires the copy at 2 while the sibling and source stay at 1."
+              "reason": "A copy that aliases its source mutates the source when the frozen copy mutation is applied; the shared source-and-copy judgment rejects it.",
+              "negativeControl": {
+                "test": "frozen JSON copy mutation rejects a retained source alias",
+                "testSource": "tests/chord/StrictJsonTest.cpp",
+                "reason": "A copy that aliases its source mutates the source when the frozen copy mutation is applied; the shared source-and-copy judgment rejects it."
+              }
             }
           },
           {
@@ -6981,10 +7082,7 @@
           },
           {
             "id": "cch_chord:json:json-value",
-            "remainingBoundary": [
-              "The discriminating case reuses a comparison test; #1240 owns an independent discriminating case.",
-              "No separate frozen-scenario CTest case has been established for this claim: it must reject a nested non-finite value rather than normalize it to null."
-            ],
+            "remainingBoundary": [],
             "comparisons": [
               {
                 "artifact": "audit-1057-typed-json/chord-typed-json.json",
@@ -6996,14 +7094,19 @@
             "discriminatingCase": {
               "test": "is strict JSON checks a direct JsonValue model without normalizing it",
               "testSource": "tests/chord/StrictJsonTest.cpp",
-              "reason": "A validator that normalized a non-finite number to null would accept the nested value and return true; the case requires the strict nested value accepted field by field while the non-finite value is rejected."
+              "reason": "The capture script defines the named infinity input as root positive infinity. A validator that rejects NaN but accepts infinity fails the frozen predicate result.",
+              "negativeControl": {
+                "test": "strict JSON rejects the frozen root infinity case",
+                "testSource": "tests/chord/StrictJsonTest.cpp",
+                "reason": "The NaN-only shallow validator accepts the frozen root positive infinity and fails the shared predicate judgment."
+              }
             }
           },
           {
             "id": "cch_chord:Chord:json",
             "remainingBoundary": [
-              "The discriminating case reuses a comparison test; #1240 owns an independent discriminating case.",
-              "No separate frozen-scenario CTest case has been established for this claim: it must observe both detachment from the source container and immutable Chord-copy sharing."
+              "The discriminating case reuses a comparison test; #1240 owns a reviewed independent discriminator or executable negative control.",
+              "The frozen observation exists at audit-1057-typed-json/chord-typed-json.json / copyJson copies strict JSON without retaining aliases; the candidate to_support mutation does not demonstrate a defective Chord admission that passes the existing comparison."
             ],
             "comparisons": [
               {
@@ -7079,7 +7182,7 @@
           },
           {
             "path": "tests/chord/StrictJsonTest.cpp",
-            "sha256": "c657149668e74e86e1488fd07227e94ad4e61e486ffe51efd9fd5eedf61ab299"
+            "sha256": "a067416b928c9429ac4e051cc4a249f0bb024e93fbb6a11ed96c992450949015"
           },
           {
             "path": "fixtures/pi-v1.3.0/audit-1057/manifest.json",
@@ -7131,15 +7234,15 @@
           },
           {
             "path": "tests/chord/ChordContextTest.cpp",
-            "sha256": "1a549dc32585229809c4fe25481f561bff6f0b3d7fb4531384f85a6b91c61e51"
+            "sha256": "81d3a335c5c23f991b89acd3f4d7ab902b105fb09cca4a3fd0b89319f0d74de1"
           },
           {
             "path": "tests/chord/DeltaTest.cpp",
-            "sha256": "ba2dfd2eb1345c0c929c78508f40c505fef17c62bb8238616803f20445c6a505"
+            "sha256": "67223d7516d8764656c8e7e505925423ab4b43461063b9e4e3fe9239e39ba2f9"
           },
           {
             "path": "tests/chord/TrackerTest.cpp",
-            "sha256": "57cd3361fd6febea6c9c2accba156268601d06ce24016562d6cbfb01318c9092"
+            "sha256": "ecf5405e58dcd05fabed4866e7e94adbd10fa8fd7ea7e648df385bad91fad0fa"
           },
           {
             "path": "tests/chord/OutputTest.cpp",
@@ -7147,7 +7250,7 @@
           },
           {
             "path": "tests/chord/ReplicatedStateTest.cpp",
-            "sha256": "8d3718548057e537bf7aa635c94f2a10c07dcc7202cef65a681d33284e1f253c"
+            "sha256": "0308878ca84abb088fdb6ae6e3b6eb610c50a32507e7a0f0e26a160963c4662f"
           },
           {
             "path": "tests/support/ChordEvidence.hpp",
@@ -7844,6 +7947,35 @@
               "sha256": "1befb47183f3accb13b75b8e6d0bc902e592faaeca0ac12ffecb4d8debdfb915"
             }
           }
+        },
+        "revalidation1240Remaining": {
+          "reason": "The reviewed frozen-scenario discriminators and their shared comparison judgments changed the pinned Chord test sources; the full prior selection was rerun.",
+          "changedInputs": [
+            "tests/chord/StrictJsonTest.cpp",
+            "tests/chord/ChordContextTest.cpp",
+            "tests/chord/DeltaTest.cpp",
+            "tests/chord/TrackerTest.cpp",
+            "tests/chord/ReplicatedStateTest.cpp"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-L",
+              "chord",
+              "--output-on-failure",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1240-pilot-chord.xml"
+            ],
+            "testedRevision": "cde9255c41c3c575c6e9ce20b1432687869a36f7",
+            "recordedAt": "2026-11-07T07:06:07Z",
+            "selected": 92,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1240-pilot-chord.xml",
+              "sha256": "24e34050c9f175d4fc285909dd5e70b3419ca7672c1ab03c882754953411a3bc"
+            }
+          }
         }
       },
       {
@@ -7883,22 +8015,22 @@
             "chord",
             "--output-on-failure",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1240-pilot-chord.xml"
+            "../docs/research/pi-v1.3.0/deliveries/1240-remaining-chord.xml"
           ],
-          "testedRevision": "cde9255c41c3c575c6e9ce20b1432687869a36f7",
-          "recordedAt": "2026-11-07T07:06:07Z",
-          "selected": 92,
+          "testedRevision": "0e52577e3679167a7dd66db597066882b03378ae",
+          "recordedAt": "2026-11-07T09:51:28Z",
+          "selected": 104,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1240-pilot-chord.xml",
-            "sha256": "24e34050c9f175d4fc285909dd5e70b3419ca7672c1ab03c882754953411a3bc"
+            "path": "docs/research/pi-v1.3.0/deliveries/1240-remaining-chord.xml",
+            "sha256": "6bc16df2e57437a5100d915ce2c51a766ff4d270c8459402290bf15619e0e997"
           }
         },
         "rows": [
           {
             "id": "cch_chord:state:delivery-order",
             "remainingBoundary": [
-              "The discriminating case reuses a comparison test; #1240 owns an independent discriminating case.",
-              "No separate frozen-scenario CTest case has been established for this claim: it must hold one listener while another frame arrives, then observe serialized and eventual delivery."
+              "The discriminating case reuses a comparison test; #1240 owns a reviewed independent discriminator or executable negative control.",
+              "The frozen observation exists at audit-1057/replicated-state.json / a watch acquired before start buffers frames and serializes callbacks and comparison a watch acquired before start buffers frames and serializes callbacks uses it; a separate discriminator or executable negative control has not yet been established."
             ],
             "comparisons": [
               {
@@ -8033,7 +8165,7 @@
           },
           {
             "path": "tests/chord/ReplicatedStateTest.cpp",
-            "sha256": "8d3718548057e537bf7aa635c94f2a10c07dcc7202cef65a681d33284e1f253c"
+            "sha256": "0308878ca84abb088fdb6ae6e3b6eb610c50a32507e7a0f0e26a160963c4662f"
           },
           {
             "path": "fixtures/pi-v1.3.0/audit-1057/manifest.json",
@@ -8085,15 +8217,15 @@
           },
           {
             "path": "tests/chord/ChordContextTest.cpp",
-            "sha256": "1a549dc32585229809c4fe25481f561bff6f0b3d7fb4531384f85a6b91c61e51"
+            "sha256": "81d3a335c5c23f991b89acd3f4d7ab902b105fb09cca4a3fd0b89319f0d74de1"
           },
           {
             "path": "tests/chord/DeltaTest.cpp",
-            "sha256": "ba2dfd2eb1345c0c929c78508f40c505fef17c62bb8238616803f20445c6a505"
+            "sha256": "67223d7516d8764656c8e7e505925423ab4b43461063b9e4e3fe9239e39ba2f9"
           },
           {
             "path": "tests/chord/TrackerTest.cpp",
-            "sha256": "57cd3361fd6febea6c9c2accba156268601d06ce24016562d6cbfb01318c9092"
+            "sha256": "ecf5405e58dcd05fabed4866e7e94adbd10fa8fd7ea7e648df385bad91fad0fa"
           },
           {
             "path": "tests/chord/OutputTest.cpp",
@@ -8101,7 +8233,7 @@
           },
           {
             "path": "tests/chord/StrictJsonTest.cpp",
-            "sha256": "c657149668e74e86e1488fd07227e94ad4e61e486ffe51efd9fd5eedf61ab299"
+            "sha256": "a067416b928c9429ac4e051cc4a249f0bb024e93fbb6a11ed96c992450949015"
           },
           {
             "path": "tests/support/ChordEvidence.hpp",
@@ -8765,6 +8897,35 @@
             "junit": {
               "path": "docs/research/pi-v1.3.0/deliveries/1240-nested-json-revalidation.xml",
               "sha256": "1befb47183f3accb13b75b8e6d0bc902e592faaeca0ac12ffecb4d8debdfb915"
+            }
+          }
+        },
+        "revalidation1240Remaining": {
+          "reason": "The reviewed frozen-scenario discriminators and their shared comparison judgments changed the pinned Chord test sources; the full prior selection was rerun.",
+          "changedInputs": [
+            "tests/chord/ReplicatedStateTest.cpp",
+            "tests/chord/ChordContextTest.cpp",
+            "tests/chord/DeltaTest.cpp",
+            "tests/chord/TrackerTest.cpp",
+            "tests/chord/StrictJsonTest.cpp"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-L",
+              "chord",
+              "--output-on-failure",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1240-pilot-chord.xml"
+            ],
+            "testedRevision": "cde9255c41c3c575c6e9ce20b1432687869a36f7",
+            "recordedAt": "2026-11-07T07:06:07Z",
+            "selected": 92,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1240-pilot-chord.xml",
+              "sha256": "24e34050c9f175d4fc285909dd5e70b3419ca7672c1ab03c882754953411a3bc"
             }
           }
         }
@@ -32164,10 +32325,10 @@
         "not-applicable": 2
       },
       "cch_chord": {
-        "implemented": 31,
-        "missing": 25,
+        "implemented": 37,
+        "missing": 22,
         "not-applicable": 5,
-        "partial": 4
+        "partial": 1
       },
       "cch_codemode": {
         "implemented": 45,
@@ -32204,21 +32365,21 @@
       "supported": 1435
     },
     "implementation": {
-      "implemented": 1091,
-      "missing": 185,
+      "implemented": 1097,
+      "missing": 182,
       "not-applicable": 18,
-      "partial": 170
+      "partial": 167
     },
     "verification": {
       "not-applicable": 28,
-      "unverified": 536,
-      "upstream-captured": 333,
-      "verified": 567
+      "unverified": 534,
+      "upstream-captured": 325,
+      "verified": 577
     },
     "evidenceRoute": {
-      "captured": 900,
+      "captured": 902,
       "artifact-only": 0,
-      "related-captured": 232,
+      "related-captured": 230,
       "declared-comparison": 29,
       "cpp-regression-only": 10,
       "unobserved": 29,
@@ -32228,7 +32389,7 @@
       "not-applicable": 0,
       "excluded": 28
     },
-    "unobservedSupported": 536,
+    "unobservedSupported": 534,
     "noDecision": [],
     "excluded": [
       "cch_ai:Retry:additional-matching",
@@ -32261,7 +32422,7 @@
       "cch_tui:internal.native-modifiers",
       "cch_tui:isAppleTerminalSession"
     ],
-    "missingObservationRows": 536,
+    "missingObservationRows": 534,
     "scenarioCoverage": {
       "scenarios": 1009,
       "scenarioNamed": 591,
@@ -40397,36 +40558,32 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "missing",
-      "verification": "unverified",
+      "implementation": "implemented",
+      "verification": "verified",
       "owner": "cch_chord",
       "consumer": "cch_durable document transactions (planned)",
       "consumerOwners": [
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1185",
       "scenario": "aborting a changed draft revokes escaped handles and leaves the committed revision unchanged",
       "comparisonScenarios": [
         "aborting a changed draft revokes escaped handles and leaves the committed revision unchanged"
       ],
       "evidence": {
-        "route": "related-captured",
+        "route": "captured",
         "artifact": "fixtures/pi-v1.3.0/audit-1057/delta-revisions.json",
         "scenarioMatch": "direct",
         "capturedScenarios": [
           "aborting a changed draft revokes escaped handles and leaves the committed revision unchanged"
         ],
-        "result": "An escaped draft write after abort throws 'Cannot use a settled overlay'; adopting the prepared change throws 'Prepared change has been aborted'; the committed value and revision stay unchanged."
+        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1185-chord-delta-ingestion.md"
       },
-      "missingObservation": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
-      "gaps": [
-        "No C++ Draft/tracker exists; owned by #1057.",
-        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only.",
-        "No C++ comparison can run until the durable owner exists; the row stays upstream-captured or unverified."
-      ],
-      "remainingWork": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
-      "notes": "",
+      "missingObservation": null,
+      "gaps": [],
+      "remainingWork": null,
+      "notes": "Delivered by #1185; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1185-chord-delta-ingestion.md",
       "lane": "1054",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -40439,7 +40596,30 @@
           "verification": "unverified",
           "owner": "cch_chord"
         }
-      ]
+      ],
+      "auditStatus": {
+        "implementation_ticket": "#1058-draft",
+        "implementation": "missing",
+        "verification": "unverified",
+        "evidence": {
+          "route": "related-captured",
+          "artifact": "fixtures/pi-v1.3.0/audit-1057/delta-revisions.json",
+          "scenarioMatch": "direct",
+          "capturedScenarios": [
+            "aborting a changed draft revokes escaped handles and leaves the committed revision unchanged"
+          ],
+          "result": "An escaped draft write after abort throws 'Cannot use a settled overlay'; adopting the prepared change throws 'Prepared change has been aborted'; the committed value and revision stay unchanged."
+        },
+        "missingObservation": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
+        "gaps": [
+          "No C++ Draft/tracker exists; owned by #1057.",
+          "No cch_durable target or C++ implementation exists; this audit records upstream behavior only.",
+          "No C++ comparison can run until the durable owner exists; the row stays upstream-captured or unverified."
+        ],
+        "remainingWork": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
+        "notes": ""
+      },
+      "delivery": "1185-chord-delta-ingestion"
     },
     {
       "id": "cch_chord:Chord:json",
@@ -41268,15 +41448,15 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "partial",
-      "verification": "upstream-captured",
+      "implementation": "implemented",
+      "verification": "verified",
       "owner": "cch_chord",
       "consumer": "packages/durable/src/session/session.ts:SessionImpl.close,SessionImpl.#runCommit; packages/durable/src/session/observation.ts:CommittedWatch; packages/durable/src/harness/view.ts:235; packages/durable/src/harness/task-graph.ts:201",
       "consumerOwners": [
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1178",
       "scenario": "withoutAbortSignal removes cancellation while preserving typed values",
       "comparisonScenarios": [
         "withoutAbortSignal removes cancellation while preserving typed values"
@@ -41288,12 +41468,12 @@
         "capturedScenarios": [
           "withoutAbortSignal removes cancellation while preserving typed values"
         ],
-        "result": "Masked context exposes no signal but retains value 'cleanup'."
+        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1178-chord-reconciliation.md"
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-      "notes": "Recommendation: Provide a cleanup overlay that suppresses cancellation propagation only for the operation it wraps; keep values intact.",
+      "remainingWork": null,
+      "notes": "Delivered by #1178; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1178-chord-reconciliation.md",
       "lane": "1057",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -41306,7 +41486,26 @@
           "verification": "upstream-captured",
           "owner": "cch_chord"
         }
-      ]
+      ],
+      "auditStatus": {
+        "implementation_ticket": null,
+        "implementation": "partial",
+        "verification": "upstream-captured",
+        "evidence": {
+          "route": "captured",
+          "artifact": "fixtures/pi-v1.3.0/audit-1057/context-cancellation.json",
+          "scenarioMatch": "direct",
+          "capturedScenarios": [
+            "withoutAbortSignal removes cancellation while preserving typed values"
+          ],
+          "result": "Masked context exposes no signal but retains value 'cleanup'."
+        },
+        "missingObservation": null,
+        "gaps": [],
+        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+        "notes": "Recommendation: Provide a cleanup overlay that suppresses cancellation propagation only for the operation it wraps; keep values intact."
+      },
+      "delivery": "1178-chord-comparisons"
     },
     {
       "id": "cch_chord:delta:batch-application",
@@ -41316,15 +41515,15 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "missing",
-      "verification": "upstream-captured",
+      "implementation": "implemented",
+      "verification": "verified",
       "owner": "cch_chord",
       "consumer": "packages/durable/src/storage/memory.ts:applyImmutableBatches; packages/durable/src/storage/sqlite/storage.ts:apply",
       "consumerOwners": [
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1178",
       "scenario": "batched immutable application applies ordered batches and returns only the final revision",
       "comparisonScenarios": [
         "batched immutable application applies ordered batches and returns only the final revision"
@@ -41336,12 +41535,12 @@
         "capturedScenarios": [
           "batched immutable application applies ordered batches and returns only the final revision"
         ],
-        "result": "Two batches yield {items:['b'],value:2}; the input {items:['a'],value:0} is unchanged; root creation works from undefined."
+        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1178-chord-reconciliation.md"
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-      "notes": "Recommendation: Replay each stored delta batch in revision order; do not require a full snapshot between batches.",
+      "remainingWork": null,
+      "notes": "Delivered by #1178; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1178-chord-reconciliation.md",
       "lane": "1057",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -41354,7 +41553,26 @@
           "verification": "upstream-captured",
           "owner": "cch_chord"
         }
-      ]
+      ],
+      "auditStatus": {
+        "implementation_ticket": null,
+        "implementation": "missing",
+        "verification": "upstream-captured",
+        "evidence": {
+          "route": "captured",
+          "artifact": "fixtures/pi-v1.3.0/audit-1057/delta-revisions.json",
+          "scenarioMatch": "direct",
+          "capturedScenarios": [
+            "batched immutable application applies ordered batches and returns only the final revision"
+          ],
+          "result": "Two batches yield {items:['b'],value:2}; the input {items:['a'],value:0} is unchanged; root creation works from undefined."
+        },
+        "missingObservation": null,
+        "gaps": [],
+        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+        "notes": "Recommendation: Replay each stored delta batch in revision order; do not require a full snapshot between batches."
+      },
+      "delivery": "1178-chord-comparisons"
     },
     {
       "id": "cch_chord:delta:draft-abort",
@@ -41431,15 +41649,15 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "missing",
-      "verification": "upstream-captured",
+      "implementation": "implemented",
+      "verification": "verified",
       "owner": "cch_chord",
       "consumer": "packages/durable/src/harness/task-graph.ts:200; packages/durable/src/harness/view.ts:237; packages/durable/src/storage/memory.ts:applyImmutableBatches",
       "consumerOwners": [
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1178",
       "scenario": "immutable application reproduces each revision without mutating the base and shares untouched subtrees",
       "comparisonScenarios": [
         "immutable application reproduces each revision without mutating the base and shares untouched subtrees"
@@ -41451,12 +41669,12 @@
         "capturedScenarios": [
           "immutable application reproduces each revision without mutating the base and shares untouched subtrees"
         ],
-        "result": "Base unchanged; root and touched containers new; `retained` and nested `retained` subtrees shared across revisions."
+        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1178-chord-reconciliation.md"
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-      "notes": "Recommendation: Implement value-identity-preserving copy-on-write; never mutate a committed value or its shared subtrees.",
+      "remainingWork": null,
+      "notes": "Delivered by #1178; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1178-chord-reconciliation.md",
       "lane": "1057",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -41469,7 +41687,26 @@
           "verification": "upstream-captured",
           "owner": "cch_chord"
         }
-      ]
+      ],
+      "auditStatus": {
+        "implementation_ticket": null,
+        "implementation": "missing",
+        "verification": "upstream-captured",
+        "evidence": {
+          "route": "captured",
+          "artifact": "fixtures/pi-v1.3.0/audit-1057/delta-revisions.json",
+          "scenarioMatch": "direct",
+          "capturedScenarios": [
+            "immutable application reproduces each revision without mutating the base and shares untouched subtrees"
+          ],
+          "result": "Base unchanged; root and touched containers new; `retained` and nested `retained` subtrees shared across revisions."
+        },
+        "missingObservation": null,
+        "gaps": [],
+        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+        "notes": "Recommendation: Implement value-identity-preserving copy-on-write; never mutate a committed value or its shared subtrees."
+      },
+      "delivery": "1178-chord-comparisons"
     },
     {
       "id": "cch_chord:delta:mutable-application",
@@ -41480,14 +41717,14 @@
       "frozenSymbols": [],
       "membership": "supported",
       "implementation": "implemented",
-      "verification": "upstream-captured",
+      "verification": "verified",
       "owner": "cch_chord",
       "consumer": "packages/durable/src/storage/sqlite/storage.ts:654 (revision materialization)",
       "consumerOwners": [
         "cch_durable"
       ],
       "boundary": "src/chord/Delta.cpp:apply; src/chord/include/cch/chord/Delta.hpp:apply",
-      "implementation_ticket": "#1061",
+      "implementation_ticket": "#1178",
       "scenario": "a later empty path keeps the preceding mutable write and reports the empty path",
       "comparisonScenarios": [
         "a later empty path keeps the preceding mutable write and reports the empty path"
@@ -41499,12 +41736,12 @@
         "capturedScenarios": [
           "a later empty path keeps the preceding mutable write and reports the empty path"
         ],
-        "result": "Mutable operations execute sequentially and preserve prior writes when a later operation fails; a root replacement remains local until the batch succeeds."
+        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1178-chord-reconciliation.md"
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-      "notes": "C++ covers the representable typed operation shapes; malformed tuple and string-index inputs are rejected before reaching this API. Recommendation: Use mutable application only on values owned by the materializer, never on a committed/shared revision.",
+      "remainingWork": null,
+      "notes": "Delivered by #1178; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1178-chord-reconciliation.md",
       "lane": "1057",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -41517,7 +41754,26 @@
           "verification": "upstream-captured",
           "owner": "cch_chord"
         }
-      ]
+      ],
+      "auditStatus": {
+        "implementation_ticket": "#1061",
+        "implementation": "implemented",
+        "verification": "upstream-captured",
+        "evidence": {
+          "route": "captured",
+          "artifact": "fixtures/pi-v1.3.0/audit-1061/validation-order.json",
+          "scenarioMatch": "direct",
+          "capturedScenarios": [
+            "a later empty path keeps the preceding mutable write and reports the empty path"
+          ],
+          "result": "Mutable operations execute sequentially and preserve prior writes when a later operation fails; a root replacement remains local until the batch succeeds."
+        },
+        "missingObservation": null,
+        "gaps": [],
+        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+        "notes": "C++ covers the representable typed operation shapes; malformed tuple and string-index inputs are rejected before reaching this API. Recommendation: Use mutable application only on values owned by the materializer, never on a committed/shared revision."
+      },
+      "delivery": "1178-chord-comparisons"
     },
     {
       "id": "cch_chord:delta:op-validation",
@@ -41777,14 +42033,14 @@
       "frozenSymbols": [],
       "membership": "supported",
       "implementation": "implemented",
-      "verification": "upstream-captured",
+      "verification": "verified",
       "owner": "cch_chord",
       "consumer": "packages/durable/src/session/transaction.ts:planDocument",
       "consumerOwners": [
         "cch_durable"
       ],
       "boundary": "src/chord/include/cch/chord/Delta.hpp:Tracker::prepare_replace,Prepared::base,Prepared::value,Tracker::adopt",
-      "implementation_ticket": "#1061",
+      "implementation_ticket": "#1178",
       "scenario": "a prepared whole-root replacement keeps the prior revision as its base and stales a same-base preparation after adoption",
       "comparisonScenarios": [
         "a prepared whole-root replacement keeps the prior revision as its base and stales a same-base preparation after adoption",
@@ -41796,16 +42052,16 @@
         "artifact": "fixtures/pi-v1.3.0/audit-1061/prepare-replace.json",
         "scenarioMatch": "direct",
         "capturedScenarios": [
-          "a prepared whole-root replacement keeps the prior revision as its base and stales a same-base preparation after adoption"
+          "a prepared whole-root replacement keeps the prior revision as its base and stales a same-base preparation after adoption",
+          "a deeply equal whole-root replacement emits no operations and still stales a same-base preparation",
+          "an aborted whole-root preparation cannot be adopted"
         ],
-        "result": "The captured base stays at revision 0 while the owned replacement becomes revision 1; a same-base competitor reports `Prepared change is stale`, and reuse reports `Prepared change has already been used`. The equal-root capture records an empty batch and still advances revision."
+        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1178-chord-reconciliation.md"
       },
       "missingObservation": null,
-      "gaps": [
-        "C++ comparison has not been run; upstream capture alone does not establish implementation parity."
-      ],
-      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-      "notes": "Recommendation: Let a whole-value replacement take immutable ownership once; do not deep-copy it into a delta.",
+      "gaps": [],
+      "remainingWork": null,
+      "notes": "Delivered by #1178; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1178-chord-reconciliation.md",
       "lane": "1057",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -41818,7 +42074,28 @@
           "verification": "upstream-captured",
           "owner": "cch_chord"
         }
-      ]
+      ],
+      "auditStatus": {
+        "implementation_ticket": "#1061",
+        "implementation": "implemented",
+        "verification": "upstream-captured",
+        "evidence": {
+          "route": "captured",
+          "artifact": "fixtures/pi-v1.3.0/audit-1061/prepare-replace.json",
+          "scenarioMatch": "direct",
+          "capturedScenarios": [
+            "a prepared whole-root replacement keeps the prior revision as its base and stales a same-base preparation after adoption"
+          ],
+          "result": "The captured base stays at revision 0 while the owned replacement becomes revision 1; a same-base competitor reports `Prepared change is stale`, and reuse reports `Prepared change has already been used`. The equal-root capture records an empty batch and still advances revision."
+        },
+        "missingObservation": null,
+        "gaps": [
+          "C++ comparison has not been run; upstream capture alone does not establish implementation parity."
+        ],
+        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+        "notes": "Recommendation: Let a whole-value replacement take immutable ownership once; do not deep-copy it into a delta."
+      },
+      "delivery": "1178-chord-comparisons"
     },
     {
       "id": "cch_chord:delta:root-replacement",
@@ -42976,15 +43253,15 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "partial",
-      "verification": "upstream-captured",
+      "implementation": "implemented",
+      "verification": "verified",
       "owner": "cch_chord",
       "consumer": "packages/durable/src/harness/usage.ts:37; packages/durable/src/harness/inbox.ts; packages/durable/src/documents.ts:materializeDocument",
       "consumerOwners": [
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1186",
       "scenario": "copyJson returns a detached strict-JSON value and omits undefined object properties",
       "comparisonScenarios": [
         "copyJson returns a detached strict-JSON value and omits undefined object properties",
@@ -42998,14 +43275,12 @@
         "capturedScenarios": [
           "copyJson returns a detached strict-JSON value and omits undefined object properties"
         ],
-        "result": "Nested copy is detached; default undefined rejects with 'Value contains a non-JSON undefined; expected strict JSON'; with omit, undefined properties disappear."
+        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1186-chord-typed-json.md"
       },
       "missingObservation": null,
-      "gaps": [
-        "C++ `JsonValue` cannot represent undefined; object key order is sorted by `std::map`, unlike JS insertion order."
-      ],
-      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-      "notes": "Recommendation: Use value copying for detachment, but add a strict validator and an explicit omit-undefined policy; C++ `JsonValue` has no undefined.",
+      "gaps": [],
+      "remainingWork": null,
+      "notes": "Delivered by #1186; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1186-chord-typed-json.md",
       "lane": "1057",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -43018,7 +43293,28 @@
           "verification": "upstream-captured",
           "owner": "cch_chord"
         }
-      ]
+      ],
+      "auditStatus": {
+        "implementation_ticket": null,
+        "implementation": "partial",
+        "verification": "upstream-captured",
+        "evidence": {
+          "route": "captured",
+          "artifact": "fixtures/pi-v1.3.0/audit-1057/json-output-support.json",
+          "scenarioMatch": "direct",
+          "capturedScenarios": [
+            "copyJson returns a detached strict-JSON value and omits undefined object properties"
+          ],
+          "result": "Nested copy is detached; default undefined rejects with 'Value contains a non-JSON undefined; expected strict JSON'; with omit, undefined properties disappear."
+        },
+        "missingObservation": null,
+        "gaps": [
+          "C++ `JsonValue` cannot represent undefined; object key order is sorted by `std::map`, unlike JS insertion order."
+        ],
+        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+        "notes": "Recommendation: Use value copying for detachment, but add a strict validator and an explicit omit-undefined policy; C++ `JsonValue` has no undefined."
+      },
+      "delivery": "1186-chord-typed-json"
     },
     {
       "id": "cch_chord:json:json-representation",
@@ -43074,34 +43370,32 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "partial",
-      "verification": "unverified",
+      "implementation": "implemented",
+      "verification": "verified",
       "owner": "cch_chord",
       "consumer": "packages/durable/src/session/transaction.ts:Draft<JsonObject>; packages/durable/src/harness/live.ts:JsonValue",
       "consumerOwners": [
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1186",
       "scenario": "isJsonValue checks strict JSON without normalizing it",
       "comparisonScenarios": [
         "isJsonValue checks strict JSON without normalizing it"
       ],
       "evidence": {
-        "route": "related-captured",
+        "route": "captured",
         "artifact": "fixtures/pi-v1.3.0/audit-1057-typed-json/chord-typed-json.json",
-        "scenarioMatch": "direct-global",
+        "scenarioMatch": "direct",
         "capturedScenarios": [
           "isJsonValue checks strict JSON without normalizing it"
         ],
-        "result": null
+        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1186-chord-typed-json.md"
       },
-      "missingObservation": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
-      "gaps": [
-        "No captured scenario directly exercises a C++-comparable JsonValue model; the copyJson scenarios cover the JS value constraints."
-      ],
-      "remainingWork": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
-      "notes": "Recommendation: Reuse `support::JsonValue` as the data carrier but keep strictness, finite-number and object-shape policy in the durable/chord layer.",
+      "missingObservation": null,
+      "gaps": [],
+      "remainingWork": null,
+      "notes": "Delivered by #1186; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1186-chord-typed-json.md",
       "lane": "1057",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -43114,7 +43408,28 @@
           "verification": "unverified",
           "owner": "cch_chord"
         }
-      ]
+      ],
+      "auditStatus": {
+        "implementation_ticket": null,
+        "implementation": "partial",
+        "verification": "unverified",
+        "evidence": {
+          "route": "related-captured",
+          "artifact": "fixtures/pi-v1.3.0/audit-1057-typed-json/chord-typed-json.json",
+          "scenarioMatch": "direct-global",
+          "capturedScenarios": [
+            "isJsonValue checks strict JSON without normalizing it"
+          ],
+          "result": null
+        },
+        "missingObservation": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
+        "gaps": [
+          "No captured scenario directly exercises a C++-comparable JsonValue model; the copyJson scenarios cover the JS value constraints."
+        ],
+        "remainingWork": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
+        "notes": "Recommendation: Reuse `support::JsonValue` as the data carrier but keep strictness, finite-number and object-shape policy in the durable/chord layer."
+      },
+      "delivery": "1186-chord-typed-json"
     },
     {
       "id": "cch_chord:json:strict-validation",
@@ -43584,14 +43899,14 @@
       "frozenSymbols": [],
       "membership": "supported",
       "implementation": "implemented",
-      "verification": "upstream-captured",
+      "verification": "verified",
       "owner": "cch_chord",
       "consumer": "packages/durable/src/session/session.ts:SessionImpl.documentState; packages/durable/src/session/observation.ts:CommittedStateSource",
       "consumerOwners": [
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1062",
+      "implementation_ticket": "#1178",
       "scenario": "attached replicated state hydrates at cursor zero and then delivers exact frames in sequence order",
       "comparisonScenarios": [
         "attached replicated state hydrates at cursor zero and then delivers exact frames in sequence order",
@@ -43608,12 +43923,12 @@
         "capturedScenarios": [
           "attached replicated state hydrates at cursor zero and then delivers exact frames in sequence order"
         ],
-        "result": "Deliveries are hydrate/0/{value:1}, update/1/{value:2}; no error; dispose called once."
+        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1178-chord-reconciliation.md"
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-      "notes": "Recommendation: The C++ source attachment now hydrates from a snapshot cursor and publishes exact ordered frames; durable document history and retention remain in #1063.",
+      "remainingWork": null,
+      "notes": "Delivered by #1178; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1178-chord-reconciliation.md",
       "lane": "1057",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -43626,7 +43941,26 @@
           "verification": "upstream-captured",
           "owner": "cch_chord"
         }
-      ]
+      ],
+      "auditStatus": {
+        "implementation_ticket": "#1062",
+        "implementation": "implemented",
+        "verification": "upstream-captured",
+        "evidence": {
+          "route": "captured",
+          "artifact": "fixtures/pi-v1.3.0/audit-1057/replicated-state.json",
+          "scenarioMatch": "direct",
+          "capturedScenarios": [
+            "attached replicated state hydrates at cursor zero and then delivers exact frames in sequence order"
+          ],
+          "result": "Deliveries are hydrate/0/{value:1}, update/1/{value:2}; no error; dispose called once."
+        },
+        "missingObservation": null,
+        "gaps": [],
+        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+        "notes": "Recommendation: The C++ source attachment now hydrates from a snapshot cursor and publishes exact ordered frames; durable document history and retention remain in #1063."
+      },
+      "delivery": "1178-chord-comparisons"
     },
     {
       "id": "cch_chord:state:cursor-gap",
@@ -43761,14 +44095,14 @@
       "frozenSymbols": [],
       "membership": "supported",
       "implementation": "implemented",
-      "verification": "upstream-captured",
+      "verification": "verified",
       "owner": "cch_chord",
       "consumer": "packages/durable/src/session/session.ts:SessionImpl.documentState; packages/durable/src/harness/view.ts",
       "consumerOwners": [
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1062",
+      "implementation_ticket": "#1178",
       "scenario": "attached replicated state hydrates at cursor zero and then delivers exact frames in sequence order",
       "comparisonScenarios": [
         "attached replicated state hydrates at cursor zero and then delivers exact frames in sequence order",
@@ -43783,12 +44117,12 @@
         "capturedScenarios": [
           "attached replicated state hydrates at cursor zero and then delivers exact frames in sequence order"
         ],
-        "result": "disposeCalls is 1 after hydration and an explicit dispose."
+        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1178-chord-reconciliation.md"
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-      "notes": "Recommendation: Make observer disposal idempotent and release source resources exactly once; do not clear the last good value.",
+      "remainingWork": null,
+      "notes": "Delivered by #1178; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1178-chord-reconciliation.md",
       "lane": "1057",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -43801,7 +44135,26 @@
           "verification": "upstream-captured",
           "owner": "cch_chord"
         }
-      ]
+      ],
+      "auditStatus": {
+        "implementation_ticket": "#1062",
+        "implementation": "implemented",
+        "verification": "upstream-captured",
+        "evidence": {
+          "route": "captured",
+          "artifact": "fixtures/pi-v1.3.0/audit-1057/replicated-state.json",
+          "scenarioMatch": "direct",
+          "capturedScenarios": [
+            "attached replicated state hydrates at cursor zero and then delivers exact frames in sequence order"
+          ],
+          "result": "disposeCalls is 1 after hydration and an explicit dispose."
+        },
+        "missingObservation": null,
+        "gaps": [],
+        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+        "notes": "Recommendation: Make observer disposal idempotent and release source resources exactly once; do not clear the last good value."
+      },
+      "delivery": "1178-chord-comparisons"
     },
     {
       "id": "cch_chord:state:listener-error",

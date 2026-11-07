@@ -79,6 +79,22 @@ constexpr const char* kNonFiniteMessage = "value contains a non-finite number an
     return keep->at("nested").get_if<JsonValue::array_t>();
 }
 
+[[nodiscard]] bool matches_frozen_json_predicate(bool actual, bool expected) { return actual == expected; }
+
+[[nodiscard]] bool matches_frozen_copy_mutation(
+        const cch::tests::FrozenChordScenario& frozen, const JsonValue& source, const JsonValue& copy) {
+    const auto* expected_source = frozen.object_member("sourceAfterCopyMutation");
+    const auto* expected_copy = frozen.object_member("copiedAfterMutation");
+    REQUIRE(expected_source != nullptr);
+    REQUIRE(expected_copy != nullptr);
+    const auto source_text = support::canonical_json(source);
+    const auto expected_source_text = support::canonical_json(JsonValue{*expected_source});
+    const auto copy_text = support::canonical_json(copy);
+    const auto expected_copy_text = support::canonical_json(JsonValue{*expected_copy});
+    return source_text && expected_source_text && copy_text && expected_copy_text &&
+           *source_text == *expected_source_text && *copy_text == *expected_copy_text;
+}
+
 } // namespace
 
 // Frozen evidence: fixtures/pi-v1.3.0/audit-1057/json-output-support.json
@@ -333,6 +349,45 @@ TEST_CASE("copy strict JSON keeps equal sibling members independent of the sourc
     REQUIRE(actual_text.has_value());
     REQUIRE(expected_text.has_value());
     CHECK(*actual_text == *expected_text);
+    CHECK(matches_frozen_copy_mutation(frozen, source, *copied));
+}
+
+TEST_CASE("frozen JSON copy mutation rejects a retained source alias", "[chord][json][issue1240][spec]") {
+    const auto frozen = typed_json_scenario("copyJson copies strict JSON without retaining aliases");
+    const auto* input = frozen.inputs_member("value");
+    const auto* expected_copy = frozen.object_member("copiedAfterMutation");
+    REQUIRE(input != nullptr);
+    REQUIRE(expected_copy != nullptr);
+    const auto* expected_left = support::json_object_member(*expected_copy, "left");
+    REQUIRE(expected_left != nullptr);
+    const auto* mutation = support::json_member(*expected_left, "value");
+    REQUIRE(mutation != nullptr);
+    const auto mutate = [mutation](JsonValue& value) {
+        auto* fields = object_of(value);
+        REQUIRE(fields != nullptr);
+        auto* left = fields->at("left").get_if<JsonValue::object_t>();
+        REQUIRE(left != nullptr);
+        left->at("value") = *mutation;
+    };
+
+    // A shallow copy aliases the source, so mutating the copy changes the source.
+    auto shallow_source = *input;
+    const auto shallow_copy_json = [](JsonValue& value) -> JsonValue& { return value; };
+    auto& shallow_copy = shallow_copy_json(shallow_source);
+    mutate(shallow_copy);
+    CHECK_FALSE(matches_frozen_copy_mutation(frozen, shallow_source, shallow_copy));
+
+    auto source = *input;
+    auto copied = copy_strict_json(source);
+    REQUIRE(copied);
+    mutate(*copied);
+    CHECK(matches_frozen_copy_mutation(frozen, source, *copied));
+
+    const auto admitted = Json::from_support(source);
+    REQUIRE(admitted);
+    auto chord_copy = admitted->to_support();
+    mutate(chord_copy);
+    CHECK(matches_frozen_copy_mutation(frozen, source, chord_copy));
 }
 
 // Frozen evidence: fixtures/pi-v1.3.0/audit-1057-typed-json/chord-typed-json.json
@@ -394,7 +449,10 @@ TEST_CASE("is strict JSON checks a direct JsonValue model without normalizing it
     const auto non_finite = JsonValue{JsonValue::object_t{
             {"nested", JsonValue{JsonValue::array_t{JsonValue{1.0}, JsonValue{std::nan("")}}}},
     }};
-    CHECK(is_strict_json_value(non_finite) == *frozen_infinity);
+    // This is a separate C++ regression; the frozen infinity input is root positive infinity.
+    CHECK_FALSE(is_strict_json_value(non_finite));
+    CHECK(matches_frozen_json_predicate(
+            is_strict_json_value(JsonValue{std::numeric_limits<double>::infinity()}), *frozen_infinity));
 
     const auto copied = copy_strict_json(strict_value);
     REQUIRE(copied);
@@ -406,6 +464,29 @@ TEST_CASE("is strict JSON checks a direct JsonValue model without normalizing it
     CHECK(nested->at(0).get_number() == 1.0);
     CHECK(nested->at(1).get_boolean());
     CHECK(nested->at(2).holds<std::nullptr_t>());
+}
+
+// The capture constructs the recorded "infinity" case as Number.POSITIVE_INFINITY.
+TEST_CASE("strict JSON rejects the frozen root infinity case", "[chord][json][issue1240][spec]") {
+    const auto frozen = typed_json_scenario("isJsonValue checks strict JSON without normalizing it");
+    const auto* cases_value = frozen.inputs_member("cases");
+    const auto* results = frozen.object_member("results");
+    REQUIRE(cases_value != nullptr);
+    REQUIRE(results != nullptr);
+    const auto* cases = cases_value->get_if<JsonValue::array_t>();
+    REQUIRE(cases != nullptr);
+    bool has_infinity = false;
+    for (const auto& item : *cases) {
+        const auto* name = item.get_if<std::string>();
+        if (name != nullptr && *name == "infinity") has_infinity = true;
+    }
+    CHECK(has_infinity);
+    const auto expected = support::json_bool_member(*results, "infinity");
+    REQUIRE(expected.has_value());
+    const double infinity = std::numeric_limits<double>::infinity();
+    CHECK(matches_frozen_json_predicate(is_strict_json_value(JsonValue{infinity}), *expected));
+    // Rejecting NaN alone leaves infinity accepted, despite the frozen result.
+    CHECK_FALSE(matches_frozen_json_predicate(!std::isnan(infinity), *expected));
 }
 
 // Frozen evidence: fixtures/pi-v1.3.0/audit-1057-typed-json/chord-typed-json.json
