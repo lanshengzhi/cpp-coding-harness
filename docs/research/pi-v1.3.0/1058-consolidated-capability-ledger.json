@@ -1185,14 +1185,14 @@
             "-L",
             "^(issue1090|issue1101|issue1104)$",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1090-durable-images-revalidation-1244-capture.xml"
+            "docs/research/pi-v1.3.0/deliveries/1090-durable-images-revalidation-1232.xml"
           ],
-          "testedRevision": "6451b872e665cc8d014582eaad3e6dce06ff22cd",
-          "recordedAt": "2026-11-06T17:17:20Z",
+          "testedRevision": "d655d396eb86a16d2174a78c9d12439a830ea94d",
+          "recordedAt": "2026-11-08T04:38:07Z",
           "selected": 36,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1090-durable-images-revalidation-1244-capture.xml",
-            "sha256": "42d44f7914bde911845fb31e389b8d7a5734dee2ea816fe9b6c51a2898d449b4"
+            "path": "docs/research/pi-v1.3.0/deliveries/1090-durable-images-revalidation-1232.xml",
+            "sha256": "a813457b9e9d3032818b95d95c7c4b96f69d89aac3346d5e36b015b41ddc8deb"
           }
         },
         "inputs": [
@@ -1242,7 +1242,7 @@
           },
           {
             "path": "src/durable/CodingTools.cpp",
-            "sha256": "4bb2c56bdaa9a5e3cf44a15401bf30faa3e46ded1f1f117c132a3d268eefb26d"
+            "sha256": "047ef7daeb69f7e3dcc476740fa35f7c25d0b4c9db0b1209640808e0c80adc1d"
           },
           {
             "path": "src/durable/Images.cpp",
@@ -2220,6 +2220,30 @@
             "junit": {
               "path": "docs/research/pi-v1.3.0/deliveries/1090-durable-images-revalidation-1221-stdin.xml",
               "sha256": "fbaa1c71878c417bc0f55f4d28b5565c2bf89a7093bf56333e0fd66420222776"
+            }
+          }
+        },
+        "revalidation1232": {
+          "reason": "Issue #1232 aligns read-tool size diagnostics with frozen pi rounding; image preparation, scenario mappings and routing are unchanged. The exact receipt selection was rerun on the checkout base plus the changed input pinned above.",
+          "changedInputs": [
+            "src/durable/CodingTools.cpp"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-L",
+              "^(issue1090|issue1101|issue1104)$",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1090-durable-images-revalidation-1244-capture.xml"
+            ],
+            "testedRevision": "6451b872e665cc8d014582eaad3e6dce06ff22cd",
+            "recordedAt": "2026-11-06T17:17:20Z",
+            "selected": 36,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1090-durable-images-revalidation-1244-capture.xml",
+              "sha256": "42d44f7914bde911845fb31e389b8d7a5734dee2ea816fe9b6c51a2898d449b4"
             }
           }
         }

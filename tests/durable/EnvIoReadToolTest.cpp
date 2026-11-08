@@ -160,6 +160,33 @@ TEST_CASE("Durable read tool matches the frozen one-based line read contract", "
     }
 }
 
+TEST_CASE("Durable read tool formats oversized line sizes like frozen pi", "[durable][environment][issue1232]") {
+    cch::tests::TempWorkspace workspace;
+    auto env = cch::durable::local_environment(workspace.path().string());
+    for (const auto& [size, expected] : std::vector<std::pair<std::size_t, std::string_view>>{{51455, "50.2KB"},
+                 {51456, "50.3KB"},
+                 {51457, "50.3KB"},
+                 {1048575, "1024.0KB"},
+                 {1048576, "1.0MB"},
+                 {1310719, "1.2MB"},
+                 {1310720, "1.3MB"},
+                 {1310721, "1.3MB"}}) {
+        INFO("line size: " << size);
+        {
+            std::ofstream output(workspace.path() / "line.txt", std::ios::binary | std::ios::trunc);
+            output << std::string(size, 'a');
+            REQUIRE(output.good());
+        }
+        auto result = run_read(env, JsonValue(JsonValue::object_t{{"path", JsonValue("line.txt")}}));
+        REQUIRE(result.has_value());
+        CHECK(result->content.size() == 2);
+        REQUIRE_FALSE(result->content.empty());
+        const auto* diagnostic = std::get_if<cch::ai::TextContent>(&result->content.back());
+        REQUIRE(diagnostic != nullptr);
+        CHECK(diagnostic->text.contains(std::format("Line 1 is {}, exceeds the 50.0KB limit", expected)));
+    }
+}
+
 TEST_CASE("Durable read tool never loads an unbounded file into memory", "[durable][environment][issue1197]") {
     cch::tests::TempWorkspace workspace;
     auto env = cch::durable::local_environment(workspace.path().string());

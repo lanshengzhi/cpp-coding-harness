@@ -13,7 +13,6 @@
 #include <charconv>
 #include <chrono>
 #include <cmath>
-#include <cstdio>
 #include <format>
 #include <limits>
 #include <optional>
@@ -162,14 +161,13 @@ std::string js_number(double value) {
 /// Frozen `formatSize`: bytes below 1 KiB render as `NB`, below 1 MiB as one
 /// decimal kilobyte, otherwise one decimal megabyte.
 std::string format_size(std::size_t bytes) {
-    char buffer[32]{};
     if (bytes < 1024) return std::format("{}B", bytes);
-    if (bytes < 1024 * 1024) {
-        std::snprintf(buffer, sizeof(buffer), "%.1f", static_cast<double>(bytes) / 1024.0);
-        return std::string(buffer) + "KB";
-    }
-    std::snprintf(buffer, sizeof(buffer), "%.1f", static_cast<double>(bytes) / (1024.0 * 1024.0));
-    return std::string(buffer) + "MB";
+    const bool kilobytes = bytes < 1024 * 1024;
+    double value = static_cast<double>(bytes) / (kilobytes ? 1024.0 : 1024.0 * 1024.0);
+    // Binary doubles are exactly halfway between tenths only at .25 and .75.
+    // JavaScript toFixed chooses the larger decimal at a tie; format uses even.
+    if (std::fmod(value, 0.5) == 0.25) value = std::nextafter(value, std::numeric_limits<double>::infinity());
+    return std::format("{:.1f}{}", value, kilobytes ? "KB" : "MB");
 }
 
 /// Where one file's lines are, as the frozen `LineScanner` finds them in one
