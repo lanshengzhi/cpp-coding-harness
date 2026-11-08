@@ -155,6 +155,23 @@ def wiki_lint(root, graph_keys, repo):
             'broken_relative_links': broken, 'missing_tracker_references': missing}
 
 
+def parse_batch_tickets(decisions, repo):
+    tickets = {}
+    for batch_id, number in re.findall(r'\| N5 → (B[0-9]+) \| \[#([1-9][0-9]*)\]', decisions):
+        if batch_id in tickets:
+            raise ValueError(f'duplicate route batch mapping {batch_id}')
+        tickets[batch_id] = f'{repo}#{number}'
+    return tickets
+
+
+def historical_group_table(proposal):
+    section = proposal.split('## 2.', 1)[1].split('## 3.', 1)[0]
+    lines = [line for line in section.splitlines() if line.startswith('|')]
+    if len(lines) < 3:
+        raise ValueError('proposal group table missing')
+    return '\n'.join(lines)
+
+
 def report(root, repo):
     data = {name: json.loads((root / path).read_text()) for name, path in FILES.items()}
     rows = {}
@@ -198,11 +215,7 @@ def report(root, repo):
                 raise ValueError(f'unknown delivery row {rid}')
             rows[rid]['deliveries'].append({'id': receipt['id'], 'ticket': receipt['ticket']})
     decisions = (root / 'docs/wiki/pi-alignment/decisions-2026-11-04.md').read_text()
-    batch_tickets = {}
-    for batch_id, number in re.findall(r'\| N5 → (B[0-9]+) \| \[#([1-9][0-9]*)\]', decisions):
-        if batch_id in batch_tickets:
-            raise ValueError(f'duplicate route batch mapping {batch_id}')
-        batch_tickets[batch_id] = f'{repo}#{number}'
+    batch_tickets = parse_batch_tickets(decisions, repo)
     route_rows = defaultdict(list)
     for batch in data['routes']['batches']:
         if batch['id'] not in batch_tickets:
@@ -218,7 +231,7 @@ def report(root, repo):
         key = reference(item['issue'], repo)
         if key:
             refs.add(key)
-    issues, hierarchy = graph(repo, refs)
+    issues, _hierarchy = graph(repo, refs)
     by_ticket = defaultdict(list)
     for rid, row in rows.items():
         key = reference(row['ticket'], repo)
@@ -230,19 +243,16 @@ def report(root, repo):
             associated_tickets.add(reference(row['mapping']['ticket'], repo))
         associated_tickets.update(f'{repo}#{delivery["ticket"]}' for delivery in row['deliveries'])
     proposal = (root / 'docs/wiki/pi-alignment/reconciliation-1183-proposal-2026-11-04.md').read_text()
-    section = proposal.split('## 2.', 1)[1].split('## 3.', 1)[0]
-    lines = [line for line in section.splitlines() if line.startswith('|')]
-    if len(lines) < 3:
-        raise ValueError('proposal group table missing')
+    table = historical_group_table(proposal)
     return {'rows': dict(sorted(rows.items())), 'unreferenced': dict(sorted(unreferenced.items())),
             'historical_unreferenced': dict(sorted(historical_unreferenced.items())),
             'rollup': dict(sorted(rollup.items())), 'graph': issues,
             'frontier': {'owners': data['frontier']['ownerGraph']['nodes'],
                          'residual_reconciliation': data['frontier']['residualReconciliation']},
             'closed_tickets_successor_unknown': {key: sorted(ids) for key, ids in sorted(by_ticket.items()) if issues[key]['state'] == 'CLOSED'},
-            'open_tickets_without_rows': sorted(key for key in hierarchy if issues[key]['state'] == 'OPEN' and key not in associated_tickets),
+            'open_tickets_without_rows': sorted(key for key in issues if issues[key]['state'] == 'OPEN' and key not in associated_tickets),
             'reference_lint': wiki_lint(root, issues, repo),
-            'historical_group_table': {'status': 'published counts only; row membership and historical graph unverified; group 9 contradicts missing/partial population', 'table': '\n'.join(lines)}}
+            'historical_group_table': {'status': 'published counts only; row membership and historical graph unverified; group 9 contradicts missing/partial population', 'table': table}}
 
 
 def main():

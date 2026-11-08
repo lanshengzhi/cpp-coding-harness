@@ -25,7 +25,7 @@ class ReconciliationCliTest(unittest.TestCase):
                 {'id': 'r4', 'owner': 'owner', 'membership': 'supported', 'implementation': 'implemented', 'verification': 'unverified', 'implementation_ticket': None},
             ]},
             'docs/research/pi-v1.3.0/1058-deliveries.json': {'records': [{'id': 'receipt', 'ticket': '2', 'rows': [{'id': 'r2'}]}]},
-            'docs/research/pi-v1.3.0/1058-implementation-frontier.json': {'ownerGraph': {'nodes': [{'owner': 'owner'}]}, 'residualReconciliation': []},
+            'docs/research/pi-v1.3.0/1058-implementation-frontier.json': {'ownerGraph': {'nodes': [{'owner': 'owner'}]}, 'residualReconciliation': [{'issue': '#5'}]},
             'fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json': {'ticketMappings': {'entries': [{'id': 'mapping', 'ticket': '#2', 'history': True, 'rows': ['r2']}, {'id': 'mapping4', 'ticket': '#4', 'rows': ['r1']}]}},
             'docs/research/pi-v1.3.0/1182-tui-route-batches.json': {'batches': [{'id': 'B1', 'owner': 'owner', 'rows': ['r1'], 'dependency': 'capture'}]},
         }
@@ -89,6 +89,7 @@ print(json.dumps({'data': {'repository': {'issue': issue}}}))
         self.assertIn('example/repo#4', report['graph'])
         self.assertNotIn('example/repo#3', report['open_tickets_without_rows'])
         self.assertNotIn('example/repo#4', report['open_tickets_without_rows'])
+        self.assertIn('example/repo#5', report['open_tickets_without_rows'])
         self.assertIn('Example', report['historical_group_table']['table'])
 
     def test_failures_never_emit_a_partial_report(self):

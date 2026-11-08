@@ -2,6 +2,15 @@ include_guard(GLOBAL)
 
 # Orchestration include: top-level CMakeLists.txt only (relies on CMAKE_CURRENT_SOURCE_DIR = repo root).
 
+    # Read-only evidence reconciliation CLI; uses fixed inputs and a fake gh boundary.
+    add_test(
+        NAME cch_pi_v130_reconciliation_cli
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/evidence/ReconciliationCliTest.py
+    )
+    set_tests_properties(cch_pi_v130_reconciliation_cli PROPERTIES
+        LABELS "evidence;consolidation;issue1208;spec"
+        TIMEOUT 120)
+
     # CLI and architecture. The only shard that launches the built binary
     # (CliSmokeTest), so it carries the PIKE_EXECUTABLE definition and a build
     # dependency on pike.
