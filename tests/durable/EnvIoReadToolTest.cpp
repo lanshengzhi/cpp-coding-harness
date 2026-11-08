@@ -9,9 +9,12 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-#include <fstream>
+#include <charconv>
 #include <filesystem>
+#include <fstream>
+#include <limits>
 #include <optional>
+#include <sstream>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -21,6 +24,51 @@ using cch::support::JsonValue;
 namespace {
 
 namespace fs = std::filesystem;
+
+std::optional<unsigned long long> read_peak_memory(std::istream& status) {
+    std::optional<unsigned long long> peak;
+    std::string line;
+    while (std::getline(status, line)) {
+        if (!line.starts_with("VmHWM:")) continue;
+        if (peak.has_value()) return std::nullopt;
+        std::string_view value(line);
+        value.remove_prefix(6);
+        const auto start = value.find_first_not_of(" \t");
+        if (start == std::string_view::npos) return std::nullopt;
+        value.remove_prefix(start);
+        unsigned long long kilobytes = 0;
+        const auto parsed = std::from_chars(value.data(), value.data() + value.size(), kilobytes);
+        if (parsed.ec != std::errc{} || parsed.ptr == value.data() || kilobytes == 0 ||
+                kilobytes > std::numeric_limits<unsigned long long>::max() / 1024)
+            return std::nullopt;
+        value.remove_prefix(static_cast<std::size_t>(parsed.ptr - value.data()));
+        const auto unit = value.find_first_not_of(" \t");
+        if (unit == std::string_view::npos || unit == 0) return std::nullopt;
+        value.remove_prefix(unit);
+        const auto end = value.find_last_not_of(" \t\r");
+        if (end == std::string_view::npos || value.substr(0, end + 1) != "kB") return std::nullopt;
+        peak = kilobytes * 1024;
+    }
+    if (status.bad()) return std::nullopt;
+    return peak;
+}
+
+// Supplies one valid line, then reports a read error on the next extraction.
+class FailingStatusBuffer final : public std::stringbuf {
+public:
+    FailingStatusBuffer() : std::stringbuf("VmHWM: 12 kB\n") {}
+
+    void attach(std::istream& stream) { stream_ = &stream; }
+
+protected:
+    int_type underflow() override {
+        stream_->setstate(std::ios::badbit);
+        return traits_type::eof();
+    }
+
+private:
+    std::istream* stream_ = nullptr; // The stream outlives all reads from this buffer.
+};
 
 /// Renders the frozen diagnostic block the stored message ends with (frozen
 /// `appendToolResult` -> `renderDiagnostics`).
@@ -187,6 +235,35 @@ TEST_CASE("Durable read tool formats oversized line sizes like frozen pi", "[dur
     }
 }
 
+TEST_CASE("Peak memory reading rejects a missing status field", "[durable][environment][issue1232]") {
+    std::istringstream status("Name:\tpike\n");
+    CHECK_FALSE(read_peak_memory(status).has_value());
+}
+
+TEST_CASE("Peak memory reading validates status values and read failures", "[durable][environment][issue1232]") {
+    std::istringstream valid("Name:\tpike\nVmHWM:\t 1234 kB\nVmRSS:\t100 kB\n");
+    CHECK(read_peak_memory(valid) == 1263616ull);
+
+    for (const std::string_view input : {"VmHWM: 0 kB\n",
+                 "VmHWM: abc kB\n",
+                 "VmHWM: 12x kB\n",
+                 "VmHWM: 12 MB\n",
+                 "VmHWM: 12kB\n",
+                 "VmHWM: 18446744073709551616 kB\n",
+                 "VmHWM: 18014398509481984 kB\n",
+                 "VmHWM: 12 kB extra\n",
+                 "VmHWM: 12 kB\nVmHWM: 13 kB\n"}) {
+        INFO(input);
+        std::istringstream status{std::string(input)};
+        CHECK_FALSE(read_peak_memory(status).has_value());
+    }
+    FailingStatusBuffer buffer;
+    std::istream failed(&buffer);
+    buffer.attach(failed);
+    CHECK_FALSE(read_peak_memory(failed).has_value());
+    CHECK(failed.bad());
+}
+
 TEST_CASE("Durable read tool never loads an unbounded file into memory", "[durable][environment][issue1197]") {
     cch::tests::TempWorkspace workspace;
     auto env = cch::durable::local_environment(workspace.path().string());
@@ -198,26 +275,19 @@ TEST_CASE("Durable read tool never loads an unbounded file into memory", "[durab
         output.seekp(256 * 1024 * 1024 - 1);
         output.put('\n');
     }
-    const auto before = [] {
-        std::ifstream status("/proc/self/status");
-        std::string line;
-        while (std::getline(status, line))
-            if (line.starts_with("VmHWM:")) return std::stoull(line.substr(line.find_first_of("0123456789"))) * 1024;
-        return 0ull;
-    }();
+    std::ifstream before_status("/proc/self/status");
+    const auto before = read_peak_memory(before_status);
+    REQUIRE(before.has_value());
     auto result = run_read(env, JsonValue(JsonValue::object_t{{"path", JsonValue(std::string{"sparse.txt"})}}));
-    const auto after = [] {
-        std::ifstream status("/proc/self/status");
-        std::string line;
-        while (std::getline(status, line))
-            if (line.starts_with("VmHWM:")) return std::stoull(line.substr(line.find_first_of("0123456789"))) * 1024;
-        return 0ull;
-    }();
+    std::ifstream after_status("/proc/self/status");
+    const auto after = read_peak_memory(after_status);
+    REQUIRE(after.has_value());
     REQUIRE(result.has_value());
     CHECK_FALSE(result->is_error);
     // The scan is streaming; the sparse file's pages are never touched, so the
     // high-water mark rises by far less than the file's 256 MiB.
-    CHECK(after - before < 64 * 1024 * 1024);
+    CHECK(*after >= *before);
+    CHECK((*after >= *before && *after - *before < 64 * 1024 * 1024));
 }
 
 TEST_CASE("Durable read tool reports an offset past the last line as an error", "[durable][environment][issue1197]") {
