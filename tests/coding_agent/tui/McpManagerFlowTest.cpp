@@ -382,12 +382,14 @@ void type(cch::tui::InputHandler& handler, std::string_view text) {
 
 struct FlowFixture {
     /// The flow's private serialized domain: posts and spawned flows run
-    /// here, pumped by `pump` (RuntimeFixture::loop is private to its
-    /// driver; the flow needs no Runtime workers, only a serialized loop).
+    /// here. The test thread pumps it (`pump_flow`, called by `wait_until`),
+    /// so view and presenter state is only touched by one thread at a time,
+    /// as under the engine's single executor. (A dedicated pump thread raced
+    /// the test's press()/render() against show_menu() and crashed the full
+    /// suite with SIGSEGV.)
     boost::asio::io_context flow_io;
     boost::asio::executor_work_guard<boost::asio::io_context::executor_type> work{
             boost::asio::make_work_guard(flow_io)};
-    std::unique_ptr<std::thread> pump;
     std::shared_ptr<TestFactory> factory = std::make_shared<TestFactory>();
     std::shared_ptr<TestSurface> surface = std::make_shared<TestSurface>();
     std::shared_ptr<TestAuth> auth = std::make_shared<TestAuth>();
@@ -405,8 +407,19 @@ struct FlowFixture {
     ~FlowFixture() {
         work.reset();
         flow_io.stop();
-        if (pump && pump->joinable()) {
-            pump->join();
+    }
+
+    /// Run the flow's handlers on the calling (test) thread for one bounded
+    /// slice. `poll()` would never return while a waiter re-posts itself
+    /// (`wait_for_pending_connects` polls by yielding).
+    void pump_flow() { flow_io.run_for(std::chrono::milliseconds{1}); }
+
+    /// Pump the flow for a fixed time (a negative-evidence window).
+    void pump_flow_for(std::chrono::milliseconds duration) {
+        const auto deadline = std::chrono::steady_clock::now() + duration;
+        while (std::chrono::steady_clock::now() < deadline) {
+            pump_flow();
+            std::this_thread::sleep_for(std::chrono::milliseconds{1});
         }
     }
 
@@ -436,7 +449,8 @@ struct FlowFixture {
         } else {
             // Tests modelling a pending connect (#1104) start the manager on
             // the flow's serialized loop instead: the background connects and
-            // their gates stay observable and pumpable on flow_io.
+            // their gates stay observable and pumpable on flow_io (the test
+            // thread pumps it from wait_until).
             auto manager = fixture->manager;
             boost::asio::co_spawn(
                     fixture->flow_io,
@@ -445,8 +459,6 @@ struct FlowFixture {
                     },
                     boost::asio::detached);
         }
-        fixture->pump = std::make_unique<std::thread>([&io = fixture->flow_io] { io.run(); });
-
         coding_agent::tui::McpFlowHostHooks hooks;
         hooks.post_on_executor = [&io = fixture->flow_io](std::move_only_function<void()> action) {
             boost::asio::post(io, std::move(action));
@@ -486,22 +498,37 @@ struct FlowFixture {
         return dynamic_cast<coding_agent::tui::McpManagerView*>(presenter.slot.get());
     }
 
-    /// Run the loop until the condition holds (the loop driver pumps on its
-    /// own thread; this waits on the test thread).
+    /// Run the loop until the condition holds (pumps the flow on the test
+    /// thread between checks).
     template <typename Predicate>
     [[nodiscard]] bool wait_until(Predicate condition, std::chrono::milliseconds budget = std::chrono::seconds{5}) {
         const auto deadline = std::chrono::steady_clock::now() + budget;
         while (std::chrono::steady_clock::now() < deadline) {
+            pump_flow();
             if (condition()) {
                 return true;
             }
             std::this_thread::sleep_for(std::chrono::milliseconds{1});
         }
+        pump_flow();
         return condition();
     }
 };
 
 } // namespace
+
+TEST_CASE("the flow fixture serializes flow work with the test thread", "[coding_agent][tui][mcp][issue884]") {
+    // The view and presenter are single-threaded by contract (the engine posts
+    // every flow step on one executor). A fixture that pumps the flow on a
+    // second thread races the test's press()/render() against show_menu() and
+    // crashed the full suite with SIGSEGV.
+    auto fixture =
+            FlowFixture::make(config_with({stdio_entry("echo")}), {{"echo", std::make_shared<TestConnection>()}});
+    std::optional<std::thread::id> flow_thread;
+    boost::asio::post(fixture->flow_io, [&flow_thread] { flow_thread = std::this_thread::get_id(); });
+    REQUIRE(fixture->wait_until([&] { return flow_thread.has_value(); }));
+    CHECK(*flow_thread == std::this_thread::get_id());
+}
 
 TEST_CASE("/mcp opens the servers menu panel and escape closes it", "[coding_agent][tui][mcp][issue884][spec]") {
     auto connection = std::make_shared<TestConnection>();
@@ -727,14 +754,6 @@ TEST_CASE("the discovery warning reaches the notification channel and the snapsh
 TEST_CASE("/mcp without a manager prints pi's non-TUI status report", "[coding_agent][tui][mcp][issue884][spec]") {
     boost::asio::io_context flow_io;
     auto work = boost::asio::make_work_guard(flow_io);
-    std::thread pump([&flow_io] { flow_io.run(); });
-    const auto stop_pump = [&] {
-        work.reset();
-        flow_io.stop();
-        if (pump.joinable()) {
-            pump.join();
-        }
-    };
     RecordingModalPresenter presenter;
     std::shared_ptr<void> host_lifetime = std::make_shared<int>(0);
     coding_agent::tui::McpFlowHostHooks hooks;
@@ -759,14 +778,16 @@ TEST_CASE("/mcp without a manager prints pi's non-TUI status report", "[coding_a
 
     flow->handle_command("");
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds{5};
+    // The test thread pumps the flow so the presenter is single-threaded.
     while (presenter.statuses.empty() && std::chrono::steady_clock::now() < deadline) {
-        std::this_thread::sleep_for(std::chrono::milliseconds{1});
+        flow_io.run_for(std::chrono::milliseconds{1});
     }
     REQUIRE(!presenter.statuses.empty());
     // pi's empty message names the global mcp.json.
     CHECK(presenter.statuses.front().find("No MCP servers configured") != std::string::npos);
     CHECK(presenter.slot == nullptr);
-    stop_pump();
+    work.reset();
+    flow_io.stop();
 }
 
 TEST_CASE("/mcp panel stays live while a server connect is pending and subcommands await the settle",
@@ -811,7 +832,7 @@ TEST_CASE("/mcp panel stays live while a server connect is pending and subcomman
     // pi's subcommand parity: reconnect awaits the pending connects, so with
     // the gate closed the action has not run yet...
     fixture->flow->handle_command("reconnect slow");
-    std::this_thread::sleep_for(std::chrono::milliseconds{100});
+    fixture->pump_flow_for(std::chrono::milliseconds{100});
     CHECK(slow->reconnect_calls == 0);
     // ...and once the transport answers, the awaited subcommand lands.
     boost::asio::post(fixture->flow_io, [gate] { gate->open(); });
