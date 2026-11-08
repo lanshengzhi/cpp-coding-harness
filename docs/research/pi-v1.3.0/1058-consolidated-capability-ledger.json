@@ -15088,7 +15088,7 @@
         "inputs": [
           {
             "path": "tests/durable/HarnessOwnershipTest.cpp",
-            "sha256": "cd5bcd3dce81b14633612c60b0c300e79ca22905b63bb94af6f44cb73bfcd58a"
+            "sha256": "db2f4d3f56a46a71b1c35801dd68de7000721536f4088a6607c3fbd85e18da7d"
           },
           {
             "path": "tests/durable/HarnessSubmissionsTest.cpp",
@@ -15149,16 +15149,44 @@
             "-L",
             "issue1203",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1234.xml",
+            "docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1234-wait.xml",
             "-j",
             "1"
           ],
-          "testedRevision": "b069ac4182bc9abbd7571b806081649132ce393b",
-          "recordedAt": "2026-11-08T02:03:39Z",
+          "testedRevision": "bfe1a248d60d9f13ac9ed8f48a04d5dbcb9d4689",
+          "recordedAt": "2026-11-08T02:39:26Z",
           "selected": 3,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1234.xml",
-            "sha256": "20f96f91af71d02d281e8dbdef95266c54cc72fad722db0ade68fd0704faa214"
+            "path": "docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1234-wait.xml",
+            "sha256": "35006e56b214c1fda61881083471eb1661c0ca7faa0ab5b82a0cc88899db9b8c"
+          }
+        },
+        "revalidation1234Wait": {
+          "reason": "Run the ownership scenario in a deadline-enforced child, preserving cleanup and every comparison to the unchanged frozen expectations; the other issue1203 scenarios are unchanged.",
+          "changedInputs": [
+            "tests/durable/HarnessOwnershipTest.cpp"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-LE",
+              "architecture",
+              "-L",
+              "issue1203",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1234.xml",
+              "-j",
+              "1"
+            ],
+            "testedRevision": "b069ac4182bc9abbd7571b806081649132ce393b",
+            "recordedAt": "2026-11-08T02:03:39Z",
+            "selected": 3,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1234.xml",
+              "sha256": "20f96f91af71d02d281e8dbdef95266c54cc72fad722db0ade68fd0704faa214"
+            }
           }
         },
         "revalidation1234": {

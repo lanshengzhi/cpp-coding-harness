@@ -19,6 +19,7 @@
 #include "durable/FrozenExpectation.hpp"
 #include "durable/Gate.hpp"
 #include "durable/Outcome.hpp"
+#include "support/UniqueFd.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -26,18 +27,31 @@ using namespace cch::durable;
 
 #include <algorithm>
 #include <atomic>
+#include <cerrno>
+#include <charconv>
 #include <chrono>
 #include <condition_variable>
 #include <cstdint>
+#include <csignal>
+#include <cstdio>
+#include <cstdlib>
 #include <map>
 #include <memory>
 #include <mutex>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <tuple>
 #include <utility>
 #include <vector>
+
+#include <fcntl.h>
+#include <sys/prctl.h>
+#include <sys/wait.h>
+#include <unistd.h>
+
+extern char** environ;
 
 namespace cch::tests::durable {
 namespace {
@@ -1435,22 +1449,159 @@ TEST_CASE("a completing owner holds its terminal outcome until ordinary owned wo
     REQUIRE(consume(harness->close()).has_value());
 }
 
+void ownership_injected_stall(const char* stage, const char* injection = nullptr) {
+    const char* descriptor = std::getenv("CCH_1234_MARKER_FD");
+    if (descriptor == nullptr) _exit(91);
+    const std::string_view text(descriptor);
+    int fd = -1;
+    const auto parsed = std::from_chars(text.data(), text.data() + text.size(), fd);
+    if (parsed.ec != std::errc{} || parsed.ptr != text.data() + text.size() || fd < 0) _exit(94);
+    const char marker = stage[0];
+    if (::write(fd, &marker, 1) != 1) _exit(92);
+    const char* requested = std::getenv("CCH_1234_STALL");
+    if (requested == nullptr || (injection != nullptr && *injection == '\0') ||
+            std::string_view(requested) != (injection == nullptr ? stage : injection))
+        return;
+    std::optional<support::AsyncResult<void>::completion_type> retained;
+    support::AsyncResult<void> pending{support::AsyncResult<void>::producer_type{
+            [&retained](support::AsyncResult<void>::completion_type completion) noexcept {
+                retained.emplace(std::move(completion));
+            }}};
+    (void)consume(std::move(pending));
+}
+
+struct OwnershipChildResult {
+    bool timed_out{false};
+    bool reaped{false};
+    bool reached_stall{false};
+    char last_stage{'-'};
+    int status{0};
+    int error{0};
+};
+
+OwnershipChildResult run_ownership_child(const char* stall) {
+    OwnershipChildResult result;
+    int markers[2];
+    if (::pipe(markers) != 0) {
+        result.error = errno;
+        return result;
+    }
+    support::UniqueFd marker_read(markers[0]);
+    support::UniqueFd marker_write(markers[1]);
+    if (::fcntl(marker_read.get(), F_SETFL, O_NONBLOCK) == -1) {
+        result.error = errno;
+        return result;
+    }
+    std::vector<std::string> environment;
+    for (char** entry = environ; *entry != nullptr; ++entry) {
+        const std::string_view value(*entry);
+        if (!value.starts_with("CCH_1234_STALL=") && !value.starts_with("CCH_1234_MARKER_FD="))
+            environment.emplace_back(value);
+    }
+    environment.push_back(std::string("CCH_1234_STALL=") + stall);
+    environment.push_back("CCH_1234_MARKER_FD=" + std::to_string(markers[1]));
+    std::vector<char*> envp;
+    for (auto& entry : environment)
+        envp.push_back(entry.data());
+    envp.push_back(nullptr);
+    char executable[] = "/proc/self/exe";
+    char filter[] = "[issue1234-child]";
+    char* argv[] = {executable, filter, nullptr};
+    char** child_environment = envp.data();
+    const pid_t parent = ::getpid();
+    const pid_t child = ::fork();
+    if (child == 0) {
+        ::close(markers[0]);
+        if (::prctl(PR_SET_PDEATHSIG, SIGKILL) != 0 || ::getppid() != parent) _exit(90);
+        ::execve(executable, argv, child_environment);
+        _exit(93);
+    }
+    const int fork_error = child < 0 ? errno : 0;
+    marker_write.reset();
+    if (child < 0) {
+        result.error = fork_error;
+        return result;
+    }
+    auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(60);
+    auto reap_deadline = deadline;
+    while (true) {
+        char marker = 0;
+        while (::read(marker_read.get(), &marker, 1) == 1) {
+            result.last_stage = marker;
+            if (*stall != '\0' && marker == stall[0] && !result.reached_stall) {
+                result.reached_stall = true;
+                deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
+            }
+        }
+        const pid_t waited = ::waitpid(child, &result.status, WNOHANG);
+        if (waited == child) {
+            result.reaped = true;
+            break;
+        }
+        if (waited < 0 && errno != EINTR) {
+            result.error = errno;
+            break;
+        }
+        const auto now = std::chrono::steady_clock::now();
+        if (!result.timed_out && now >= deadline) {
+            result.timed_out = true;
+            if (::kill(child, SIGKILL) != 0 && errno != ESRCH) result.error = errno;
+            reap_deadline = now + std::chrono::seconds(5);
+        } else if (result.timed_out && now >= reap_deadline) {
+            result.error = ETIMEDOUT;
+            break;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    return result;
+}
+
+TEST_CASE("the audit-1203 frozen background-ownership boundary observation replays in C++",
+        "[durable][ownership][issue1203]") {
+    const auto child = run_ownership_child("");
+    INFO("ownership child error=" << child.error << " status=" << child.status << " timed out=" << child.timed_out
+                                  << " last stage=" << child.last_stage);
+    REQUIRE(child.reaped);
+    REQUIRE_FALSE(child.timed_out);
+    REQUIRE(WIFEXITED(child.status));
+    INFO("ownership child exit code=" << WEXITSTATUS(child.status));
+    CHECK(WEXITSTATUS(child.status) == 0);
+}
+
+TEST_CASE("the audit-1203 ownership child is killed and reaped at injected waits", "[durable][ownership][issue1234]") {
+    for (const char* stage : {"abort conversation", "wait for task", "close"}) {
+        const auto child = run_ownership_child(stage);
+        INFO("stage=" << stage << " error=" << child.error << " status=" << child.status);
+        CHECK(child.reached_stall);
+        CHECK(child.timed_out);
+        REQUIRE(child.reaped);
+        REQUIRE(WIFSIGNALED(child.status));
+        CHECK(WTERMSIG(child.status) == SIGKILL);
+        CHECK(child.error == 0);
+    }
+}
+
 // #1203: the recaptured frozen pi-v1.3.0 observations of the durable ownership
 // boundary and idle waits (registered `audit-1203/ownership.json`) replay
 // through the C++ Harness. The frozen capture drove the real durable runtime
 // with a background child and a conversation/direct abort pair; these cases
 // bind the same outcomes at the C++ public seam.
-TEST_CASE("the audit-1203 frozen background-ownership boundary observation replays in C++",
-        "[durable][ownership][issue1203]") {
+int run_ownership_scenario() {
     const auto scenario = FrozenScenario::load("fixtures/pi-v1.3.0/audit-1203/ownership.json",
             "a background child survives a conversation abort while a direct abort reaches it");
-    REQUIRE(scenario.has_value());
+    if (!scenario.has_value()) return 21;
 
     auto gate = std::make_shared<Gate>();
+    auto phase_active = std::make_shared<std::atomic<bool>>(false);
     std::vector<TaskDefinition> tasks;
     auto builder = TaskDefinitionBuilder("audit1203.bg-child", 1);
     builder.initial([](const chord::Json&) { return checkpoint_phase("run"); });
-    builder.phase("run", [gate](const TaskRecord&, TaskRuntime& runtime) -> support::AsyncResult<void> {
+    builder.phase("run", [gate, phase_active](const TaskRecord&, TaskRuntime& runtime) -> support::AsyncResult<void> {
+        const char* requested = std::getenv("CCH_1234_STALL");
+        if (requested != nullptr && std::string_view(requested) == "close") {
+            phase_active->store(true);
+            ownership_injected_stall("active invocation", "close");
+        }
         if (!gate->wait(runtime.stop_token())) return support::AsyncResult<void>{support::ExpectedVoid{}};
         return runtime.commit([](Transaction&, const TaskRecord&) -> support::Expected<std::optional<NextTaskState>> {
             return NextTaskState::terminal(TaskOutcome{.status = "completed", .result = chord::Json("done")});
@@ -1463,12 +1614,12 @@ TEST_CASE("the audit-1203 frozen background-ownership boundary observation repla
         });
     });
     auto built = builder.build();
-    REQUIRE(built.has_value());
+    if (!built.has_value()) return 22;
     tasks.push_back(std::move(*built));
 
     MemoryStorage storage;
     auto harness_res = consume(Harness::open(storage, HarnessOptions{.tasks = std::move(tasks)}));
-    REQUIRE(harness_res.has_value());
+    if (!harness_res.has_value()) return 23;
     auto harness = std::move(harness_res.value());
     std::string after_conversation_status;
     std::string final_status;
@@ -1498,6 +1649,15 @@ TEST_CASE("the audit-1203 frozen background-ownership boundary observation repla
             std::this_thread::sleep_for(std::chrono::milliseconds(2));
         }
 
+        const char* requested = std::getenv("CCH_1234_STALL");
+        if (requested != nullptr && std::string_view(requested) == "close") {
+            while (!phase_active->load()) {
+                if (std::chrono::steady_clock::now() > deadline) return "waiting for active invocation";
+                std::this_thread::sleep_for(std::chrono::milliseconds(2));
+            }
+            return {};
+        }
+        ownership_injected_stall("abort conversation");
         if (!consume(harness->abort_conversation(root.value())).has_value()) return "abort conversation";
         auto after_conversation = consume(harness->get_task(child_id));
         if (!after_conversation.has_value() || !after_conversation.value().has_value())
@@ -1513,6 +1673,7 @@ TEST_CASE("the audit-1203 frozen background-ownership boundary observation repla
             if (std::chrono::steady_clock::now() > settle_deadline) return "waiting for task to settle";
             std::this_thread::sleep_for(std::chrono::milliseconds(2));
         }
+        ownership_injected_stall("wait for task");
         auto receipt = consume(harness->wait_for_task(child_id));
         if (!receipt.has_value()) return "wait for task";
         final_status = receipt.value().state.status;
@@ -1520,17 +1681,27 @@ TEST_CASE("the audit-1203 frozen background-ownership boundary observation repla
         return {};
     }();
     gate->release();
+    ownership_injected_stall("close", "");
     const auto closed = consume(harness->close());
 
-    REQUIRE(failure == "");
-    REQUIRE(closed.has_value());
-    CHECK(after_conversation_status == scenario->expected().at("statusAfterConversationAbort").get_string());
-    CHECK(final_status == scenario->expected().at("statusAfterDirectAbort").get_string());
-    REQUIRE(outcome.has_value());
+    if (!closed.has_value()) _exit(25);
+    if (!failure.empty()) {
+        std::fprintf(stderr, "ownership operation failed: %s\n", failure.c_str());
+        return 24;
+    }
+    if (after_conversation_status != scenario->expected().at("statusAfterConversationAbort").get_string()) return 26;
+    if (final_status != scenario->expected().at("statusAfterDirectAbort").get_string()) return 27;
+    if (!outcome.has_value()) return 28;
     const auto& frozen_outcome = scenario->expected().at("outcome");
-    CHECK(outcome->status == frozen_outcome.at("status").get_string());
-    REQUIRE(outcome->reason.has_value());
-    CHECK(*outcome->reason == frozen_outcome.at("reason").get_string());
+    if (outcome->status != frozen_outcome.at("status").get_string()) return 29;
+    if (!outcome->reason.has_value()) return 30;
+    if (*outcome->reason != frozen_outcome.at("reason").get_string()) return 31;
+    return 0;
+}
+
+TEST_CASE("the audit-1203 ownership isolated child", "[.][issue1234-child]") {
+    const int result = run_ownership_scenario();
+    if (result != 0) _exit(result);
 }
 
 } // namespace
