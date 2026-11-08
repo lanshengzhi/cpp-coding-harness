@@ -50,13 +50,41 @@ can try to join itself; the existing manual join has the same ownership concern,
 so a simple type substitution does not resolve it. No execution schedule was
 constructed to prove that final-owner path reachable.
 
+## Follow-up: frozen source and public diagnostic
+
+On 2026-11-08 the user approved the public read-tool diagnostic as the test
+seam. The adjacent `../pi-frozen-1049` checkout was subsequently found clean at
+`71023aec1546d6d677a65669c5665c0927ce0dd0`. Its
+`packages/durable/src/truncate.ts:60-67` confirms that `formatSize` uses
+`toFixed(1)`, so the Node midpoint observation above is the frozen algorithm,
+not merely a hypothetical comparison. A direct `tsx` module import failed
+because the installed `@earendil-works/chord` does not export `./output`;
+the source and the separate Node expression supply the observation.
+
+A temporary public read-tool Catch2 test wrote one 51,456-byte ASCII line and
+compared the entire warning diagnostic against the frozen midpoint result. The
+owning `cch_tests_durable` target built, and the focused CTest selected one test
+and failed: the actual warning contained `Line 1 is 50.2KB`; the frozen formula
+expects `Line 1 is 50.3KB`. The temporary failing test was removed, so it is not
+part of the checked-in suite. This is an existing externally visible difference,
+not a difference introduced by a refactor.
+
+A separate GCC 16.2.1 C++23 probe set each floating-point rounding mode and
+formatted the exact double `50.25`. In `FE_TONEAREST`, both `snprintf` and
+`std::format` returned `50.2`; in `FE_UPWARD`, `snprintf` returned `50.3` and
+`std::format` returned `50.2`. `FE_DOWNWARD` and `FE_TOWARDZERO` returned
+`50.2` in both. No repository code setting the mode was found. This observation
+prevents a blanket claim that the suggested direct replacement preserves the
+existing behavior in every calling environment.
+
 ## Remaining work
 
-Confirm the public test seam for a read-tool diagnostic boundary, obtain or
-capture the authoritative frozen midpoint behavior, and add a discriminating
-boundary test before selecting a behavior-preserving formatting implementation.
-Separately resolve and test worker ownership, cancellation and final-owner
-ordering before changing its thread type. The file-descriptor/process lifetime
-and number-parser parts of #1232 also remain open. The `$tdd` skill requires
-user confirmation of the test seam before writing a test; this record is a
-partial investigation, not a completed production slice or ticket.
+The instruction to preserve real behavior and the frozen-source midpoint
+requirement pull in different directions: preserving the current diagnostic
+keeps `50.2KB`, whereas matching frozen pi changes it to `50.3KB`. Decide that
+boundary before implementing it; a direct `std::format` substitution alone
+also changes behavior under `FE_UPWARD`. Separately resolve and test worker
+ownership, cancellation and final-owner ordering before changing its thread
+type. The file-descriptor/process lifetime and number-parser parts of #1232
+also remain open. This record is a partial investigation, not a completed
+production slice or ticket.
