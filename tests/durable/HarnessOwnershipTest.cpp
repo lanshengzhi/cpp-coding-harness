@@ -1470,45 +1470,67 @@ TEST_CASE("the audit-1203 frozen background-ownership boundary observation repla
     auto harness_res = consume(Harness::open(storage, HarnessOptions{.tasks = std::move(tasks)}));
     REQUIRE(harness_res.has_value());
     auto harness = std::move(harness_res.value());
-    auto root = consume(harness->root());
-    REQUIRE(root.has_value());
+    std::string after_conversation_status;
+    std::string final_status;
+    std::optional<TaskOutcome> outcome;
+    const auto failure = [&]() -> std::string {
+        auto root = consume(harness->root());
+        if (!root.has_value()) return "root";
 
-    TaskId child_id;
-    auto commit_res = consume(harness->session().commit([&](Transaction& tx) -> support::ExpectedVoid {
-        auto created = tx.create_task(*harness->task_definition("audit1203.bg-child"),
-                chord::Json{},
-                TaskOptions{.conversation_id = root.value(), .background = true});
-        if (!created) return std::unexpected(created.error());
-        child_id = *created;
+        TaskId child_id;
+        auto committed = consume(harness->session().commit([&](Transaction& tx) -> support::ExpectedVoid {
+            auto created = tx.create_task(*harness->task_definition("audit1203.bg-child"),
+                    chord::Json{},
+                    TaskOptions{.conversation_id = root.value(), .background = true});
+            if (!created) return std::unexpected(created.error());
+            child_id = *created;
+            return {};
+        }));
+        if (!committed.has_value()) return "commit";
+        if (!harness->resume()) return "resume";
+
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(20);
+        while (true) {
+            const auto record = consume(harness->get_task(child_id));
+            if (!record.has_value()) return "get running task";
+            if (record.value().has_value() && record.value()->state.status == "running") break;
+            if (std::chrono::steady_clock::now() > deadline) return "waiting for background child";
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        }
+
+        if (!consume(harness->abort_conversation(root.value())).has_value()) return "abort conversation";
+        auto after_conversation = consume(harness->get_task(child_id));
+        if (!after_conversation.has_value() || !after_conversation.value().has_value())
+            return "get task after conversation abort";
+        after_conversation_status = after_conversation.value()->state.status;
+        if (!consume(harness->abort_task(child_id)).has_value()) return "abort task";
+        gate->release();
+        const auto settle_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(20);
+        while (true) {
+            const auto record = consume(harness->get_task(child_id));
+            if (!record.has_value() || !record.value().has_value()) return "get task while settling";
+            if (record.value()->state.status == "terminal") break;
+            if (std::chrono::steady_clock::now() > settle_deadline) return "waiting for task to settle";
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        }
+        auto receipt = consume(harness->wait_for_task(child_id));
+        if (!receipt.has_value()) return "wait for task";
+        final_status = receipt.value().state.status;
+        outcome = receipt.value().state.outcome;
         return {};
-    }));
-    REQUIRE(commit_res.has_value());
-    REQUIRE(harness->resume().has_value());
-    wait_until(
-            [&] {
-                const auto record = consume(harness->get_task(child_id));
-                return record.has_value() && record.value().has_value() && record.value()->state.status == "running";
-            },
-            "background child running");
-
-    auto aborted = consume(harness->abort_conversation(root.value()));
-    REQUIRE(aborted.has_value());
-    auto after_conversation = consume(harness->get_task(child_id));
-    REQUIRE(after_conversation.has_value());
-    REQUIRE(after_conversation.value().has_value());
-    CHECK(after_conversation.value()->state.status ==
-            scenario->expected().at("statusAfterConversationAbort").get_string());
-
-    auto marked = consume(harness->abort_task(child_id));
-    REQUIRE(marked.has_value());
+    }();
     gate->release();
-    auto receipt = consume(harness->wait_for_task(child_id));
-    REQUIRE(receipt.has_value());
-    REQUIRE(receipt.value().state.outcome.has_value());
-    CHECK(receipt.value().state.status == scenario->expected().at("statusAfterDirectAbort").get_string());
+    const auto closed = consume(harness->close());
+
+    REQUIRE(failure == "");
+    REQUIRE(closed.has_value());
+    CHECK(after_conversation_status == scenario->expected().at("statusAfterConversationAbort").get_string());
+    CHECK(final_status == scenario->expected().at("statusAfterDirectAbort").get_string());
+    REQUIRE(outcome.has_value());
     const auto& frozen_outcome = scenario->expected().at("outcome");
-    CHECK(receipt.value().state.outcome->status == frozen_outcome.at("status").get_string());
-    CHECK(receipt.value().state.outcome->reason.value() == frozen_outcome.at("reason").get_string());
+    CHECK(outcome->status == frozen_outcome.at("status").get_string());
+    REQUIRE(outcome->reason.has_value());
+    CHECK(*outcome->reason == frozen_outcome.at("reason").get_string());
 }
 
 } // namespace

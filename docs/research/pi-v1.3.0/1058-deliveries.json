@@ -15087,7 +15087,7 @@
    "inputs": [
     {
      "path": "tests/durable/HarnessOwnershipTest.cpp",
-     "sha256": "2f1f2a0de7d1f403a8303520721f3369f6e687baf5403b2b89578473c086348f"
+     "sha256": "cd5bcd3dce81b14633612c60b0c300e79ca22905b63bb94af6f44cb73bfcd58a"
     },
     {
      "path": "tests/durable/HarnessSubmissionsTest.cpp",
@@ -15148,16 +15148,30 @@
      "-L",
      "issue1203",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1244-capture.xml",
+     "docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1234.xml",
      "-j",
      "1"
     ],
-    "testedRevision": "6451b872e665cc8d014582eaad3e6dce06ff22cd",
-    "recordedAt": "2026-11-06T17:17:20Z",
+    "testedRevision": "b069ac4182bc9abbd7571b806081649132ce393b",
+    "recordedAt": "2026-11-08T02:03:39Z",
     "selected": 3,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1244-capture.xml",
-     "sha256": "32eede6a7ec471ccbcb81fc10c0a34bd8842beb027aefda7e545dc06fd9d375d"
+     "path": "docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1234.xml",
+     "sha256": "20f96f91af71d02d281e8dbdef95266c54cc72fad722db0ade68fd0704faa214"
+    }
+   },
+   "revalidation1234": {
+    "reason": "Close the background ownership harness before asserting, including operation failure paths; frozen scenario mappings and comparisons are unchanged.",
+    "changedInputs": ["tests/durable/HarnessOwnershipTest.cpp"],
+    "previousValidation": {
+     "command": ["ctest", "--preset", "vcpkg", "-LE", "architecture", "-L", "issue1203", "--output-junit", "docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1244-capture.xml", "-j", "1"],
+     "testedRevision": "6451b872e665cc8d014582eaad3e6dce06ff22cd",
+     "recordedAt": "2026-11-06T17:17:20Z",
+     "selected": 3,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1244-capture.xml",
+      "sha256": "32eede6a7ec471ccbcb81fc10c0a34bd8842beb027aefda7e545dc06fd9d375d"
+     }
     }
    },
    "rows": [

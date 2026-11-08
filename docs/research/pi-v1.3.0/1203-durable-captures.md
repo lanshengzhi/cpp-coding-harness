@@ -76,3 +76,14 @@ negative/control/boundary case is delivered. No cited test, pinned input,
 scenario mapping or routing digest changed; see
 [1229-withdrawn-1209-root-tui-lifecycle-claims.json](1229-withdrawn-1209-root-tui-lifecycle-claims.json)
 for receipts that also carry a #1229 withdrawal.
+
+## 2026-11-08 revalidation (#1234)
+
+The background-ownership comparison now records operation failures and frozen
+outcomes, releases the child gate and closes the Harness before any assertion.
+Both task-start and task-settlement polling have deadlines. An injected failure
+once the child was running produced a normal Catch2 failure after cleanup; the
+injection was removed. The unchanged `[issue1203]` selection passed 3/3 at
+checkout base `b069ac4182bc9abbd7571b806081649132ce393b`, with the changed test
+source and new JUnit artifact pinned in `revalidation1234`. Scenario mappings
+and the #1229 bounded claims remain unchanged.
