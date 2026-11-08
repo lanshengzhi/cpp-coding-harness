@@ -9,6 +9,7 @@ Shared historical record for aligning Pike with upstream pi. Created 2026-11-04 
 - [Owner decisions, 2026-11-05](decisions-2026-11-05.md): the owner ruling (decision B) settling the JSONL task-sidecar symlink divergence as funded alignment with frozen pi (ADR 0076).
 - [v1.3.0 residual-gap audit, 2026-11-04](residual-gap-audit-2026-11-04.md): complete, claimed-only and open work within ADR 0075's scope.
 - [Reconciliation proposal for #1183, 2026-11-04](reconciliation-1183-proposal-2026-11-04.md): proposed row/ticket mapping and safe ledger, frontier and deliveries edits for the delivery-ownership index; nothing applied.
+- Read-only current reconciliation: run `python3 scripts/evidence/reconcile_1058.py` from the checkout; it emits JSON to stdout and requires authenticated `gh` access. The [#1208 investigation](../../research/pi-v1.3.0/1208-reconciliation-limitations.md) explains the successor, lint and historical classification limits.
 - [Build readiness for #1202 re-anchoring, 2026-11-05](build-readiness-2026-11-05.md): the `vcpkg` preset and receipt labels, the stale `build/` tree, toolchain/vcpkg/`PI_CHECKOUT` state, and what is missing to make re-anchoring cheap.
 
 ## History
