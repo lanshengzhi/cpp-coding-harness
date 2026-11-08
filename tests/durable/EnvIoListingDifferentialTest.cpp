@@ -1,6 +1,7 @@
 #include <cch/durable/Environment.hpp>
 
 #include "support/TempWorkspace.hpp"
+#include "support/UniqueFd.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -14,10 +15,12 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <fcntl.h>
 #include <optional>
 #include <string>
 #include <string_view>
 #include <chrono>
+#include <cerrno>
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -216,33 +219,35 @@ std::string file_sha256(const fs::path& path) {
 /// One length-prefixed daemon frame (`docs/protocol.md`): u32 length, u8
 /// kind, u32 id, u32 json length, JSON, payload.
 struct DaemonClient {
-    explicit DaemonClient(std::string binary) {
+    explicit DaemonClient(std::string binary, int (*pipe_call)(int*) = ::pipe, pid_t (*fork_call)() = ::fork) {
         int in_pipe[2], out_pipe[2];
-        if (::pipe(in_pipe) != 0 || ::pipe(out_pipe) != 0) return;
-        const pid_t child = ::fork();
+        if (pipe_call(in_pipe) != 0) return;
+        cch::support::UniqueFd in_read(in_pipe[0]);
+        cch::support::UniqueFd in_write(in_pipe[1]);
+        if (pipe_call(out_pipe) != 0) return;
+        cch::support::UniqueFd out_read(out_pipe[0]);
+        cch::support::UniqueFd out_write(out_pipe[1]);
+        const pid_t child = fork_call();
+        if (child < 0) return;
         if (child == 0) {
             ::dup2(in_pipe[0], STDIN_FILENO);
             ::dup2(out_pipe[1], STDOUT_FILENO);
             ::execl(binary.c_str(), binary.c_str(), "serve", "--token", "6363682d646966666572656e7469616c", nullptr);
             _exit(127);
         }
-        ::close(in_pipe[0]);
-        ::close(out_pipe[1]);
-        write_fd_ = in_pipe[1];
-        read_fd_ = out_pipe[0];
+        in_read.reset();
+        out_write.reset();
+        write_fd_ = std::move(in_write);
+        read_fd_ = std::move(out_read);
         // The daemon announces itself with `PI-ENV <token>\n`.
         std::string marker;
         char c = 0;
-        while (::read(read_fd_, &c, 1) == 1 && c != '\n')
+        while (::read(read_fd_.get(), &c, 1) == 1 && c != '\n')
             marker.push_back(c);
         alive_ = marker.starts_with("PI-ENV ");
     }
     DaemonClient(const DaemonClient&) = delete;
     DaemonClient& operator=(const DaemonClient&) = delete;
-    ~DaemonClient() {
-        if (write_fd_ >= 0) ::close(write_fd_);
-        if (read_fd_ >= 0) ::close(read_fd_);
-    }
 
     struct Reply {
         std::string json{};
@@ -271,7 +276,7 @@ struct DaemonClient {
         frame.insert(frame.end(), json.begin(), json.end());
         std::size_t written = 0;
         while (written < frame.size()) {
-            const ssize_t n = ::write(write_fd_, frame.data() + written, frame.size() - written);
+            const ssize_t n = ::write(write_fd_.get(), frame.data() + written, frame.size() - written);
             if (n <= 0) return std::nullopt;
             written += static_cast<std::size_t>(n);
         }
@@ -298,15 +303,15 @@ private:
     bool read_exact(std::uint8_t* out, std::size_t count) {
         std::size_t done = 0;
         while (done < count) {
-            const ssize_t n = ::read(read_fd_, out + done, count - done);
+            const ssize_t n = ::read(read_fd_.get(), out + done, count - done);
             if (n <= 0) return false;
             done += static_cast<std::size_t>(n);
         }
         return true;
     }
 
-    int write_fd_{-1};
-    int read_fd_{-1};
+    cch::support::UniqueFd read_fd_;
+    cch::support::UniqueFd write_fd_;
     std::uint32_t next_id_{1};
     bool alive_{};
 };
@@ -428,7 +433,113 @@ void write_file(const fs::path& path, const std::string& content = {}) {
     output << content;
 }
 
+int injected_pipe_count = 0;
+int injected_first_pipe[2]{};
+int injected_pipes[4]{};
+pid_t controlled_child = -1;
+
+int record_pipe(int* fds) {
+    const int result = ::pipe(fds);
+    if (result == 0) {
+        injected_pipes[injected_pipe_count * 2] = fds[0];
+        injected_pipes[injected_pipe_count * 2 + 1] = fds[1];
+        ++injected_pipe_count;
+    }
+    return result;
+}
+
+pid_t fail_fork() { return -1; }
+
+pid_t fork_controlled_daemon() {
+    controlled_child = ::fork();
+    if (controlled_child == 0) {
+        ::alarm(2);
+        cch::support::UniqueFd input(injected_pipes[0]);
+        cch::support::UniqueFd unused_input(injected_pipes[1]);
+        cch::support::UniqueFd unused_output(injected_pipes[2]);
+        cch::support::UniqueFd output(injected_pipes[3]);
+        unused_input.reset();
+        unused_output.reset();
+        constexpr std::string_view marker = "PI-ENV controlled\n";
+        if (::write(output.get(), marker.data(), marker.size()) != static_cast<ssize_t>(marker.size())) _exit(1);
+        char byte = 0;
+        if (::read(input.get(), &byte, 1) != 0) _exit(1);
+        _exit(0);
+    }
+    return controlled_child;
+}
+
+bool descriptor_closed(int fd) { return ::fcntl(fd, F_GETFD) == -1 && errno == EBADF; }
+
+int fail_second_pipe(int* fds) {
+    if (++injected_pipe_count == 2) return -1;
+    const int result = ::pipe(fds);
+    if (result == 0) {
+        injected_first_pipe[0] = fds[0];
+        injected_first_pipe[1] = fds[1];
+    }
+    return result;
+}
+
 } // namespace
+
+TEST_CASE("DaemonClient closes the first pipe when the second pipe fails", "[durable][issue1232]") {
+    const pid_t child = ::fork();
+    REQUIRE(child >= 0);
+    if (child == 0) {
+        ::alarm(5);
+        DaemonClient daemon("unused", fail_second_pipe);
+        const bool closed = !daemon.alive() && injected_pipe_count == 2 && descriptor_closed(injected_first_pipe[0]) &&
+                            descriptor_closed(injected_first_pipe[1]);
+        _exit(closed ? 0 : 1);
+    }
+    int status = 0;
+    REQUIRE(::waitpid(child, &status, 0) == child);
+    REQUIRE(WIFEXITED(status));
+    CHECK(WEXITSTATUS(status) == 0);
+}
+
+TEST_CASE("DaemonClient closes both pipes when fork fails", "[durable][issue1232]") {
+    const pid_t child = ::fork();
+    REQUIRE(child >= 0);
+    if (child == 0) {
+        ::alarm(5);
+        DaemonClient daemon("unused", record_pipe, fail_fork);
+        bool closed = !daemon.alive() && injected_pipe_count == 2;
+        for (const int fd : injected_pipes)
+            closed = closed && descriptor_closed(fd);
+        _exit(closed ? 0 : 1);
+    }
+    int status = 0;
+    REQUIRE(::waitpid(child, &status, 0) == child);
+    REQUIRE(WIFEXITED(status));
+    CHECK(WEXITSTATUS(status) == 0);
+}
+
+TEST_CASE("DaemonClient owns parent pipe ends until destruction", "[durable][issue1232]") {
+    const pid_t child = ::fork();
+    REQUIRE(child >= 0);
+    if (child == 0) {
+        ::alarm(5);
+        bool owned = false;
+        {
+            DaemonClient daemon("unused", record_pipe, fork_controlled_daemon);
+            owned = daemon.alive() && injected_pipe_count == 2 && controlled_child > 0 &&
+                    descriptor_closed(injected_pipes[0]) && descriptor_closed(injected_pipes[3]) &&
+                    ::fcntl(injected_pipes[1], F_GETFD) != -1 && ::fcntl(injected_pipes[2], F_GETFD) != -1;
+        }
+        const bool closed = descriptor_closed(injected_pipes[1]) && descriptor_closed(injected_pipes[2]);
+        int daemon_status = 0;
+        const bool exited = controlled_child > 0 &&
+                            ::waitpid(controlled_child, &daemon_status, 0) == controlled_child &&
+                            WIFEXITED(daemon_status) && WEXITSTATUS(daemon_status) == 0;
+        _exit(owned && closed && exited ? 0 : 1);
+    }
+    int status = 0;
+    REQUIRE(::waitpid(child, &status, 0) == child);
+    REQUIRE(WIFEXITED(status));
+    CHECK(WEXITSTATUS(status) == 0);
+}
 
 TEST_CASE("Durable tree listing is byte-for-byte identical to the frozen listFiles daemon",
         "[durable][environment][issue1200]") {
