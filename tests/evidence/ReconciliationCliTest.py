@@ -35,15 +35,23 @@ class ReconciliationCliTest(unittest.TestCase):
             target.write_text(json.dumps(value))
         wiki = self.root / 'docs/wiki/pi-alignment'
         wiki.mkdir(parents=True)
-        (wiki / 'reconciliation-1183-proposal-2026-11-04.md').write_text('## 2. Classification\n\n| Group | Rows | Proposed owner |\n| --- | --- | --- |\n| Example | 1 | #2 |\n\n## 3. Next\n[broken](missing.md) #99\n')
+        proposal = (ROOT / 'docs/wiki/pi-alignment/reconciliation-1183-proposal-2026-11-04.md').read_text()
+        (wiki / 'reconciliation-1183-proposal-2026-11-04.md').write_text(proposal.split('## 3.')[0] + '## 3. Next\n[broken](missing.md) #99\n')
+        mapping = self.root / 'scripts/evidence/1058-successors.json'
+        mapping.parent.mkdir(parents=True)
+        mapping.write_text(json.dumps({'version': 1, 'scope': 'fixture', 'entries': []}))
+        self.mapping = mapping
+        self.historical = self.root / 'historical.json'
+        self.historical.write_text(json.dumps(files['docs/research/pi-v1.3.0/1058-consolidated-capability-ledger.json']))
         (wiki / 'decisions-2026-11-04.md').write_text('| N5 → B1 | [#3](https://github.com/example/repo/issues/3) | TUI batch |\n')
         self.fake = self.root / 'gh'
-        self.fake.write_text(f'#!{sys.executable}\n' + '''import json, os, sys
+        self.fake.write_text(f'#!{sys.executable}\n' + '''import json, os, re, sys
 args = dict(x.split('=', 1) for x in sys.argv if '=' in x)
 if args.get('lint') == '1':
     if os.environ.get('GH_LINT_FAIL'):
         print(json.dumps({'errors': [{'message': 'lint denied'}], 'data': {}})); sys.exit(0)
-    print(json.dumps({'data': {'repository': {'i99': None}}})); sys.exit(0)
+    numbers = re.findall(r'i([0-9]+): issue', args['query'])
+    print(json.dumps({'data': {'repository': {'i' + n: None if n == '99' else {'number': int(n)} for n in numbers}}})); sys.exit(0)
 if os.environ.get('GH_FAIL'):
     print(json.dumps({'errors': [{'message': 'denied'}], 'data': {}})); sys.exit(0)
 if os.environ.get('GH_EXIT'):
@@ -64,13 +72,16 @@ count = 2 if (n == 1044 and connection == 'subIssues') or (n == 3 and connection
 if os.environ.get('GH_INCOMPLETE') and n == 4 and connection == 'blockedBy':
     count += 1
 conn = {'nodes': [node(x) for x in nums], 'totalCount': count, 'pageInfo': {'hasNextPage': more, 'endCursor': 'page2' if more else None}}
-issue = {'number': n, 'title': str(n), 'state': 'CLOSED' if n == 2 else 'OPEN', 'repository': {'nameWithOwner': 'example/repo'}, connection: conn}
+issue = {'number': n, 'title': str(n), 'state': 'CLOSED' if n in (2, 7) else 'OPEN', 'repository': {'nameWithOwner': 'example/repo'}, connection: conn}
 print(json.dumps({'data': {'repository': {'issue': issue}}}))
 ''')
         self.fake.chmod(0o755)
 
-    def run_cli(self, **env):
-        return subprocess.run([sys.executable, str(CLI), '--root', str(self.root), '--repo', 'example/repo'], text=True, capture_output=True, env={**os.environ, 'PATH': str(self.root) + os.pathsep + os.environ['PATH'], **env})
+    def run_cli(self, *, use_historical_override=True, **env):
+        args = [sys.executable, str(CLI), '--root', str(self.root), '--repo', 'example/repo']
+        if use_historical_override:
+            args += ['--historical-ledger', str(self.historical)]
+        return subprocess.run(args, text=True, capture_output=True, env={**os.environ, 'PATH': str(self.root) + os.pathsep + os.environ['PATH'], **env})
 
     def test_join_reports_rows_and_nested_paginated_graph(self):
         result = self.run_cli()
@@ -82,15 +93,103 @@ print(json.dumps({'data': {'repository': {'issue': issue}}}))
         self.assertEqual(report['unreferenced']['owner'], {'null': ['r1', 'r4'], 'draft': ['r3']})
         self.assertEqual(report['historical_unreferenced']['owner'], {'null': ['r1'], 'draft': ['r3']})
         self.assertEqual(report['rollup']['owner']['implementation'], {'implemented': 1, 'missing': 2, 'partial': 1})
-        self.assertEqual(report['closed_tickets_successor_unknown']['example/repo#2'], ['r2'])
-        self.assertEqual(report['reference_lint']['broken_relative_links'][0]['target'], 'missing.md')
+        self.assertEqual(report['closed_ticket_successors']['insufficient_successor_information']['example/repo#2']['rows'], ['r2'])
+        self.assertIn('missing.md', [item['target'] for item in report['reference_lint']['broken_relative_links']])
         self.assertIn('example/repo#99', report['reference_lint']['missing_tracker_references'])
         self.assertEqual(report['graph']['example/repo#3']['blocked_by'], ['example/repo#2', 'example/repo#4'])
         self.assertIn('example/repo#4', report['graph'])
         self.assertNotIn('example/repo#3', report['open_tickets_without_rows'])
         self.assertNotIn('example/repo#4', report['open_tickets_without_rows'])
         self.assertIn('example/repo#5', report['open_tickets_without_rows'])
-        self.assertIn('Example', report['historical_group_table']['table'])
+        self.assertEqual(len(report['historical_group_table']['groups']), 17)
+        self.assertFalse(report['historical_group_table']['groups'][8]['selection_complete'])
+
+    def test_successor_evidence_and_completeness(self):
+        source = 'docs/wiki/pi-alignment/decisions-2026-11-04.md'
+        def run_with(successors, complete):
+            self.mapping.write_text(json.dumps({'version': 1, 'scope': 'fixture', 'entries': [
+                {'ticket': '#2', 'successors': successors, 'complete': complete, 'source': source}]}))
+            result = self.run_cli()
+            self.assertEqual(result.returncode, 0, result.stderr)
+            return json.loads(result.stdout)['closed_ticket_successors']
+        known = run_with(['#6'], False)['known_open_documented_successor']['example/repo#2']
+        self.assertEqual(known['open_successors'], ['example/repo#6'])
+        self.assertIn('example/repo#2', run_with(['#7'], True)['checked_no_documented_open_successor'])
+        self.assertIn('example/repo#2', run_with(['#7'], False)['insufficient_successor_information'])
+        self.mapping.write_text(json.dumps({'version': 1, 'scope': 'fixture', 'entries': [
+            {'ticket': '#2', 'successors': [], 'complete': True, 'source': 'missing.md'}]}))
+        result = self.run_cli()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(result.stdout, '')
+        self.assertIn('missing successor source', result.stderr)
+
+    def test_candidate_snapshot_compares_each_group(self):
+        ledger_path = 'docs/research/pi-v1.3.0/1058-consolidated-capability-ledger.json'
+        candidate = subprocess.run(['git', 'show', 'a4df1a115:' + ledger_path], cwd=ROOT,
+                                   text=True, capture_output=True, check=True)
+        self.historical.write_text(candidate.stdout)
+        result = self.run_cli()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        historical = json.loads(result.stdout)['historical_group_table']
+        self.assertEqual(historical['population_count'], 341)
+        groups = historical['groups']
+        for number in (3, 6, 7, 8, 10, 17):
+            self.assertEqual(groups[number - 1]['count_delta'], 0)
+        self.assertEqual(len(groups[8]['named_rows_outside_population']), 3)
+        self.assertFalse(groups[15]['selection_complete'])
+        self.assertIsNone(groups[15]['count_delta'])
+        self.assertFalse(groups[1]['selection_complete'])
+        self.assertIn('cch_durable:abort-cascade-bottom-up', groups[1]['candidate_rows'])
+        self.assertIn('cch_durable:abort-task-protocol', groups[1]['candidate_rows'])
+        self.assertIn('cch_durable:Interchange:cpp-create', groups[0]['candidate_rows'])
+        self.assertIn('cch_durable:steering-followup', groups[4]['candidate_rows'])
+        self.assertIn('cch_coding_agent:Session:assembly:createAgentSession',
+                      [row['id'] for row in groups[10]['named_rows_outside_population']])
+        self.assertIsNone(historical['candidate_snapshot'])
+
+    def test_named_group_nine_rows_inside_the_caller_population(self):
+        candidate = json.loads(self.historical.read_text())
+        candidate['rows'].append({'id': 'cch_codemode:codemode-remote', 'owner': 'cch_codemode',
+                                  'membership': 'supported', 'implementation': 'partial',
+                                  'verification': 'unverified', 'implementation_ticket': None})
+        self.historical.write_text(json.dumps(candidate))
+        result = self.run_cli()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        group = json.loads(result.stdout)['historical_group_table']['groups'][8]
+        self.assertIn('cch_codemode:codemode-remote', group['candidate_rows'])
+        self.assertNotIn('cch_codemode:codemode-remote',
+                         [row['id'] for row in group['named_rows_outside_population']])
+        self.assertNotIn('are implemented and outside', group['boundary'])
+
+    def test_reordered_historical_groups_fail_closed(self):
+        proposal = self.root / 'docs/wiki/pi-alignment/reconciliation-1183-proposal-2026-11-04.md'
+        text = proposal.read_text()
+        lines = text.splitlines()
+        start = next(i for i, line in enumerate(lines) if line.startswith('## 2.'))
+        indexes = [i for i in range(start, len(lines)) if lines[i].startswith('|')][2:]
+        lines[indexes[2]], lines[indexes[3]] = lines[indexes[3]], lines[indexes[2]]
+        proposal.write_text('\n'.join(lines))
+        result = self.run_cli()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(result.stdout, '')
+        self.assertIn('historical group identities', result.stderr)
+
+    def test_default_historical_git_input_and_missing_object(self):
+        fake_git = self.root / 'git'
+        fake_git.write_text(f'#!{sys.executable}\n' + '''import os, sys
+if os.environ.get('GIT_MISSING'):
+    print('missing candidate object', file=sys.stderr); sys.exit(1)
+with open(os.environ['HISTORICAL_FIXTURE']) as source:
+    print(source.read())
+''')
+        fake_git.chmod(0o755)
+        result = self.run_cli(use_historical_override=False, HISTORICAL_FIXTURE=str(self.historical))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout)['historical_group_table']['candidate_snapshot'],
+                         'a4df1a1153b044f3e406cf543d36f3ad1180c864')
+        missing = self.run_cli(use_historical_override=False, GIT_MISSING='1')
+        self.assertNotEqual(missing.returncode, 0)
+        self.assertEqual(missing.stdout, '')
 
     def test_failures_never_emit_a_partial_report(self):
         for mode, message in [('GH_FAIL', 'denied'), ('GH_EXIT', 'offline'),

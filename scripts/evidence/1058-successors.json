@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "scope": "Explicit documented successor relationships only; complete means this entry was checked for the listed direct successors, not that the whole tracker was exhaustively searched. Unlisted tickets are unknown.",
+  "entries": [
+    {"ticket": "#1176", "successors": ["#1205"], "complete": false, "source": "docs/wiki/pi-alignment/decisions-2026-11-04.md#new-tickets-filed-2026-11-04"},
+    {"ticket": "#1177", "successors": ["#1206"], "complete": false, "source": "docs/wiki/pi-alignment/decisions-2026-11-04.md#new-tickets-filed-2026-11-04"}
+  ]
+}

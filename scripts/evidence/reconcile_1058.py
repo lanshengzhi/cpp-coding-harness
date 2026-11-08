@@ -3,6 +3,7 @@
 import argparse
 from collections import Counter, defaultdict
 from concurrent.futures import ThreadPoolExecutor
+import hashlib
 import json
 from pathlib import Path
 import re
@@ -172,7 +173,125 @@ def historical_group_table(proposal):
     return '\n'.join(lines)
 
 
-def report(root, repo):
+def successor_mapping(root, repo):
+    path = root / 'scripts/evidence/1058-successors.json'
+    data = json.loads(path.read_text())
+    if data['version'] != 1 or not isinstance(data['scope'], str):
+        raise ValueError('invalid successor mapping version or scope')
+    entries, refs = {}, set()
+    for entry in data['entries']:
+        key = reference(entry['ticket'], repo)
+        successors = [reference(value, repo) for value in entry['successors']]
+        if (not key or key in entries or None in successors or key in successors
+                or len(set(successors)) != len(successors) or not isinstance(entry['complete'], bool)
+                or not isinstance(entry['source'], str) or not entry['source'].strip()):
+            raise ValueError(f'invalid successor entry for {key}')
+        source_path = entry['source'].split('#', 1)[0]
+        if not source_path or Path(source_path).is_absolute() or '..' in Path(source_path).parts or not (root / source_path).is_file():
+            raise ValueError(f'missing successor source: {entry["source"]}')
+        entries[key] = {'successors': successors, 'complete': entry['complete'], 'source': entry['source']}
+        refs.update(successors)
+    return entries, refs
+
+
+def historical_comparison(proposal, ledger):
+    table = historical_group_table(proposal)
+    lines = table.splitlines()[2:]
+    descriptions = '\n'.join(line.strip('|').split('|')[0].strip() for line in lines)
+    expected = 'cb30a8e73fd304f84c9bb13d27b5af7aaa924c7db0e634b6d0440d380bc97c1a'
+    if len(lines) != 17 or hashlib.sha256(descriptions.encode()).hexdigest() != expected:
+        raise ValueError('historical group identities or order changed')
+    groups = []
+    population = [r for r in ledger['rows'] if r['membership'] == 'supported'
+                  and r['implementation'] in ('missing', 'partial')
+                  and r['implementation_ticket'] in (None, '#1058-draft')]
+    # Select only descriptions that identify rows unambiguously; partial selections
+    # are reported as such, never presented as a reconstructed full partition.
+    owners = {10: 'cch_agent_core', 16: 'cch_tui', 17: 'cch_mcp'}
+    named = {
+        2: ('cch_durable', ('task-reservation-checkpoint', 'task-terminal-receipt-atomicity', 'atomic-admission-inbox', 'request-id-deduplication')),
+        3: ('cch_durable', ('node-env-watch', 'node-exec', 'node-filesystem')),
+        4: ('cch_durable', ('codemode-script', 'codemode-replay', 'codemode-failure', 'event-stream', 'abandon-on-restart', 'Storage:jsonl:fsync')),
+        5: ('cch_durable', ('background-compaction', 'idle-waits', 'submission-queues', 'harness-settings-defaults', 'native-run-triggering', 'codemode-models', 'codemode-output', 'codemode-limits')),
+        6: ('cch_chord', ('chord-delta', 'chord-documents')),
+        7: ('cch_chord', ('context:root-background', 'json:json-representation', 'output:progress', 'Chord:context')),
+        8: ('cch_codemode', ('codemode-execute-outcome', 'codemode-inline-close', 'codemode-portable-entry', 'codemode-script-clock-timezone')),
+        9: ('cch_codemode', ('codemode-remote', 'codemode-sandbox-create-errors', 'codemode-source-output-token-option')),
+        11: ('cch_coding_agent', ('Session:assembly:createAgentSession',)),
+        13: ('cch_coding_agent', ('mcp-external-signin-pickup', 'mcp-management-ui')),
+        15: ('cch_coding_agent', ('osc52-opt-in', 'tool-read-line-range', 'system-theme', 'residual-1032-system-theme')),
+    }
+    reasons = {
+        1: 'Draft Document/Entry/Identity/Query/Session/Storage/Tx and Interchange rows are candidates; unpublished overlapping group assignments prevent a full partition.',
+        2: 'Names four rows and abort-*; the proposal later records ambiguity in the 11-row selection.',
+        3: 'All three exact names are published.',
+        4: 'Named examples include codemode rows; codemode-* overlaps the unobserved group and assignment precedence is unpublished.',
+        5: 'Examples overlap group 4 and no complete assignment or precedence is published.',
+        6: 'The proposal names all document:* rows and both coarse rows.',
+        7: 'All four exact names are published.',
+        8: 'All four exact names are published.',
+        9: 'Compare the three #1193 source-only rows named in §1.5 against the supplied population; the published table describes them as implemented.',
+        10: 'The candidate population has only these agent-core rows.',
+        11: 'Candidate Session:* draft rows follow the description; group overlap and complete membership remain unpublished.',
+        12: 'Subject descriptions overlap other groups; complete membership is unpublished.',
+        13: 'MCP description includes a withdrawn row that is not missing/partial; complete membership is unpublished.',
+        14: 'Named residual prefixes yield candidates, but overlap the unobserved group; precedence and exact membership are unpublished.',
+        15: 'Four exact names are published; one is also in the residual group.',
+        16: 'The candidate population has only these TUI rows; proposal mentions terminal rows but their candidate ticket state must be checked.',
+        17: 'Both exact names and the owner population are published.',
+    }
+    for index, line in enumerate(lines, 1):
+        cells = [cell.strip() for cell in line.strip('|').split('|')]
+        if len(cells) != 3 or not cells[1].isdigit():
+            raise ValueError(f'invalid proposal group {index}')
+        selected = []
+        for row in population:
+            owner = row['owner']
+            suffix = row['id'].removeprefix(owner + ':')
+            include = owner == owners.get(index)
+            if index in named:
+                target, names = named[index]
+                include = owner == target and (suffix in names or (index == 6 and suffix.startswith('document:')))
+            if index == 2 and owner == 'cch_durable' and suffix.startswith('abort-'):
+                include = True
+            if index == 1:
+                include = (owner == 'cch_durable' and
+                           ((row['implementation_ticket'] == '#1058-draft'
+                             and suffix.startswith(('Document:', 'Entry:', 'Identity:', 'Query:', 'Session:', 'Storage:', 'Tx:')))
+                            or suffix.startswith('Interchange:')))
+            if index == 5 and owner == 'cch_durable' and suffix.startswith('steering-'):
+                include = True
+            if index == 11:
+                include = owner == 'cch_coding_agent' and row['implementation_ticket'] == '#1058-draft' and suffix.startswith('Session:')
+            if index == 14:
+                include = owner == 'cch_coding_agent' and suffix.startswith(('residual-808-', 'residual-810-', 'residual-812-', 'residual-1032-', 'residual-1043-'))
+            if include:
+                selected.append(row['id'])
+        outside = []
+        if index == 9:
+            names = {'cch_codemode:codemode-remote', 'cch_codemode:codemode-sandbox-create-errors',
+                     'cch_codemode:codemode-source-output-token-option'}
+            outside = [{'id': r['id'], 'implementation': r['implementation'], 'ticket': r['implementation_ticket']}
+                       for r in ledger['rows'] if r['id'] in names and r not in population]
+        if index == 11:
+            outside = [{'id': r['id'], 'implementation': r['implementation'], 'ticket': r['implementation_ticket']}
+                       for r in ledger['rows'] if r['id'] == 'cch_coding_agent:Session:assembly:createAgentSession' and r not in population]
+        if index == 13:
+            outside = [{'id': r['id'], 'implementation': r['implementation'], 'ticket': r['implementation_ticket']}
+                       for r in ledger['rows'] if r['id'] == 'cch_coding_agent:mcp-management-ui' and r not in population]
+        complete = index in (3, 6, 7, 8, 10, 17)
+        groups.append({'group': index, 'description': cells[0], 'published_count': int(cells[1]),
+                       'candidate_rows': sorted(selected), 'candidate_count': len(selected), 'named_rows_outside_population': outside,
+                       'selection_complete': complete, 'count_delta': len(selected) - int(cells[1]) if complete else None,
+                       'boundary': reasons.get(index, 'No complete row-level assignment or precedence is published.')})
+    if len(groups) != 17:
+        raise ValueError(f'expected 17 historical groups, got {len(groups)}')
+    return {'candidate_snapshot': 'a4df1a1153b044f3e406cf543d36f3ad1180c864',
+            'provenance': 'Candidate ledger; proposal used an uncommitted tree and live issue state, neither fully preserved. Counts alone do not establish membership parity.',
+            'population_count': len(population), 'groups': groups, 'table': table}
+
+
+def report(root, repo, historical_ledger):
     data = {name: json.loads((root / path).read_text()) for name, path in FILES.items()}
     rows = {}
     unreferenced = defaultdict(lambda: {'null': [], 'draft': []})
@@ -231,6 +350,8 @@ def report(root, repo):
         key = reference(item['issue'], repo)
         if key:
             refs.add(key)
+    successors, successor_refs = successor_mapping(root, repo)
+    refs.update(successor_refs)
     issues, _hierarchy = graph(repo, refs)
     by_ticket = defaultdict(list)
     for rid, row in rows.items():
@@ -243,29 +364,51 @@ def report(root, repo):
             associated_tickets.add(reference(row['mapping']['ticket'], repo))
         associated_tickets.update(f'{repo}#{delivery["ticket"]}' for delivery in row['deliveries'])
     proposal = (root / 'docs/wiki/pi-alignment/reconciliation-1183-proposal-2026-11-04.md').read_text()
-    table = historical_group_table(proposal)
+    historical = historical_comparison(proposal, historical_ledger)
+    closed = {'known_open_documented_successor': {}, 'checked_no_documented_open_successor': {},
+              'insufficient_successor_information': {}}
+    for key, ids in sorted(by_ticket.items()):
+        if issues[key]['state'] != 'CLOSED':
+            continue
+        entry = successors.get(key)
+        open_successors = sorted(s for s in entry['successors'] if issues[s]['state'] == 'OPEN') if entry else []
+        category = ('known_open_documented_successor' if open_successors else
+                    'checked_no_documented_open_successor' if entry and entry['complete'] else
+                    'insufficient_successor_information')
+        closed[category][key] = {'rows': sorted(ids), 'open_successors': open_successors,
+                                 'evidence': entry}
     return {'rows': dict(sorted(rows.items())), 'unreferenced': dict(sorted(unreferenced.items())),
             'historical_unreferenced': dict(sorted(historical_unreferenced.items())),
             'rollup': dict(sorted(rollup.items())), 'graph': issues,
             'frontier': {'owners': data['frontier']['ownerGraph']['nodes'],
                          'residual_reconciliation': data['frontier']['residualReconciliation']},
-            'closed_tickets_successor_unknown': {key: sorted(ids) for key, ids in sorted(by_ticket.items()) if issues[key]['state'] == 'CLOSED'},
+            'closed_ticket_successors': closed,
             'open_tickets_without_rows': sorted(key for key in issues if issues[key]['state'] == 'OPEN' and key not in associated_tickets),
             'reference_lint': wiki_lint(root, issues, repo),
-            'historical_group_table': {'status': 'published counts only; row membership and historical graph unverified; group 9 contradicts missing/partial population', 'table': table}}
+            'historical_group_table': historical}
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--root', type=Path, default=DEFAULT_ROOT, help='input checkout root')
     parser.add_argument('--repo', default='lanshengzhi/cpp-coding-harness', help='GitHub owner/repository')
+    parser.add_argument('--historical-ledger', type=Path, help='candidate ledger override; default requires Git object a4df1a115')
     args = parser.parse_args()
     try:
         if not re.fullmatch(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+', args.repo):
             raise ValueError('invalid repository')
-        result = report(args.root, args.repo.lower())
+        if args.historical_ledger:
+            historical_ledger = json.loads(args.historical_ledger.read_text())
+        else:
+            proc = subprocess.run(['git', 'show', 'a4df1a1153b044f3e406cf543d36f3ad1180c864:' + FILES['ledger']],
+                                  cwd=DEFAULT_ROOT, text=True, capture_output=True, check=True, timeout=30)
+            historical_ledger = json.loads(proc.stdout)
+        result = report(args.root, args.repo.lower(), historical_ledger)
+        if args.historical_ledger:
+            result['historical_group_table']['candidate_snapshot'] = None
+            result['historical_group_table']['provenance'] = f'Caller-supplied ledger: {args.historical_ledger}; snapshot identity not verified.'
         print(json.dumps(result, indent=2, sort_keys=True))
-    except (OSError, ValueError, KeyError, TypeError, IndexError, subprocess.TimeoutExpired) as exc:
+    except (OSError, ValueError, KeyError, TypeError, IndexError, subprocess.TimeoutExpired, subprocess.CalledProcessError) as exc:
         print(f'reconciliation failed: {exc}', file=sys.stderr)
         return 1
     return 0
