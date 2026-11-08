@@ -26,6 +26,8 @@
 
 #include <atomic>
 #include <chrono>
+#include <charconv>
+#include <cmath>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
@@ -1019,6 +1021,44 @@ TEST_CASE("RemoteCodemodeSandbox reports failing, silent or unreachable remote a
 
 namespace {
 
+[[nodiscard]] std::optional<double> parse_remote_number(std::string_view input) {
+    const auto whitespace = [](char c) { return c == ' ' || c == '\t' || c == '\r' || c == '\n'; };
+    while (!input.empty() && whitespace(input.front()))
+        input.remove_prefix(1);
+    while (!input.empty() && whitespace(input.back()))
+        input.remove_suffix(1);
+    auto rest = input;
+    const auto digit = [](char c) { return c >= '0' && c <= '9'; };
+    if (!rest.empty() && rest.front() == '-') rest.remove_prefix(1);
+    if (rest.empty()) return std::nullopt;
+    if (rest.front() == '0') {
+        rest.remove_prefix(1);
+    } else {
+        if (rest.front() < '1' || rest.front() > '9') return std::nullopt;
+        while (!rest.empty() && digit(rest.front()))
+            rest.remove_prefix(1);
+    }
+    if (!rest.empty() && rest.front() == '.') {
+        rest.remove_prefix(1);
+        if (rest.empty() || !digit(rest.front())) return std::nullopt;
+        while (!rest.empty() && digit(rest.front()))
+            rest.remove_prefix(1);
+    }
+    if (!rest.empty() && (rest.front() == 'e' || rest.front() == 'E')) {
+        rest.remove_prefix(1);
+        if (!rest.empty() && (rest.front() == '+' || rest.front() == '-')) rest.remove_prefix(1);
+        if (rest.empty() || !digit(rest.front())) return std::nullopt;
+        while (!rest.empty() && digit(rest.front()))
+            rest.remove_prefix(1);
+    }
+    if (!rest.empty()) return std::nullopt;
+    double value = 0;
+    const auto parsed = std::from_chars(input.data(), input.data() + input.size(), value);
+    if (parsed.ec != std::errc{} || parsed.ptr != input.data() + input.size() || !std::isfinite(value))
+        return std::nullopt;
+    return value;
+}
+
 [[nodiscard]] support::JsonValue read_1193_artifact(std::string_view name) {
     const auto path = std::filesystem::path{CCH_SOURCE_DIR} / "fixtures" / "pi-v1.3.0" / "audit-1193" / name;
     std::ifstream input(path, std::ios::binary);
@@ -1171,6 +1211,61 @@ TEST_CASE("the generic remote exchange runs the script remotely and calls a call
     CHECK(remote->exchange_kinds.back() == "done");
 }
 
+TEST_CASE("remote numeric results require a complete in-range number", "[codemode][remote][issue1232]") {
+    struct ValueRemote final : codemode::CodemodeRemote {
+        std::string value;
+        [[nodiscard]] support::AsyncResult<void> execute(
+                codemode::CodemodeRemoteRequest, codemode::CodemodeRemoteExchangeHook exchange) override {
+            return support::detail::make_async_result([value = value, exchange = std::move(exchange)]() mutable
+                                                              -> boost::asio::awaitable<support::Expected<void>> {
+                auto reply = co_await support::detail::await_async_result(exchange({codemode::CodemodeRemoteDoneMessage{
+                        .ok = true, .value = value, .writes = "[]", .error = std::nullopt, .during = std::nullopt}}));
+                if (!reply) co_return std::unexpected(reply.error());
+                co_return support::ExpectedVoid{};
+            });
+        }
+    };
+    auto remote = std::make_shared<ValueRemote>();
+    codemode::RemoteCodemodeSandboxOptions options;
+    options.remote = [remote]() -> support::Expected<std::shared_ptr<codemode::CodemodeRemote>> { return remote; };
+    auto sandbox = codemode::RemoteCodemodeSandbox::create(std::move(options));
+    REQUIRE(sandbox.has_value());
+    for (const auto& [input, expected] : std::vector<std::pair<std::string, std::optional<double>>>{{"-12.5e1", -125.0},
+                 {" \t0.25E+2\r\n", 25.0},
+                 {"-0", 0.0},
+                 {"1.7976931348623157e308", 0x1.fffffffffffffp1023},
+                 {"4.9406564584124654e-324", 0x0.0000000000001p-1022},
+                 {"1.25e-2", 0.0125},
+                 {"", std::nullopt},
+                 {" ", std::nullopt},
+                 {"abc", std::nullopt},
+                 {"nan", std::nullopt},
+                 {"inf", std::nullopt},
+                 {"1e9999", std::nullopt},
+                 {"1e-9999", std::nullopt},
+                 {"\v1", std::nullopt},
+                 {"1\f", std::nullopt},
+                 {"1junk", std::nullopt},
+                 {"01", std::nullopt},
+                 {"-01", std::nullopt},
+                 {"1.", std::nullopt},
+                 {".1", std::nullopt},
+                 {"+1", std::nullopt},
+                 {"1e+", std::nullopt},
+                 {"1 2", std::nullopt}}) {
+        remote->value = input;
+        auto result = run_async((*sandbox)->run("return 1"));
+        REQUIRE(result.has_value());
+        REQUIRE_FALSE(result->error.has_value());
+        REQUIRE(result->value_json.has_value());
+        REQUIRE(result->store_writes.has_value());
+        CHECK(result->store_writes->set.empty());
+        CHECK(result->store_writes->deleted.empty());
+        INFO("remote value: " << input);
+        CHECK(parse_remote_number(*result->value_json) == expected);
+    }
+}
+
 TEST_CASE("the generic remote terminal writes set is empty on success and carries the script write set",
         "[codemode][remote][issue1193][spec]") {
     const auto artifact = read_1193_artifact("remote-generic.json");
@@ -1192,7 +1287,9 @@ TEST_CASE("the generic remote terminal writes set is empty on success and carrie
     REQUIRE(plain.has_value());
     REQUIRE_FALSE(plain->error.has_value());
     REQUIRE(plain->value_json.has_value());
-    CHECK(std::stod(*plain->value_json) == expected.at("plain").get_object().at("value").get_number());
+    const auto plain_number = parse_remote_number(*plain->value_json);
+    REQUIRE(plain_number.has_value());
+    CHECK(*plain_number == expected.at("plain").get_object().at("value").get_number());
     REQUIRE(plain->store_writes.has_value());
     CHECK(plain->store_writes->set.empty());
     CHECK(plain->store_writes->deleted.empty());
@@ -1200,7 +1297,9 @@ TEST_CASE("the generic remote terminal writes set is empty on success and carrie
     REQUIRE(writing.has_value());
     REQUIRE_FALSE(writing->error.has_value());
     REQUIRE(writing->value_json.has_value());
-    CHECK(std::stod(*writing->value_json) == expected.at("writing").get_object().at("value").get_number());
+    const auto writing_number = parse_remote_number(*writing->value_json);
+    REQUIRE(writing_number.has_value());
+    CHECK(*writing_number == expected.at("writing").get_object().at("value").get_number());
     REQUIRE(writing->store_writes.has_value());
     const auto& frozen_set = expected.at("writing").get_object().at("writes").get_object().at("set").get_object();
     REQUIRE(writing->store_writes->set.size() == frozen_set.size());
