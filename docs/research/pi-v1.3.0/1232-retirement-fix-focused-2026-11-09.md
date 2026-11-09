@@ -1,0 +1,5 @@
+# Remote retirement: earlier focused candidate, 2026-11-09
+
+This record describes a historical intermediate candidate in a mixed worktree, whose exact source tree was not recorded. It is not evidence for the final slice. Six cases reportedly passed ordinary and ASan/UBSan standalone runs; those historical results and commands are not presented as reproducible on the current tree. The intermediate design used a shared-future observer and had no coroutine/executor adapter. Its raw stop token no longer escaped; a counted registration lease covered callback invocation and capture destruction, including synchronous registration after stop.
+
+The later candidate replaces polling with executor notifications and adds reentrant construction and notification-failure coverage. For its contract, actual slice validation and commands, see [the slice record](1232-retirement-review-fix-2026-11-09.md). The historical callback race is retained separately in [the red record](1232-retirement-review-red-2026-11-09.md). No production integration or complete teardown witness follows from either historical observation.
