@@ -27,4 +27,8 @@ The owner approved a pilot allowing the comparison test to serve as its own `dis
 
 If refused, the alternative is explicit: every claim whose comparison test is already sharp stays unverified permanently, across the 44 rows in #1240–#1243 and #1229's 182, unless a genuinely different frozen observation is captured for each.
 
+## 2026-11-07: pilot and #1240 disposition
+
+At `lanshengzhi/cpp-coding-harness@fc062f2de`, the single-row pilot implemented the negative-control route. At `lanshengzhi/cpp-coding-harness@5c9caaf5c`, [#1240's final disposition](https://github.com/lanshengzhi/cpp-coding-harness/issues/1240#issuecomment-6705473783) reported 11 of its 15 claims promoted including the pilot, and four retained as bounded. Each promotion was reviewed against its own frozen scenario and acceptance judgment; the pilot alone did not qualify other claims. The [delivery record](../../research/pi-v1.3.0/1240-remaining-discriminators.md) names the rows, controls and remaining boundaries. This supersedes the earlier rule description as a statement of the delivery contract and the refused-alternative paragraph as a possible disposition of the accepted pilot; both remain as history. It does not establish outcomes for #1241–#1243.
+
 Related: [evidence and delivery history](evidence-and-delivery-history.md), [ledger field staleness](ledger-field-staleness.md), [index](index.md).
