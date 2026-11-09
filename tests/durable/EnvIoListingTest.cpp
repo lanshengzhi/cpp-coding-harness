@@ -3,6 +3,7 @@
 #include <cch/support/JsonValue.hpp>
 
 #include "durable/FrozenExpectation.hpp"
+#include "support/PeakMemory.hpp"
 #include "support/TempWorkspace.hpp"
 
 #include <catch2/catch_test_macros.hpp>
@@ -13,6 +14,9 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <istream>
+#include <optional>
+#include <sstream>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -21,6 +25,10 @@ using cch::support::JsonValue;
 namespace fs = std::filesystem;
 
 namespace {
+
+[[nodiscard]] std::optional<unsigned long long> listing_peak_memory(std::istream& status) {
+    return cch::tests::read_peak_memory(status);
+}
 
 /// Restores one environment variable at scope end; tests own the
 /// environment state they change (CODING_STANDARDS.md §11.7).
@@ -437,6 +445,16 @@ TEST_CASE("Global excludesFile expands only a leading tilde", "[durable][environ
     CHECK(paths == std::vector<std::string>{"keep.txt"});
 }
 
+TEST_CASE("Listing peak memory propagates status read failures", "[durable][environment][issue1232]") {
+    std::istringstream valid("VmHWM: 12 kB\n");
+    CHECK(listing_peak_memory(valid) == 12288ull);
+    std::istringstream missing("Name: pike\n");
+    CHECK_FALSE(listing_peak_memory(missing).has_value());
+    std::istringstream unreadable("VmHWM: 12 kB\n");
+    unreadable.setstate(std::ios::badbit);
+    CHECK_FALSE(listing_peak_memory(unreadable).has_value());
+}
+
 TEST_CASE("Durable tree listing never loads an unbounded directory into memory", "[durable][environment][issue1158]") {
     cch::tests::TempWorkspace workspace;
     apply_neutral_env(workspace.path());
@@ -450,28 +468,21 @@ TEST_CASE("Durable tree listing never loads an unbounded directory into memory",
     cch::durable::TreeListingOptions options;
     options.gitignore = false;
     options.max_entries = 100;
-    const auto before = [] {
-        std::ifstream status("/proc/self/status");
-        std::string line;
-        while (std::getline(status, line))
-            if (line.starts_with("VmHWM:")) return std::stoull(line.substr(line.find_first_of("0123456789"))) * 1024;
-        return 0ull;
-    }();
+    std::ifstream before_status("/proc/self/status");
+    const auto before = listing_peak_memory(before_status);
+    REQUIRE(before.has_value());
     auto listing = env->list_files(".", options, {});
-    const auto after = [] {
-        std::ifstream status("/proc/self/status");
-        std::string line;
-        while (std::getline(status, line))
-            if (line.starts_with("VmHWM:")) return std::stoull(line.substr(line.find_first_of("0123456789"))) * 1024;
-        return 0ull;
-    }();
+    std::ifstream after_status("/proc/self/status");
+    const auto after = listing_peak_memory(after_status);
+    REQUIRE(after.has_value());
     REQUIRE(listing.has_value());
     CHECK(listing->entries.size() == 100);
     CHECK(listing->truncated);
     // The listing stopped at its bound: names are streamed and the truncated
     // prefix is retained, so the high-water mark stays far below a full
     // materialization of 20k entries.
-    CHECK(after - before < 8 * 1024 * 1024);
+    CHECK(*after >= *before);
+    CHECK((*after >= *before && *after - *before < 8 * 1024 * 1024));
 }
 
 TEST_CASE("Durable tree listing observes cancellation between entries", "[durable][environment][issue1198]") {

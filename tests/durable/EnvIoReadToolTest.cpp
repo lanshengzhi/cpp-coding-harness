@@ -4,16 +4,14 @@
 #include <cch/support/JsonValue.hpp>
 
 #include "durable/FrozenExpectation.hpp"
+#include "support/PeakMemory.hpp"
 
 #include "support/TempWorkspace.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
-#include <charconv>
 #include <filesystem>
 #include <fstream>
-#include <limits>
-#include <optional>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -25,33 +23,7 @@ namespace {
 
 namespace fs = std::filesystem;
 
-std::optional<unsigned long long> read_peak_memory(std::istream& status) {
-    std::optional<unsigned long long> peak;
-    std::string line;
-    while (std::getline(status, line)) {
-        if (!line.starts_with("VmHWM:")) continue;
-        if (peak.has_value()) return std::nullopt;
-        std::string_view value(line);
-        value.remove_prefix(6);
-        const auto start = value.find_first_not_of(" \t");
-        if (start == std::string_view::npos) return std::nullopt;
-        value.remove_prefix(start);
-        unsigned long long kilobytes = 0;
-        const auto parsed = std::from_chars(value.data(), value.data() + value.size(), kilobytes);
-        if (parsed.ec != std::errc{} || parsed.ptr == value.data() || kilobytes == 0 ||
-                kilobytes > std::numeric_limits<unsigned long long>::max() / 1024)
-            return std::nullopt;
-        value.remove_prefix(static_cast<std::size_t>(parsed.ptr - value.data()));
-        const auto unit = value.find_first_not_of(" \t");
-        if (unit == std::string_view::npos || unit == 0) return std::nullopt;
-        value.remove_prefix(unit);
-        const auto end = value.find_last_not_of(" \t\r");
-        if (end == std::string_view::npos || value.substr(0, end + 1) != "kB") return std::nullopt;
-        peak = kilobytes * 1024;
-    }
-    if (status.bad()) return std::nullopt;
-    return peak;
-}
+using cch::tests::read_peak_memory;
 
 // Supplies one valid line, then reports a read error on the next extraction.
 class FailingStatusBuffer final : public std::stringbuf {
@@ -257,6 +229,10 @@ TEST_CASE("Peak memory reading validates status values and read failures", "[dur
         std::istringstream status{std::string(input)};
         CHECK_FALSE(read_peak_memory(status).has_value());
     }
+    std::istringstream unreadable("VmHWM: 12 kB\n");
+    unreadable.setstate(std::ios::badbit);
+    CHECK_FALSE(read_peak_memory(unreadable).has_value());
+
     FailingStatusBuffer buffer;
     std::istream failed(&buffer);
     buffer.attach(failed);
