@@ -8,6 +8,7 @@
     "boost-process",
     "boost-beast",
     "boost-asio",
+    "boost-uuid",
     "boost-multiprecision",
     "openssl",
     "catch2",

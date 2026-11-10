@@ -6,8 +6,6 @@
 #include "coding_agent/runtime/SessionFactory.hpp"
 #include "support/ExpectedMacros.hpp"
 
-#include <boost/asio/awaitable.hpp>
-
 #include <filesystem>
 #include <memory>
 #include <optional>

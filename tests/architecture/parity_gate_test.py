@@ -1989,6 +1989,70 @@ class CompileContextTest(unittest.TestCase):
         diagnostics = pg.check(valid_manifest(), index, "d" * 64, compile_commands=commands)
         self.assertEqual(rule_ids(diagnostics), [pg.RULE_OPAQUE_PCH_FORBIDDEN])
 
+    def test_declared_pch_input_accepts_its_scanned_generated_artifact(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            build = root / "build"
+            target_dir = build / "CMakeFiles" / "cch_ai.dir"
+            target_dir.mkdir(parents=True)
+            source = root / "src" / "model.cpp"
+            source.parent.mkdir()
+            source.write_text("// fixture source\n")
+            pch_input = root / "cmake" / "Pch.hpp"
+            pch_input.parent.mkdir()
+            pch_input.write_text("#pragma once\n")
+            wrapper = target_dir / "cmake_pch.hxx"
+            wrapper.write_text(f'#include "{pch_input}"\n')
+            pch_source = target_dir / "cmake_pch.hxx.cxx"
+            pch_source.write_text('#include "cmake_pch.hxx"\n')
+            pch_artifact = "CMakeFiles/cch_ai.dir/cmake_pch.hxx.gch"
+            index = make_index(
+                [
+                    {
+                        "name": "cch_ai",
+                        "role": "owner",
+                        "owner": "cch_ai",
+                        "sources": [str(source)],
+                        "dependencies": [],
+                        "pch_input": str(pch_input),
+                    }
+                ]
+            )
+            direct = make_direct_includes(
+                [
+                    {"path": str(source), "includes": []},
+                    {"path": str(pch_input), "includes": []},
+                ]
+            )
+            commands = make_compile_commands(
+                [
+                    {
+                        "file": str(source),
+                        "directory": str(build),
+                        "command": (
+                            f"g++ -include {wrapper} -include {pch_input} -c {source}"
+                        ),
+                    },
+                    {
+                        "file": str(pch_source),
+                        "directory": str(build),
+                        "command": (
+                            f"g++ -include {wrapper} -include {pch_input} -x c++-header "
+                            f"-o {pch_artifact} -c {pch_source}"
+                        ),
+                    },
+                ]
+            )
+            diagnostics = pg.check(
+                valid_manifest(),
+                index,
+                "d" * 64,
+                direct_includes=direct,
+                compile_commands=commands,
+                project_root=tmp,
+            )
+        self.assertEqual(diagnostics, [])
+
     def test_unscanned_forced_include_is_rejected(self):
         with tempfile.TemporaryDirectory() as tmp:
             project_root = make_project_tree(tmp)

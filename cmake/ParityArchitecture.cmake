@@ -427,14 +427,17 @@ endfunction()
 # manifest, index, direct-include, compile-command, and depfile evidence at
 # the build phase, failing the build on any rejection.
 #
-# Test executables must additionally depend on ${CCH_PARITY_BUILD_GATE_TARGET}
-# so CTest entry points require fresh successful Gate evidence. EXTERNAL_
-# INCLUDE_ROOTS names external dependency include roots that are never project
-# paths. The target name is published as the CACHE INTERNAL variable
-# CCH_PARITY_BUILD_GATE_TARGET.
+# The composition target is ordered after all other production targets through
+# a build-only barrier. Its POST_BUILD Gate therefore reads stable production
+# depfile evidence, while the ownership graph remains based on declared link
+# dependencies. Test executables additionally depend on
+# ${CCH_PARITY_BUILD_GATE_TARGET} so CTest entry points require fresh
+# successful Gate evidence. EXTERNAL_INCLUDE_ROOTS names external dependency
+# include roots that are never project paths. The target name is published as
+# the CACHE INTERNAL variable CCH_PARITY_BUILD_GATE_TARGET.
 function(cch_parity_add_build_gate manifest_path)
     set(options "")
-    set(one_value_keywords PROJECT_ROOT BUILD_DIR STRICT_NO_EXCEPTIONS)
+    set(one_value_keywords PROJECT_ROOT BUILD_DIR STRICT_NO_EXCEPTIONS COMPOSITION_TARGET)
     set(multi_value_keywords EXTERNAL_INCLUDE_ROOTS)
     cmake_parse_arguments(gate "${options}" "${one_value_keywords}" "${multi_value_keywords}" ${ARGN})
 
@@ -450,6 +453,23 @@ function(cch_parity_add_build_gate manifest_path)
         message(FATAL_ERROR
             "cch_parity_add_build_gate: no production targets are declared; call it after "
             "every cch_parity_declare_target")
+    endif()
+
+    if(gate_COMPOSITION_TARGET)
+        if(NOT gate_COMPOSITION_TARGET IN_LIST production_targets OR
+           NOT TARGET "${gate_COMPOSITION_TARGET}")
+            message(FATAL_ERROR
+                "cch_parity_add_build_gate: composition target '${gate_COMPOSITION_TARGET}' "
+                "must be a declared production target")
+        endif()
+        set(production_barrier_target "cch_parity_production_ready")
+        set(production_gate_inputs "${production_targets}")
+        list(REMOVE_ITEM production_gate_inputs "${gate_COMPOSITION_TARGET}")
+        add_custom_target(${production_barrier_target})
+        if(production_gate_inputs)
+            add_dependencies(${production_barrier_target} ${production_gate_inputs})
+        endif()
+        add_dependencies(${gate_COMPOSITION_TARGET} ${production_barrier_target})
     endif()
 
     set(build_gate_target "cch_parity_gate_build")

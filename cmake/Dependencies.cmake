@@ -2,7 +2,7 @@ include_guard(GLOBAL)
 
 # Orchestration include: top-level CMakeLists.txt only (relies on CMAKE_CURRENT_SOURCE_DIR = repo root).
 
-find_package(Boost CONFIG REQUIRED COMPONENTS filesystem)
+find_package(Boost CONFIG REQUIRED COMPONENTS filesystem uuid)
 find_package(Threads REQUIRED)
 find_package(OpenSSL REQUIRED)
 find_package(glaze CONFIG REQUIRED)

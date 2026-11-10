@@ -1843,6 +1843,64 @@ def _is_project_path(
     return False
 
 
+def _command_path(path: str, directory: str) -> str:
+    candidate = path if os.path.isabs(path) else os.path.join(directory, path)
+    return _norm_path(candidate)
+
+
+def _target_pch_path(target: Target, directory: str, filename: str) -> str:
+    return _norm_path(
+        os.path.join(directory, "CMakeFiles", f"{target.name}.dir", filename)
+    )
+
+
+def _is_target_pch_wrapper(path: str, target: Optional[Target], directory: str) -> bool:
+    return bool(
+        target is not None
+        and target.pch_input
+        and _command_path(path, directory)
+        == _target_pch_path(target, directory, "cmake_pch.hxx")
+    )
+
+
+def _is_target_pch_artifact(path: str, target: Optional[Target], directory: str) -> bool:
+    return bool(
+        target is not None
+        and target.pch_input
+        and _command_path(path, directory)
+        in {
+            _target_pch_path(target, directory, "cmake_pch.hxx.gch"),
+            _target_pch_path(target, directory, "cmake_pch.hxx.pch"),
+        }
+    )
+
+
+def _is_target_pch_source(path: str, target: Target, directory: str) -> bool:
+    return _command_path(path, directory) == _target_pch_path(
+        target, directory, "cmake_pch.hxx.cxx"
+    )
+
+
+def _pch_target_for_source(source: str, targets_by_name: dict[str, Target]) -> Optional[Target]:
+    match = re.search(
+        r"(?:^|/)CMakeFiles/([^/]+)\.dir/cmake_pch\.hxx\.cxx$",
+        source.replace("\\", "/"),
+    )
+    if match is None:
+        return None
+    target = targets_by_name.get(match.group(1))
+    return target if target is not None and target.pch_input else None
+
+
+def _command_output_path(tokens: Sequence[str], directory: str) -> Optional[str]:
+    for index, token in enumerate(tokens):
+        if token == "-o" and index + 1 < len(tokens):
+            return _command_path(tokens[index + 1], directory)
+        if token.startswith("-o") and len(token) > 2:
+            return _command_path(token[2:], directory)
+    return None
+
+
 def _scan_compile_tokens(
     tokens: list[str],
     target: Optional[Target],
@@ -1869,16 +1927,17 @@ def _scan_compile_tokens(
         tok = tokens[i]
         if tok in forced_two_arg:
             arg = tokens[i + 1] if i + 1 < n else ""
-            if tok == "-include-pch":
+            declared_artifact = _is_target_pch_artifact(arg, target, directory)
+            if tok == "-include-pch" and not declared_artifact:
                 diagnostics.append(
                     Diagnostic(
                         RULE_OPAQUE_PCH_FORBIDDEN,
-                        f"opaque precompiled header '{arg}' is forbidden; declare the PCH input "
-                        f"source and let the compiler build it",
+                        f"opaque precompiled header '{arg}' is forbidden; declare and scan the "
+                        f"PCH input source",
                         path=source,
                     )
                 )
-            elif arg.endswith(".gch") or arg.endswith(".pch"):
+            elif arg.endswith((".gch", ".pch")) and not declared_artifact:
                 diagnostics.append(
                     Diagnostic(
                         RULE_OPAQUE_PCH_FORBIDDEN,
@@ -1887,7 +1946,13 @@ def _scan_compile_tokens(
                         path=source,
                     )
                 )
-            elif target is not None and _norm_path(arg) not in forced_declared and _norm_path(arg) != pch_declared:
+            elif (
+                tok != "-include-pch"
+                and target is not None
+                and _command_path(arg, directory) not in forced_declared
+                and _command_path(arg, directory) != pch_declared
+                and not _is_target_pch_wrapper(arg, target, directory)
+            ):
                 diagnostics.append(
                     Diagnostic(
                         RULE_UNDECLARED_FORCED_INCLUDE,
@@ -1898,7 +1963,7 @@ def _scan_compile_tokens(
             i += 2
             continue
         if tok in unsupported_two_arg:
-            arg = tokens[i + 1] if i + 1 < n else ""
+            arg = tokens[i + 1] if i + 1 < len(tokens) else ""
             if _is_project_path(arg, directory, project_root, external_include_roots):
                 diagnostics.append(
                     Diagnostic(
@@ -1927,7 +1992,9 @@ def _scan_compile_tokens(
         if matched_unsupported:
             i += 1
             continue
-        if tok.endswith(".gch") or tok.endswith(".pch"):
+        if tok.endswith((".gch", ".pch")) and not _is_target_pch_artifact(
+            tok, target, directory
+        ):
             diagnostics.append(
                 Diagnostic(
                     RULE_OPAQUE_PCH_FORBIDDEN,
@@ -2264,6 +2331,117 @@ def _check_exception_compile_flags(
                 )
 
 
+def _include_argument_paths(tokens: Sequence[str], directory: str) -> set[str]:
+    paths: set[str] = set()
+    for index, token in enumerate(tokens[:-1]):
+        if token in {"-include", "-include-pch"}:
+            paths.add(_command_path(tokens[index + 1], directory))
+    return paths
+
+
+def _check_declared_pch_commands(
+    index: Index,
+    compile_commands: CompileCommands,
+    diagnostics: list[Diagnostic],
+) -> None:
+    commands_by_file: dict[str, list[CompileCommand]] = {}
+    for command in compile_commands.commands:
+        commands_by_file.setdefault(_norm_path(command.file), []).append(command)
+
+    for target in index.targets:
+        if target.pch_input is None:
+            continue
+
+        pch_commands = [
+            command
+            for command in compile_commands.commands
+            if _is_target_pch_source(_norm_path(command.file), target, command.directory)
+        ]
+        if len(pch_commands) != 1:
+            diagnostics.append(
+                Diagnostic(
+                    RULE_OPAQUE_PCH_FORBIDDEN,
+                    f"target '{target.name}' declares PCH input '{target.pch_input}' but has "
+                    f"{len(pch_commands)} generated PCH compile commands; expected exactly one",
+                    target=target.name,
+                )
+            )
+            continue
+
+        command = pch_commands[0]
+        tokens = _split_command(command.command)
+        wrapper = _target_pch_path(target, command.directory, "cmake_pch.hxx")
+        output = _command_output_path(tokens, command.directory)
+        if output is None or not _is_target_pch_artifact(output, target, command.directory):
+            diagnostics.append(
+                Diagnostic(
+                    RULE_OPAQUE_PCH_FORBIDDEN,
+                    f"generated PCH for target '{target.name}' does not write its declared "
+                    "target-local PCH artifact",
+                    target=target.name,
+                    path=command.file,
+                )
+            )
+        if wrapper not in _include_argument_paths(tokens, command.directory):
+            diagnostics.append(
+                Diagnostic(
+                    RULE_OPAQUE_PCH_FORBIDDEN,
+                    f"generated PCH for target '{target.name}' does not include its CMake PCH "
+                    "wrapper",
+                    target=target.name,
+                    path=command.file,
+                )
+            )
+        elif not os.path.isfile(wrapper):
+            diagnostics.append(
+                Diagnostic(
+                    RULE_OPAQUE_PCH_FORBIDDEN,
+                    f"generated PCH wrapper for target '{target.name}' is missing",
+                    target=target.name,
+                    path=wrapper,
+                )
+            )
+        else:
+            wrapper_text = _read_bytes(wrapper).decode("utf-8", errors="replace")
+            wrapper_includes = re.findall(
+                r'^\s*#\s*include\s*"([^"]+)"', wrapper_text, flags=re.MULTILINE
+            )
+            resolved_includes = [
+                _command_path(include, os.path.dirname(wrapper))
+                for include in wrapper_includes
+            ]
+            declared_pch = _norm_path(target.pch_input)
+            if resolved_includes != [declared_pch]:
+                diagnostics.append(
+                    Diagnostic(
+                        RULE_OPAQUE_PCH_FORBIDDEN,
+                        f"generated PCH wrapper for target '{target.name}' does not contain "
+                        f"exactly its declared PCH input '{target.pch_input}'",
+                        target=target.name,
+                        path=wrapper,
+                    )
+                )
+
+        for source in target.sources:
+            source_commands = commands_by_file.get(_norm_path(source), [])
+            for source_command in source_commands:
+                source_tokens = _split_command(source_command.command)
+                includes = _include_argument_paths(source_tokens, source_command.directory)
+                if wrapper not in includes and not any(
+                    _is_target_pch_artifact(path, target, source_command.directory)
+                    for path in includes
+                ):
+                    diagnostics.append(
+                        Diagnostic(
+                            RULE_OPAQUE_PCH_FORBIDDEN,
+                            f"compile command for target '{target.name}' does not use its "
+                            "declared PCH wrapper",
+                            target=target.name,
+                            path=source_command.file,
+                        )
+                    )
+
+
 def _check_compile_commands(
     manifest: Manifest,
     index: Index,
@@ -2277,6 +2455,7 @@ def _check_compile_commands(
         return
 
     declared: dict[str, Target] = {}
+    targets_by_name = {target.name: target for target in index.targets}
     for target in index.targets:
         if target.role == "external":
             continue
@@ -2311,6 +2490,8 @@ def _check_compile_commands(
     for command in compile_commands.commands:
         source = _norm_path(command.file)
         target = declared.get(source)
+        if target is None:
+            target = _pch_target_for_source(source, targets_by_name)
         tokens = _split_command(command.command)
         if not tokens:
             continue
@@ -2331,6 +2512,8 @@ def _check_compile_commands(
         _check_exception_compile_flags(
             manifest, command, target, tokens, strict_no_exceptions, diagnostics
         )
+
+    _check_declared_pch_commands(index, compile_commands, diagnostics)
 
 
 def _check_depfiles(

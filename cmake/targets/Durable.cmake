@@ -43,6 +43,7 @@ cch_parity_declare_target(
         src/durable/WorkflowRuntime.cpp
     DEPENDS
         Boost::headers@boost
+        Boost::uuid@boost
         cch_ai
         cch_chord
         cch_codemode

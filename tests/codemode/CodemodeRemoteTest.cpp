@@ -800,8 +800,10 @@ TEST_CASE(
                 codemode::CodemodeRemoteRequest, codemode::CodemodeRemoteExchangeHook exchange) override {
             return support::detail::make_async_result([this, exchange = std::move(exchange)]() mutable
                                                               -> boost::asio::awaitable<support::Expected<void>> {
-                auto reply = co_await support::detail::await_async_result(exchange({codemode::CodemodeRemoteCallMessage{
-                        .id = 1, .target = "tool", .name = "hang", .args = "null"}}));
+                std::vector<codemode::CodemodeRemoteMessageVariant> messages;
+                messages.push_back(codemode::CodemodeRemoteCallMessage{
+                        .id = 1, .target = "tool", .name = "hang", .args = "null"});
+                auto reply = co_await support::detail::await_async_result(exchange(std::move(messages)));
                 if (reply && std::holds_alternative<codemode::CodemodeRemoteStopReply>(*reply)) {
                     stopped.set_value();
                     auto executor = co_await boost::asio::this_coro::executor;

@@ -104,6 +104,26 @@ Slow translation units include:
 
 A standalone Debug compile of the leading hotspot took 32.7 seconds with GCC and 22.1 seconds with Clang. This supports a full Clang experiment, but not an immediate compiler-default change.
 
+## Local full Debug one-third-target follow-up (2026-11)
+
+These measurements use the current Pike source tree and the same AMD host for the four-job control and the isolated high-parallelism runs. They are separate from the older Intel-host measurements above.
+
+| Run | Jobs | Cold build | Available memory before |
+| --- | ---: | ---: | ---: |
+| Four-job control, samples 1–3 | 4 | 507.641 s, 507.203 s, 507.564 s (median 507.564 s) | 34.7–38.7 GiB |
+| One-third target | — | 169.188 s | — |
+| Isolated sample 1 | 16 | 164.316 s | 89.5 GiB |
+| Isolated sample 2 | 16 | 164.248 s | 80.2 GiB |
+| Isolated sample 3 | 16 | 164.367 s | 80.3 GiB |
+| 16-job median | 16 | 164.316 s | — |
+| 12-job exploratory run | 12 | 204.244 s | 19.1 GiB |
+
+The 16-job median is 67.63% below the four-job control and 4.872 seconds below the one-third target. Each run compiled 643 units, and configure time was recorded separately (2.929–3.208 seconds). All three passed both Parity Architecture Gate phases, checking 13 targets and 3,960 includes. Each benchmark used a fresh build directory and an isolated ccache that started empty; the report's final ccache hit rate includes later warm and incremental stages. The warmed local vcpkg binary cache served dependencies without network access.
+
+The host was an AMD Ryzen AI MAX+ 395 with 32 CPU threads and 122 GiB total memory, running GCC 16.0.1, CMake 4.4.0, Ninja 1.13.2, and ccache 4.12.3. Available memory differed between the four-job controls and 16-job runs as recorded above, so retain that context when comparing elapsed times. Sixteen jobs were used only for this exclusive benchmark; routine and CI builds remain capped at four jobs.
+
+A separate four-job trial with a standard-library PCH on `cch_coding_agent` took 513.060 seconds and showed no improvement over the control; the target PCH setting was removed. The Gate still validates declared PCH inputs and their generated artifacts.
+
 ## CI build-time evidence
 
 The supported-Linux CI lanes run on GitHub-hosted `ubuntu-24.04` runners (4 vCPU). The vcpkg dependency cache (#521) restores in about two seconds, so lane wall time is dominated by project compilation and the test run.

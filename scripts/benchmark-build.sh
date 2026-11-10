@@ -47,6 +47,8 @@ Options:
   --jobs N             Parallel build jobs (default: 4).
   --samples N          Repeat the cheap scenarios (no-op, incremental, hotspot)
                        N times and report the median (default: 3).
+  --debug-cxx-flags STRING
+                       Override CMAKE_CXX_FLAGS_DEBUG for a Debug build variant.
   --prod-source FILE   Production source for the typical incremental scenario
                        (default: src/coding_agent/SettingsManager.cpp).
   --test-source FILE   Test source for the typical test-source incremental
@@ -96,6 +98,7 @@ root=""
 build_type="Debug"
 jobs=4
 samples=3
+debug_cxx_flags=""
 prod_source="src/coding_agent/SettingsManager.cpp"
 test_source="tests/coding_agent/ModelRuntimeTest.cpp"
 hotspot_source="src/support/BoostBeastStreamTransport.cpp"
@@ -122,6 +125,11 @@ while [[ $# -gt 0 ]]; do
 	--samples)
 		[[ $# -ge 2 ]] || { echo "error: --samples requires a number" >&2; exit 2; }
 		samples="$2"
+		shift 2
+		;;
+	--debug-cxx-flags)
+		[[ $# -ge 2 ]] || { echo "error: --debug-cxx-flags requires a value" >&2; exit 2; }
+		debug_cxx_flags="$2"
 		shift 2
 		;;
 	--prod-source)
@@ -370,6 +378,9 @@ fi
 echo "== build benchmark =="
 echo "root:       $root"
 echo "build type: $build_type, jobs: $jobs, samples: $samples"
+if [[ -n "$debug_cxx_flags" ]]; then
+	echo "Debug C++ flags: $debug_cxx_flags"
+fi
 echo "compiler:   ${compiler:-CMake default}, generator: Ninja, ccache: $ccache_dir"
 echo "network:    $([ "$network_required" = true ] && echo allowed || echo "offline ($VCPKG_BINARY_SOURCES)")"
 echo "vcpkg root: $vcpkg_root"
@@ -386,10 +397,23 @@ configure_args=(
 	-B "$build_dir"
 	-G Ninja
 	-DCMAKE_BUILD_TYPE="$build_type"
+	-DCMAKE_CXX_COMPILER=g++
+	-DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+	-DCMAKE_CXX_SCAN_FOR_MODULES=OFF
 	-DCMAKE_C_COMPILER_LAUNCHER=ccache
 	-DCMAKE_CXX_COMPILER_LAUNCHER=ccache
 	-DCMAKE_TOOLCHAIN_FILE="$vcpkg_root/scripts/buildsystems/vcpkg.cmake"
+	-DCCH_TOOLCHAIN_ROLE=build
+	-DVCPKG_HOST_TRIPLET=x64-linux
+	-DVCPKG_MANIFEST_INSTALL=ON
+	-DVCPKG_MANIFEST_MODE=ON
+	-DVCPKG_OVERLAY_PORTS="$repo_root/cmake/vcpkg-ports"
+	-DVCPKG_TARGET_TRIPLET=x64-linux
 )
+if [[ -n "$debug_cxx_flags" ]]; then
+	[[ "$build_type" == "Debug" ]] || { echo "error: --debug-cxx-flags requires Debug build type" >&2; exit 2; }
+	configure_args+=( "-DCMAKE_CXX_FLAGS_DEBUG=$debug_cxx_flags" )
+fi
 if [[ -n "$compiler" ]]; then
 	configure_args+=( -DCMAKE_C_COMPILER="$compiler" -DCMAKE_CXX_COMPILER="$compiler" )
 fi
@@ -489,6 +513,7 @@ export BM_GENERATOR_VERSION="$ninja_version"
 export BM_CMAKE_VERSION="$cmake_version"
 export BM_CCACHE_VERSION="$ccache_version"
 export BM_BUILD_TYPE="$build_type"
+export BM_DEBUG_CXX_FLAGS="$debug_cxx_flags"
 export BM_JOBS="$jobs"
 export BM_NETWORK_REQUIRED="$network_required"
 export BM_VCPKG_ROOT="$vcpkg_root"
@@ -679,6 +704,7 @@ environment = {
     "cmake_version": get("BM_CMAKE_VERSION"),
     "ccache_version": get("BM_CCACHE_VERSION"),
     "build_type": get("BM_BUILD_TYPE"),
+    "debug_cxx_flags": get("BM_DEBUG_CXX_FLAGS"),
     "jobs": int_or(get("BM_JOBS"), 0),
     "network_required": get("BM_NETWORK_REQUIRED") == "true",
     "vcpkg_root": get("BM_VCPKG_ROOT"),
@@ -739,6 +765,7 @@ print()
 print("Build benchmark results (%s)" % get("BM_TIMESTAMP"))
 print("=" * 60)
 print(col("configure", measurements["configure_seconds"]))
+print("Debug C++ flags: %s" % (environment["debug_cxx_flags"] or "CMake default"))
 print(col("clean cold build", measurements["cold_clean_build_seconds"]))
 print(col("no-op build (median)", (measurements["noop_build_seconds"] or {}).get("median", "-")))
 print(col("warm-cache clean rebuild", measurements["warm_cache_clean_rebuild_seconds"]))
