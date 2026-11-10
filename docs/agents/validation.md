@@ -43,7 +43,7 @@ ctest --preset vcpkg -LE architecture -L coding_agent          # owning module l
 cmake --build --preset vcpkg && ctest --preset vcpkg -LE architecture   # suite minus the architecture label
 ```
 
-Parallel builds share one host budget: four concurrent jobs is the ceiling (`CMakePresets.json` `jobs: 4`; two concurrent lanes at `-j2`, or four at `-j1`; measurement record in [build-performance-baseline.md](../build-performance-baseline.md)).
+Routine builds and CI share a four-job ceiling (`CMakePresets.json` `jobs: 4`; two concurrent lanes at `-j2`, or four at `-j1`). A cold-build benchmark may pass a higher `--jobs` value to `scripts/benchmark-build.sh` when it is the only code build on the host; keep the checked-in presets and CI at four jobs. Benchmark results record the CPU and available memory. See the historical measurement record in [build-performance-baseline.md](../build-performance-baseline.md).
 
 The `vcpkg` test preset treats an empty selection as an error (`noTests: error`), while a broad regex can match unintended cases. Verify the match set before trusting it (`ctest --preset vcpkg -N -R '<regex>'`), prefer a label (`-L <label>`) or the owning shard, and report the selected count with the result.
 
@@ -131,6 +131,17 @@ each with the same pinned vcpkg toolchain: every configure runs the Parity
 Architecture Gate fail-closed with strict evidence, every normal build runs
 the build-phase Gate, and the full offline CTest suite runs the no-exception
 target graph. Do not use live provider credentials or network access.
+
+## Release qualification (CI)
+
+Issue #474 establishes the blocking release matrix in `.github/workflows/linux-toolchain.yml`:
+
+- **GCC 16.x Debug and Release** jobs build and test the complete supported product on Ubuntu 24.04; **Clang 22.x** is a blocking Debug conformance verifier over the same graph and suite and never produces release artifacts.
+- **GCC 16 Release artifact (IPO/LTO)** — the `vcpkg-release-artifact` preset builds the release Runtime with validated IPO/LTO (configure fails closed if the toolchain cannot do IPO). The job stages it into a clean prefix through the fail-closed install gate, audits the staged dependency closure, runs `scripts/ci/release-artifact-smoke.sh` (relocation, scrubbed-environment `--version`/`--help`, deterministic offline failure), binds the evidence to the artifact digest, and verifies the complete evidence directory with `scripts/ci/verify_release_evidence.py`. Missing, stale, contradictory, or incomplete evidence fails qualification with stable `REL-*` rule identifiers; nothing degrades to a warning. The qualified staged tree and its evidence upload as the `pike-runtime-linux-x86_64` run artifact.
+- **Arch pinned (blocking)** — a digest-pinned `archlinux:base-devel` snapshot with pacman pinned to the matching Arch Linux Archive date runs the same declared dependency (pinned vcpkg) and Gate contracts. Toolchain drift (e.g. GCC leaving 16.x) fails the lane closed and forces a deliberate re-pin.
+- **Arch latest drift (advisory)** — `.github/workflows/arch-drift.yml` runs current Arch latest on a weekly schedule. It never triggers on pull requests or pushes, so it cannot gate qualification or substitute for the pinned blocking lane; a failure is the drift signal to re-pin.
+
+The evidence verifier is covered by the `cch_release_evidence_unit` CTest case (`tests/install/release_evidence_test.py`).
 
 ## Documentation-only changes
 
