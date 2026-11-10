@@ -55,11 +55,11 @@ them when the migration lands.
 
 ## pi compatibility
 
-Upstream pi is optional reference material, not a specification. A pi session or
-configuration format is supported only at an explicit product compatibility
-edge, such as `compat/pi`, and only when an issue or ADR says so. Compatibility
-code is not part of the required architecture gate. The de-pi migration uses
-one-time import rather than runtime fallback reads or dual-format loading.
+Pike does not provide a dedicated pi data import. Existing capabilities with an
+explicit pi interoperability or Semantic Parity contract remain supported; changing
+them requires an owner ruling. Upstream pi is reference material, not a general
+compatibility obligation. The experimental-project rules in [AGENTS.md](../../AGENTS.md)
+govern new design and the treatment of conflicting existing contracts.
 
 When a user-visible behavior is intentionally retained because it is useful —
 for example familiar TUI keybindings or slash commands — record it as a product

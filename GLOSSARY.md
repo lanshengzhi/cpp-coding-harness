@@ -62,10 +62,6 @@ _Avoid_: CMake comment, target allowlist, duplicated policy
 The mandatory validation of the configured product against the Product Architecture Contract.
 _Avoid_: Advisory architecture test, source-format style check, optional CI job
 
-**Compat Layer**:
-The one-time import boundary for pi's session and configuration formats, separate from Pike's runtime domain model.
-_Avoid_: Runtime dual-read, deprecation shims, shared default directories
-
 **Named Baseline**:
 A named pi revision, recorded by full 40-character commit SHA, that owns exactly one evidence bundle and the verification of that bundle. Baselines are selected by name, never by an ad-hoc revision argument.
 _Avoid_: Parity Baseline (historical), tag name, short SHA prefix, free-form revision parameter

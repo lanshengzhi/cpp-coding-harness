@@ -254,7 +254,6 @@ Making assert-level failure safety a general guarantee — a helper that enforce
 Sanctioned deviations are grandfathered only on untouched existing lines. Added or modified lines comply with the current rule unless an exception below explicitly permits the deviation.
 
 - **camelCase pi vocabulary (§3.2):** untouched camelCase declarations and uses are grandfathered. A new or renamed camelCase identifier is allowed only when its issue/spec or an adjacent comment identifies the matching pi identifier; otherwise the declaration uses `snake_case`. This semantic rule covers filesystem/session/trust seams, wire fields, and skill/prompt parity code without a path allowlist.
-- **Variant-alias naming (§3.3):** `Content` and `AssistantContent` predate the suffix rule and are intentionally kept to avoid public API churn (debt recorded in #372).
 
 ### Citation migrations
 

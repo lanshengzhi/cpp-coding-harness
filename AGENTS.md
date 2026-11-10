@@ -2,6 +2,14 @@
 
 Experimental C++23 coding-agent runtime with strict Owner packages and safety boundaries.
 
+## Experimental project
+
+Prefer the clean target design. Existing APIs, configuration, data formats, names, and implementation choices carry no backward-compatibility obligation. Change consumers, tests, and documentation with the contract; remove old paths rather than adding shims, aliases, dual reads, or migration tooling. Do not add a dedicated pi data import; previously selected interoperability remains a product contract.
+
+Report a selected path's failure rather than automatically switching to another path. Use explicitly defined defaults for absent optional input; report invalid or recognized unsupported input instead of substituting a default. Explicitly specified retries and recovery remain product capabilities.
+
+Apply these rules to new work and clean up affected existing paths when changing them. When an accepted ADR or frozen behavior conflicts, obtain an owner ruling before changing the contract and implementation; do not infer an exception or remove the behavior unilaterally.
+
 ## Start gate
 
 1. Inspect `git status --short`. User owns pre-existing modified or untracked files; preserve unrelated work.

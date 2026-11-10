@@ -21,6 +21,12 @@ Partial supersession, stated clause by clause:
 
 ## Compat strategy
 
+> **Superseded in part:** The owner has retired the dedicated one-time pi import
+> proposed in this ADR, including its consequences below. [AGENTS.md](../../AGENTS.md) records the current
+> experimental-project rules; explicitly selected pi interoperability remains a
+> product contract until changed by an owner ruling. The original decision below
+> is retained as history.
+
 pi's session format, config format, and special data shapes move to a `compat/pi` edge layer used by a **one-time explicit import** command. There are no runtime fallback reads, no dual-format session loading, and no deprecation shims — the repository's standing "clean end state over migrations and fallback reads" principle now applies to pi itself. The default configuration directory leaves `~/.pi/agent` for the product's own namespace; branding changes are confined to user-visible surfaces (binary name, config directory, docs). `cch_` target names, include paths, and namespaces stay: renaming them is pure churn with no architectural payoff.
 
 ## Retained pi inheritances
