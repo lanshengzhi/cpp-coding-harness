@@ -11053,7 +11053,7 @@
     },
     {
      "path": "tests/codemode/CodemodeOwnerTest.cpp",
-     "sha256": "da1575359133b922cf9d841be282b4f8f6d33bea74df39f17e8f0e6fc050948f"
+     "sha256": "a7b2ef965875d6c1e60072142780959266a31f44f13ce87df52bb8ab5c316aff"
     },
     {
      "path": "tests/codemode/CodemodeRemoteTest.cpp",
@@ -12075,16 +12075,17 @@
      "^(Remote deterministic execution applies reversed answers by result number|Remote deterministic execution runs the script remotely and answers through deliver|RemoteCodemodeSandbox batches output instead of making one exchange per line|RemoteCodemodeSandbox caps the interrupt budget and memory at the remote's limits|RemoteCodemodeSandbox discriminating abort check: does not block on slow remote exit|RemoteCodemodeSandbox reports failing, silent or unreachable remote as sandbox error with transport reason|RemoteCodemodeSandbox runs tools in the caller and the script on the remote|RemoteCodemodeSandbox tells the remote to stop when caller aborts and settles immediately|a normal codemode run is not deterministic while start is|a public codemode caller aborting while a tool waits keeps partial output and cancels the call|a public codemode caller applies reversed answers by result number not arrival order|a public codemode caller binds a dotted global into its frozen namespace and spreads arguments|a public codemode caller catches unknown tools and thrown tool errors with error call status|a public codemode caller collects mixed output in order with the console marker and image MIME|a public codemode caller counts the interrupt budget across tool waits|a public codemode caller fails the run when the guest hits its output item limit|a public codemode caller gets UTC and no WeakRef in a deterministic run|a public codemode caller gets an uncatchable abort and a cancelled record in a deterministic run|a public codemode caller gets during for the result the VM was processing when the script ended|a public codemode caller gets illegal start options refused before any VM exists|a public codemode caller gets the fingerprint before the first call and a reused result number is refused|a public codemode caller keeps a call waiting when its answer cannot be serialized|a public codemode caller numbers globals with tools and gets rejection properties on the script Error|a public codemode caller reads a store snapshot across calls and drops failed writes|a public codemode caller records an unawaited call as cancelled and aborts it|a public codemode caller records settled calls with ok and error statuses|a public codemode caller rejects a reused result number a non-finite clock and an unknown call deterministically|a public codemode caller rejects invalid globals at construction with the frozen errors|a public codemode caller replays a deterministic run from the same start seed and answers|a public codemode caller reports a pre-aborted run with the abort reason and never starts it|a public codemode caller reports a script error with its name message stack and prior output|a public codemode caller reports guest memory exhaustion as an out-of-memory script error|a public codemode caller reports non-Error throws BigInt returns and syntax errors as script errors|a public codemode caller reports the deadline when a tool waits past it and keeps partial output|a public codemode caller returns its value and text output from a successful budgeted run|a public codemode caller sees a seed mismatch change randomness without changing the start time|a public codemode caller stops pure computation with the interrupt budget, not the deadline|a public codemode caller stringifies text and accepts image blocks with the frozen type errors|a public codemode caller treats exit\\(\\) as success with prior output and the write set|a run-supplied jsName overrides the derived script name|an over-limit script is interrupted with a timeout error|codemode worker admission follows wasm load and releases a failed start once|codemode worker results settle before exit while admission stays bounded|the public codemode declaration covers the frozen schema renderings|the public codemode declaration groups tools globals and namespaces with doc comments|the public codemode declaration preserves the relocated tool identifiers|the public codemode declaration renders frozen schema types|the public codemode declaration renders frozen tool signatures samples and blocks|the public codemode prelude is the frozen sandbox prelude with output and store limits|the public codemode source parser keeps only a first-line options command|the public codemode source parser rejects a misplaced options line with its line number|the public codemode source parser rejects invalid options and empty input with typed errors)$",
      "--no-tests=error",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1179-codemode-comparisons-revalidation-test-tmp-root.xml",
+     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1179-codemode-comparisons-revalidation-1232-closeout.xml",
      "-j",
-     "1"
+     "1",
+     "--output-on-failure"
     ],
-    "testedRevision": "2ea9ae1c360f2a3221fd1dcf5326bf2ac471627a",
-    "recordedAt": "2026-11-11T11:32:54Z",
+    "testedRevision": "b81daa42673e94a35bd24a0584e87e42e3bb2345",
+    "recordedAt": "2026-11-11T17:30:50Z",
     "selected": 52,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1179-codemode-comparisons-revalidation-test-tmp-root.xml",
-     "sha256": "7fa7cda0c893d0d8c18dfb8e33268534feb8c85b6c4d9f87c41feceedeba0b56"
+     "path": "docs/research/pi-v1.3.0/deliveries/1179-codemode-comparisons-revalidation-1232-closeout.xml",
+     "sha256": "c8c981129c972f4a2bf79dc408868905c28f72d4375f6a031fb6cf557ebf02d7"
     }
    },
    "revalidation1179m": {
@@ -12802,6 +12803,33 @@
      "junit": {
       "path": "docs/research/pi-v1.3.0/deliveries/1179-revalidation-1232-frame-join.xml",
       "sha256": "4fd7317c7fa575a3eff73723fe5956d06c4a62e24291bc64925bbff0e6736fa9"
+     }
+    }
+   },
+   "revalidation1232Closeout": {
+    "reason": "The #1232 close-out changed the bytes of tests/codemode/CodemodeOwnerTest.cpp, a test input this receipt pins, so its exact recorded 52-case selection was rerun on the updated tree at b81daa42: 52 selected, 52 passed, 0 skipped, 0 failed, 103.94 s of CTest wall time. 58cecf53e replaces the run-result std::stod reader with a from_chars reader and adds that reader's rejection case, and it is the last commit to touch the file. This round's other #1232 work (c774ab100 reaps the differential daemon, b81daa426 formats the differential reaping cases, 4cf2c53be and e3fe4c373 pin and record the TUI wrapped-path rows) touches no input pinned by this receipt. Only the one drifted input digest is rebound; no other input is rehashed. Rows, comparison scenarios, discriminating cases, implementationCommits and routingSha256 are unchanged, and the rerun makes no new capability claim. CTest resolves a relative --output-junit path against the test preset's build directory, so the command carries the absolute source-tree path and the artifact is the committed file at junit.path.",
+    "changedInputs": [
+     "tests/codemode/CodemodeOwnerTest.cpp"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-R",
+      "^(Remote deterministic execution applies reversed answers by result number|Remote deterministic execution runs the script remotely and answers through deliver|RemoteCodemodeSandbox batches output instead of making one exchange per line|RemoteCodemodeSandbox caps the interrupt budget and memory at the remote's limits|RemoteCodemodeSandbox discriminating abort check: does not block on slow remote exit|RemoteCodemodeSandbox reports failing, silent or unreachable remote as sandbox error with transport reason|RemoteCodemodeSandbox runs tools in the caller and the script on the remote|RemoteCodemodeSandbox tells the remote to stop when caller aborts and settles immediately|a normal codemode run is not deterministic while start is|a public codemode caller aborting while a tool waits keeps partial output and cancels the call|a public codemode caller applies reversed answers by result number not arrival order|a public codemode caller binds a dotted global into its frozen namespace and spreads arguments|a public codemode caller catches unknown tools and thrown tool errors with error call status|a public codemode caller collects mixed output in order with the console marker and image MIME|a public codemode caller counts the interrupt budget across tool waits|a public codemode caller fails the run when the guest hits its output item limit|a public codemode caller gets UTC and no WeakRef in a deterministic run|a public codemode caller gets an uncatchable abort and a cancelled record in a deterministic run|a public codemode caller gets during for the result the VM was processing when the script ended|a public codemode caller gets illegal start options refused before any VM exists|a public codemode caller gets the fingerprint before the first call and a reused result number is refused|a public codemode caller keeps a call waiting when its answer cannot be serialized|a public codemode caller numbers globals with tools and gets rejection properties on the script Error|a public codemode caller reads a store snapshot across calls and drops failed writes|a public codemode caller records an unawaited call as cancelled and aborts it|a public codemode caller records settled calls with ok and error statuses|a public codemode caller rejects a reused result number a non-finite clock and an unknown call deterministically|a public codemode caller rejects invalid globals at construction with the frozen errors|a public codemode caller replays a deterministic run from the same start seed and answers|a public codemode caller reports a pre-aborted run with the abort reason and never starts it|a public codemode caller reports a script error with its name message stack and prior output|a public codemode caller reports guest memory exhaustion as an out-of-memory script error|a public codemode caller reports non-Error throws BigInt returns and syntax errors as script errors|a public codemode caller reports the deadline when a tool waits past it and keeps partial output|a public codemode caller returns its value and text output from a successful budgeted run|a public codemode caller sees a seed mismatch change randomness without changing the start time|a public codemode caller stops pure computation with the interrupt budget, not the deadline|a public codemode caller stringifies text and accepts image blocks with the frozen type errors|a public codemode caller treats exit\\(\\) as success with prior output and the write set|a run-supplied jsName overrides the derived script name|an over-limit script is interrupted with a timeout error|codemode worker admission follows wasm load and releases a failed start once|codemode worker results settle before exit while admission stays bounded|the public codemode declaration covers the frozen schema renderings|the public codemode declaration groups tools globals and namespaces with doc comments|the public codemode declaration preserves the relocated tool identifiers|the public codemode declaration renders frozen schema types|the public codemode declaration renders frozen tool signatures samples and blocks|the public codemode prelude is the frozen sandbox prelude with output and store limits|the public codemode source parser keeps only a first-line options command|the public codemode source parser rejects a misplaced options line with its line number|the public codemode source parser rejects invalid options and empty input with typed errors)$",
+      "--no-tests=error",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1179-codemode-comparisons-revalidation-test-tmp-root.xml",
+      "-j",
+      "1"
+     ],
+     "testedRevision": "2ea9ae1c360f2a3221fd1dcf5326bf2ac471627a",
+     "recordedAt": "2026-11-11T11:32:54Z",
+     "selected": 52,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1179-codemode-comparisons-revalidation-test-tmp-root.xml",
+      "sha256": "7fa7cda0c893d0d8c18dfb8e33268534feb8c85b6c4d9f87c41feceedeba0b56"
      }
     }
    }
@@ -14512,7 +14540,7 @@
     },
     {
      "path": "tests/codemode/CodemodeOwnerTest.cpp",
-     "sha256": "da1575359133b922cf9d841be282b4f8f6d33bea74df39f17e8f0e6fc050948f"
+     "sha256": "a7b2ef965875d6c1e60072142780959266a31f44f13ce87df52bb8ab5c316aff"
     }
    ],
    "validation": {
@@ -14526,16 +14554,17 @@
      "^(a public codemode caller executes a script against an injected nested tool|a public codemode caller keeps prior output when an injected tool rejects|the public codemode tool table registers lists and unregisters with the frozen messages|the public codemode start rejects a later run after close with the frozen spelling|closing codemode settles the run before its worker exit releases admission)$",
      "--no-tests=error",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1192-revalidation-1232-frame-join.xml",
+     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1192-codemode-tool-table-close-revalidation-1232-closeout.xml",
      "-j",
-     "1"
+     "1",
+     "--output-on-failure"
     ],
-    "testedRevision": "44d0fa5c1d52bb834a54b812265b250424ba6844",
-    "recordedAt": "2026-11-11T06:53:11Z",
+    "testedRevision": "b81daa42673e94a35bd24a0584e87e42e3bb2345",
+    "recordedAt": "2026-11-11T17:30:50Z",
     "selected": 5,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1192-revalidation-1232-frame-join.xml",
-     "sha256": "63611617fce06d4e6c7ea8bc998dac091743db1139fd05f39ab648b3d96a4081"
+     "path": "docs/research/pi-v1.3.0/deliveries/1192-codemode-tool-table-close-revalidation-1232-closeout.xml",
+     "sha256": "a8d2fbbed262e3995c9b4c8555b8b57aaa131961117955c7ba111df6a82b5b1f"
     }
    },
    "rows": [
@@ -14627,6 +14656,35 @@
     "changedInputs": [
      "tests/Catch2Main.cpp"
     ]
+   },
+   "revalidation1232Closeout": {
+    "reason": "The #1232 close-out changed the bytes of tests/codemode/CodemodeOwnerTest.cpp, the test source of every row this receipt claims, so its exact recorded 5-case selection (-LE architecture plus the anchored case regex) was rerun on the updated tree at b81daa42: 5 selected, 5 passed, 0 skipped, 0 failed, 4.69 s of CTest wall time. 58cecf53e replaces the run-result std::stod reader with a from_chars reader and adds that reader's rejection case, and it is the last commit to touch the file. Only the one drifted input digest is rebound; no other input is rehashed. Rows, comparison scenarios, discriminating cases, implementationCommits and routingSha256 are unchanged, and the rerun makes no new capability claim. CTest resolves a relative --output-junit path against the test preset's build directory, so the command carries the absolute source-tree path and the artifact is the committed file at junit.path.",
+    "changedInputs": [
+     "tests/codemode/CodemodeOwnerTest.cpp"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-LE",
+      "architecture",
+      "-R",
+      "^(a public codemode caller executes a script against an injected nested tool|a public codemode caller keeps prior output when an injected tool rejects|the public codemode tool table registers lists and unregisters with the frozen messages|the public codemode start rejects a later run after close with the frozen spelling|closing codemode settles the run before its worker exit releases admission)$",
+      "--no-tests=error",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1192-revalidation-1232-frame-join.xml",
+      "-j",
+      "1"
+     ],
+     "testedRevision": "44d0fa5c1d52bb834a54b812265b250424ba6844",
+     "recordedAt": "2026-11-11T06:53:11Z",
+     "selected": 5,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1192-revalidation-1232-frame-join.xml",
+      "sha256": "63611617fce06d4e6c7ea8bc998dac091743db1139fd05f39ab648b3d96a4081"
+     }
+    }
    }
   },
   {
