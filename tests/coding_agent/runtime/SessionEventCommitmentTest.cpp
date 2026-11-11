@@ -309,6 +309,53 @@ TEST_CASE("Session Event Commitment appends completed messages to an in-memory s
               .has_value());
 }
 
+TEST_CASE("one run's dependent append burst is admitted on the reserved control lane",
+        "[coding_agent][runtime][commitment][issue1232][spec]") {
+    // The Agent's MessageEnd sink and a tool-loadout append submit without
+    // waiting for the previous append; the channel drains at the run's
+    // conclude(). A one-prompt run with three deferred-tool searches therefore
+    // queues twelve dependent appends (measured peak 10-11 outstanding on a
+    // btrfs root-disk isolation root, 5-6 on tmpfs). The reserved lane's
+    // task-count bound must cover one such chain: a bound of 8 rejected the
+    // twelfth append on the root disk and latched a permanent Session
+    // persistence failure, so the run failed and every later prompt was
+    // refused. Everything is recorded before the channel is released so the
+    // discriminating assertions below abort no test-owned thread
+    // (CODING_STANDARDS §11.10).
+    std::optional<CommitmentChannel> channel;
+    channel.emplace();
+    const auto session_path = channel->session_path;
+    std::optional<std::size_t> first_rejected;
+    for (std::size_t index = 0; index < 12; ++index) {
+        auto admitted = channel->persistence->submit_message_append(user_msg("turn " + std::to_string(index)));
+        if (!admitted && !first_rejected) {
+            first_rejected = index;
+        }
+    }
+    runtime::SessionEventCommitment commitment{channel->persistence};
+    const auto verdict = channel->conclude(commitment, support::ExpectedVoid{});
+    const auto latched = channel->persistence->failure();
+    const auto loaded = harness::session::SessionStore::load(session_path);
+    std::vector<std::string> persisted;
+    if (loaded) {
+        for (const auto& message : loaded->messages) {
+            if (const auto* user = std::get_if<ai::UserMessage>(&message)) {
+                persisted.push_back(ai::text_from_user_message(*user));
+            }
+        }
+    }
+    channel.reset();
+
+    REQUIRE_FALSE(first_rejected.has_value());
+    REQUIRE(verdict.has_value());
+    CHECK_FALSE(latched.has_value());
+    REQUIRE(loaded.has_value());
+    REQUIRE(persisted.size() == 12);
+    for (std::size_t index = 0; index < persisted.size(); ++index) {
+        CHECK(persisted[index] == "turn " + std::to_string(index));
+    }
+}
+
 TEST_CASE("persistence control work is admitted while the ordinary runtime budget is saturated",
         "[coding_agent][runtime][commitment][issue465][spec]") {
     // A small ordinary budget, a full reserved control lane (defaults).

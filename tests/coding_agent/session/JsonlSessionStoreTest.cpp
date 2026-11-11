@@ -721,6 +721,49 @@ TEST_CASE("a failed first flush rejects the triggering message and keeps the buf
     CHECK(text_from_message(loaded->messages[0]) == "kept");
 }
 
+TEST_CASE("the Bash-append failure hook skips earlier appends and the deferred first flush",
+        "[coding_agent][session][u9][persistence-failure][issue1232][spec]") {
+    tests::TempWorkspace workspace;
+    auto path = workspace.path() / "bash-hook-failure.jsonl";
+    auto store = harness::session::JsonlSessionStore::create_new(path, metadata_for(workspace));
+    REQUIRE(store);
+    REQUIRE(store->append_model_change(std::nullopt, "openai", "gpt-4o"));
+
+    // The user message triggers the deferred first flush, which consumes an
+    // append attempt of its own; the semantic hook must survive it and stay
+    // armed for the Bash line (#1232).
+    harness::session::testing::fail_next_bash_execution_append_for_test(path);
+    REQUIRE(store->append(user_message("turn")).status);
+    ai::AssistantMessage assistant;
+    assistant.content.emplace_back(ai::TextContent{"reply", std::nullopt});
+    assistant.api = "openai-completions";
+    assistant.provider = "openai";
+    assistant.model = "gpt-4o";
+    assistant.timestamp = 1'750'000'000'000;
+    REQUIRE(store->append(ai::MessageVariant{assistant}).status);
+
+    ai::BashExecutionMessage bash;
+    bash.command = "ls";
+    bash.output = "file.txt";
+    bash.exit_code = 0;
+    bash.timestamp = 1'750'000'000'000;
+    const auto failed = store->append(ai::MessageVariant{bash});
+    REQUIRE_FALSE(failed.status);
+    CHECK(failed.entries.empty());
+
+    // One-shot: the next Bash append persists, and every earlier entry is
+    // still on disk in order.
+    REQUIRE(store->append(ai::MessageVariant{bash}).status);
+    auto loaded = harness::session::JsonlSessionStore::load(path);
+    REQUIRE(loaded);
+    REQUIRE(loaded->entries.size() == 5);
+    CHECK(loaded->entries[1].kind == harness::session::SessionEntryKind::ModelChange);
+    REQUIRE(loaded->messages.size() == 3);
+    CHECK(text_from_message(loaded->messages[0]) == "turn");
+    CHECK(text_from_message(loaded->messages[1]) == "reply");
+    CHECK(std::holds_alternative<ai::BashExecutionMessage>(loaded->messages[2]));
+}
+
 TEST_CASE("serializer wire test keeps pi JSONL field names", "[coding_agent][session][wire][compat-pi]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "wire-fields.jsonl";

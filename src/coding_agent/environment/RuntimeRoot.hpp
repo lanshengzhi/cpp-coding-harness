@@ -42,7 +42,11 @@ struct RuntimeLimits {
     std::size_t max_admitted_bytes{1024 * 1024};
     /// Reserved control operations in flight (persistence, credential,
     /// terminal completion, Close) — never rejected by ordinary bulk work.
-    std::size_t max_reserved_operations{8};
+    /// The task count covers one Run's dependent Session append chain plus
+    /// several concurrent Sessions' control work; the byte bound is the
+    /// memory contract, so 64 × the 4096-byte admitted-operation overhead
+    /// reaches the same 256 KiB ceiling (docs/runtime-capacities.md).
+    std::size_t max_reserved_operations{64};
     /// Reserved control operations' conservative byte-charge bound.
     std::size_t max_reserved_bytes{256 * 1024};
     /// Terminal results delivered per mailbox drain before the drain

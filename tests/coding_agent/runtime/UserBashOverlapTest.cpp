@@ -583,13 +583,16 @@ TEST_CASE("deferred User Bash persistence failure is reported without rolling ba
         shell_pointer->release();
         messages_before_release = bash_message_count(session.snapshot().agent_state.messages);
 
-        // The deferred Bash commitment must be the second append after the
-        // run's user entry (then the assistant entry), and appends cross
-        // Runtime persistence workers: wait until the user entry has
-        // landed in the journal so the counted failure pins exactly the
-        // Bash write no matter when the earlier append lands (#531).
+        // The deferred Bash commitment must append after the run's user and
+        // assistant entries, and appends cross Runtime persistence workers. A
+        // counted failure cannot pin the Bash write here: the session file's
+        // deferred first flush (ADR 0064) consumes one counted attempt between
+        // making the user entry visible and returning, so a slower filesystem
+        // widened that window and the failure landed on the assistant entry
+        // instead (#1232). The semantic hook fails exactly the next Bash
+        // Execution append, whatever runs first.
         co_await wait_until([&] { return journal_contains(session_path, "failing persist run"); });
-        harness::session::testing::fail_nth_append_for_test(session_path, 2);
+        harness::session::testing::fail_next_bash_execution_append_for_test(session_path);
         client_pointer->release();
         co_await wait_until([&] { return prompt_result.has_value(); });
         co_await wait_until([&] { return bash_result.has_value(); });
@@ -598,8 +601,13 @@ TEST_CASE("deferred User Bash persistence failure is reported without rolling ba
 
         // The Session stays usable: a later prompt runs and persists again.
         tests::spawn_to_slot(executor, session.prompt("still usable"), second_prompt);
-        co_await wait_until([&] { return client_pointer->requests.size() == 2; });
-        client_pointer->release();
+        // Wait for the follow-up request or for the prompt's own settlement: a
+        // rejected follow-up must surface as its typed failure below, never as
+        // a RuntimeFixture budget timeout that hides which assertion failed.
+        co_await wait_until([&] { return client_pointer->requests.size() == 2 || second_prompt.has_value(); });
+        if (client_pointer->requests.size() == 2) {
+            client_pointer->release();
+        }
         co_await wait_until([&] { return second_prompt.has_value(); });
         requests_after_follow_up = client_pointer->requests.size();
         session.close();

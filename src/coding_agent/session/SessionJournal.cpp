@@ -137,6 +137,17 @@ struct InjectedAppendFailure {
 std::mutex injected_append_failure_mutex;
 std::optional<InjectedAppendFailure> injected_append_failure;
 
+/// One-shot failure armed for the next Bash Execution message append. Unlike
+/// the counted hook, it does not depend on how many attempts (including the
+/// deferred first flush) ran first, so a test cannot lose the arm/consume race
+/// to a slower filesystem (#1232).
+struct InjectedBashAppendFailure {
+    std::filesystem::path path;
+};
+
+std::mutex injected_bash_append_failure_mutex;
+std::optional<InjectedBashAppendFailure> injected_bash_append_failure;
+
 struct InjectedAppendDelay {
     std::filesystem::path path;
     std::chrono::milliseconds delay;
@@ -175,6 +186,22 @@ void apply_append_test_hooks(const std::filesystem::path& path) {
     }
 }
 
+/// True exactly once for the next Bash Execution line on `path`. The role is
+/// the serialized pi wire value (`EntrySerializer` writes it); the production
+/// journal never inspects a line, so the schema knowledge stays inside this
+/// test-only hook.
+[[nodiscard]] bool consume_injected_bash_append_failure(const std::filesystem::path& path, std::string_view line) {
+    std::scoped_lock lock{injected_bash_append_failure_mutex};
+    if (!injected_bash_append_failure || injected_bash_append_failure->path != path.lexically_normal()) {
+        return false;
+    }
+    if (!line.contains(R"("role":"bashExecution")")) {
+        return false;
+    }
+    injected_bash_append_failure.reset();
+    return true;
+}
+
 [[nodiscard]] bool consume_injected_append_failure(const std::filesystem::path& path) {
     std::scoped_lock lock{injected_append_failure_mutex};
     if (!injected_append_failure || injected_append_failure->path != path.lexically_normal()) {
@@ -196,6 +223,13 @@ void fail_nth_append_for_test(const std::filesystem::path& path, std::size_t att
     injected_append_failure = InjectedAppendFailure{
             .path = path.lexically_normal(),
             .attempts_remaining = attempt == 0 ? 1 : attempt,
+    };
+}
+
+void fail_next_bash_execution_append_for_test(const std::filesystem::path& path) {
+    std::scoped_lock lock{injected_bash_append_failure_mutex};
+    injected_bash_append_failure = InjectedBashAppendFailure{
+            .path = path.lexically_normal(),
     };
 }
 
@@ -339,7 +373,7 @@ support::ExpectedVoid SessionJournal::append_line(std::string_view line) const {
                 session_error("could not append to session file", "session journal awaits its first flush"));
     }
     apply_append_test_hooks(path_);
-    if (consume_injected_append_failure(path_)) {
+    if (consume_injected_append_failure(path_) || consume_injected_bash_append_failure(path_, line)) {
         return std::unexpected(session_error("could not persist session entry", "injected append failure"));
     }
     auto opened = open_session_path(path_, O_WRONLY | O_APPEND);

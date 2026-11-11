@@ -13,6 +13,15 @@ namespace cch::harness::session::testing {
 /// This private hook exists only for persistence-failure behavior tests.
 void fail_nth_append_for_test(const std::filesystem::path& path, std::size_t attempt);
 
+/// Fail the next Bash Execution message append for a single session path,
+/// regardless of how many other appends (including the deferred first flush
+/// that creates the session file) precede it. The injection is one-shot and
+/// matched on the wire role, because a counted attempt cannot pin a specific
+/// Bash write: the deferred flush's own attempt races the file becoming
+/// visible to an arming test (#1232). This private hook exists only for the
+/// deferred-User-Bash persistence-failure behavior test.
+void fail_next_bash_execution_append_for_test(const std::filesystem::path& path);
+
 /// Delay every append for a single session path by `delay` until cleared.
 /// This private hook exists only for slow-persistence behavior tests.
 void delay_appends_for_test(const std::filesystem::path& path, std::chrono::milliseconds delay);
