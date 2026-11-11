@@ -78,6 +78,16 @@ using detail::store_json;
 using detail::tools_json;
 using detail::validate_globals;
 
+/// Test seam (#1232): with the test-only worker gate installed, parks the
+/// deterministic worker inside `drive()` once the serve forwarded a caller call.
+/// The production archive has neither the hook macro nor the gate header, so this
+/// is an empty call there.
+void after_deterministic_worker_call([[maybe_unused]] std::stop_token stop) {
+#ifdef CCH_REMOTE_WORKER_TEST_HOOKS
+    detail::park_deterministic_worker_in_drive(stop);
+#endif
+}
+
 [[nodiscard]] CodemodeError parse_error_json(std::string_view raw) {
     auto parsed = support::read_json(raw);
     if (parsed && parsed->holds<support::JsonValue::object_t>()) {
@@ -863,13 +873,14 @@ support::AsyncResult<void> serve_deterministic_remote(
         host.on_started = [queue = &served->queue](std::string_view fingerprint) {
             queue->push(CodemodeRemoteStartedMessage{std::string{fingerprint}});
         };
-        host.on_call = [queue = &served->queue](const CodemodeHostCall& call) {
+        host.on_call = [queue = &served->queue, stop = served->stop.get_token()](const CodemodeHostCall& call) {
             CodemodeRemoteCallMessage message;
             message.id = call.id;
             message.target = call.target == CodemodeHostCall::Target::Global ? "global" : "tool";
             message.name = call.name;
             message.args = call.arguments_json;
             queue->push(std::move(message));
+            after_deterministic_worker_call(stop);
         };
         host.on_idle = [queue = &served->queue](std::int64_t seq, std::int64_t issued) {
             queue->push(CodemodeRemoteIdleMessage{.seq = seq, .issued = issued});
@@ -884,9 +895,13 @@ support::AsyncResult<void> serve_deterministic_remote(
             // settled during construction and has no worker to drive. The frame
             // keeps the handle in `worker_owner`, never in the shared state.
             worker_owner.worker = std::thread([served]() {
+#ifdef CCH_REMOTE_WORKER_TEST_HOOKS
+                detail::record_deterministic_worker_started(served);
+#endif
                 served->run->drive();
 #ifdef CCH_REMOTE_WORKER_TEST_HOOKS
-                detail::park_deterministic_worker(served);
+                detail::record_deterministic_worker_drive_returned();
+                detail::park_deterministic_worker();
 #endif
             });
         }
