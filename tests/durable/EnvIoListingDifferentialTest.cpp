@@ -21,6 +21,7 @@
 #include <string_view>
 #include <chrono>
 #include <cerrno>
+#include <utility>
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -218,8 +219,18 @@ std::string file_sha256(const fs::path& path) {
 
 /// One length-prefixed daemon frame (`docs/protocol.md`): u32 length, u8
 /// kind, u32 id, u32 json length, JSON, payload.
+///
+/// The child and its pipe ends are owned by this object: `close_and_reap`
+/// (and therefore destruction) closes the parent endpoints, waits for the
+/// daemon's cooperative stdin-EOF shutdown and reaps it. A daemon that ignores
+/// stdin EOF blocks destruction, exactly as `request` blocks on a daemon that
+/// stops answering; there is no timeout or signal fallback.
 struct DaemonClient {
-    explicit DaemonClient(std::string binary, int (*pipe_call)(int*) = ::pipe, pid_t (*fork_call)() = ::fork) {
+    explicit DaemonClient(std::string binary,
+            int (*pipe_call)(int*) = ::pipe,
+            pid_t (*fork_call)() = ::fork,
+            pid_t (*wait_call)(pid_t, int*, int) = ::waitpid)
+            : wait_call_(wait_call) {
         int in_pipe[2], out_pipe[2];
         if (pipe_call(in_pipe) != 0) return;
         cch::support::UniqueFd in_read(in_pipe[0]);
@@ -227,11 +238,18 @@ struct DaemonClient {
         if (pipe_call(out_pipe) != 0) return;
         cch::support::UniqueFd out_read(out_pipe[0]);
         cch::support::UniqueFd out_write(out_pipe[1]);
-        const pid_t child = fork_call();
-        if (child < 0) return;
-        if (child == 0) {
-            ::dup2(in_pipe[0], STDIN_FILENO);
-            ::dup2(out_pipe[1], STDOUT_FILENO);
+        child_ = fork_call();
+        if (child_ < 0) return;
+        if (child_ == 0) {
+            ::dup2(in_read.get(), STDIN_FILENO);
+            ::dup2(out_write.get(), STDOUT_FILENO);
+            // Only the ends the daemon uses may survive the exec: an inherited
+            // copy of a parent end keeps the daemon's own stdin from reaching
+            // EOF, and stdin EOF is its shutdown condition.
+            in_read.reset();
+            in_write.reset();
+            out_read.reset();
+            out_write.reset();
             ::execl(binary.c_str(), binary.c_str(), "serve", "--token", "6363682d646966666572656e7469616c", nullptr);
             _exit(127);
         }
@@ -246,8 +264,36 @@ struct DaemonClient {
             marker.push_back(c);
         alive_ = marker.starts_with("PI-ENV ");
     }
+    ~DaemonClient() { (void)close_and_reap(); }
     DaemonClient(const DaemonClient&) = delete;
     DaemonClient& operator=(const DaemonClient&) = delete;
+
+    /// Closes the parent endpoints and reaps the daemon. stdin EOF is the
+    /// daemon's shutdown condition, so the write end goes first; the read end
+    /// is then drained to EOF so a daemon that writes while shutting down
+    /// cannot block on a full pipe. Returns the child's wait status when this
+    /// call reaped it, and nothing when there is no child or it was already
+    /// reaped elsewhere (ECHILD).
+    [[nodiscard]] std::optional<int> close_and_reap() noexcept {
+        write_fd_.reset();
+        std::array<char, 4096> discard{};
+        while (true) {
+            const ssize_t bytes = ::read(read_fd_.get(), discard.data(), discard.size());
+            if (bytes > 0) continue;
+            if (bytes == -1 && errno == EINTR) continue;
+            break;
+        }
+        read_fd_.reset();
+        if (child_ <= 0) return std::nullopt;
+        const pid_t child = std::exchange(child_, -1);
+        int status = 0;
+        while (true) {
+            const pid_t reaped = wait_call_(child, &status, 0);
+            if (reaped == child) return status;
+            if (reaped == -1 && errno == EINTR) continue;
+            return std::nullopt;
+        }
+    }
 
     struct Reply {
         std::string json{};
@@ -312,6 +358,8 @@ private:
 
     cch::support::UniqueFd read_fd_;
     cch::support::UniqueFd write_fd_;
+    pid_t (*wait_call_)(pid_t, int*, int);
+    pid_t child_{-1};
     std::uint32_t next_id_{1};
     bool alive_{};
 };
@@ -469,6 +517,39 @@ pid_t fork_controlled_daemon() {
     return controlled_child;
 }
 
+/// A daemon that exits on its own right after the startup marker, so the client
+/// owns a child that has already terminated when it is destroyed.
+pid_t fork_exiting_daemon() {
+    controlled_child = ::fork();
+    if (controlled_child == 0) {
+        ::alarm(2);
+        cch::support::UniqueFd unused_input(injected_pipes[0]);
+        cch::support::UniqueFd unused_input_write(injected_pipes[1]);
+        cch::support::UniqueFd unused_output_read(injected_pipes[2]);
+        cch::support::UniqueFd output(injected_pipes[3]);
+        unused_input.reset();
+        unused_input_write.reset();
+        unused_output_read.reset();
+        constexpr std::string_view marker = "PI-ENV exiting\n";
+        const bool written = ::write(output.get(), marker.data(), marker.size()) == static_cast<ssize_t>(marker.size());
+        output.reset();
+        _exit(written ? 0 : 1);
+    }
+    return controlled_child;
+}
+
+int wait_calls = 0;
+
+/// Reports one interrupted wait before delegating, so the retry path is
+/// exercised without depending on a signal's timing.
+pid_t interrupt_wait_once(pid_t pid, int* status, int options) {
+    if (wait_calls++ == 0) {
+        errno = EINTR;
+        return -1;
+    }
+    return ::waitpid(pid, status, options);
+}
+
 bool descriptor_closed(int fd) { return ::fcntl(fd, F_GETFD) == -1 && errno == EBADF; }
 
 int fail_second_pipe(int* fds) {
@@ -529,15 +610,150 @@ TEST_CASE("DaemonClient owns parent pipe ends until destruction", "[durable][iss
                     ::fcntl(injected_pipes[1], F_GETFD) != -1 && ::fcntl(injected_pipes[2], F_GETFD) != -1;
         }
         const bool closed = descriptor_closed(injected_pipes[1]) && descriptor_closed(injected_pipes[2]);
+        // Reaping is asserted by the dedicated cases; an already reaped child is
+        // no longer this process's to wait for.
         int daemon_status = 0;
-        const bool exited = controlled_child > 0 &&
-                            ::waitpid(controlled_child, &daemon_status, 0) == controlled_child &&
-                            WIFEXITED(daemon_status) && WEXITSTATUS(daemon_status) == 0;
-        _exit(owned && closed && exited ? 0 : 1);
+        const bool reaped = controlled_child > 0 && ::waitpid(controlled_child, &daemon_status, WNOHANG) == -1 &&
+                            errno == ECHILD;
+        _exit(owned && closed && reaped ? 0 : 1);
     }
     int status = 0;
     REQUIRE(::waitpid(child, &status, 0) == child);
     REQUIRE(WIFEXITED(status));
+    CHECK(WEXITSTATUS(status) == 0);
+}
+
+TEST_CASE("DaemonClient reaps its daemon so no zombie remains", "[durable][issue1232]") {
+    const pid_t child = ::fork();
+    REQUIRE(child >= 0);
+    if (child == 0) {
+        ::alarm(5);
+        pid_t daemon_pid = -1;
+        {
+            DaemonClient daemon("unused", record_pipe, fork_controlled_daemon);
+            daemon_pid = daemon.alive() ? controlled_child : -1;
+        }
+        int daemon_status = 0;
+        const bool reaped = daemon_pid > 0 && ::waitpid(daemon_pid, &daemon_status, WNOHANG) == -1 &&
+                            errno == ECHILD;
+        _exit(reaped ? 0 : 1);
+    }
+    int status = 0;
+    REQUIRE(::waitpid(child, &status, 0) == child);
+    REQUIRE(WIFEXITED(status));
+    CHECK(WEXITSTATUS(status) == 0);
+}
+
+TEST_CASE("DaemonClient retries an interrupted wait instead of leaving the daemon unreaped",
+        "[durable][issue1232]") {
+    const pid_t child = ::fork();
+    REQUIRE(child >= 0);
+    if (child == 0) {
+        ::alarm(5);
+        wait_calls = 0;
+        bool reaped = false;
+        {
+            DaemonClient daemon("unused", record_pipe, fork_controlled_daemon, interrupt_wait_once);
+            const auto status = daemon.close_and_reap();
+            reaped = daemon.alive() && status.has_value() && WIFEXITED(*status) && WEXITSTATUS(*status) == 0;
+        }
+        int daemon_status = 0;
+        // One interrupted call plus one successful call, and destruction must
+        // not wait for a child that was already reaped.
+        const bool retried = wait_calls == 2;
+        const bool gone = controlled_child > 0 && ::waitpid(controlled_child, &daemon_status, WNOHANG) == -1 &&
+                          errno == ECHILD;
+        _exit(reaped && retried && gone ? 0 : 1);
+    }
+    int status = 0;
+    REQUIRE(::waitpid(child, &status, 0) == child);
+    REQUIRE(WIFEXITED(status));
+    CHECK(WEXITSTATUS(status) == 0);
+}
+
+TEST_CASE("DaemonClient reaps a daemon that exited before destruction", "[durable][issue1232]") {
+    const pid_t child = ::fork();
+    REQUIRE(child >= 0);
+    if (child == 0) {
+        ::alarm(5);
+        bool alive = false;
+        bool status_ok = false;
+        bool idempotent = false;
+        {
+            DaemonClient daemon("unused", record_pipe, fork_exiting_daemon);
+            alive = daemon.alive() && controlled_child > 0;
+            // WNOWAIT reports the exit without reaping: the client still owns
+            // the child, so its destruction has to collect the zombie.
+            siginfo_t info{};
+            const bool exited = controlled_child > 0 &&
+                                ::waitid(P_PID, static_cast<id_t>(controlled_child), &info, WEXITED | WNOWAIT) == 0 &&
+                                info.si_pid == controlled_child;
+            const auto status = daemon.close_and_reap();
+            status_ok = exited && status.has_value() && WIFEXITED(*status) && WEXITSTATUS(*status) == 0;
+            idempotent = !daemon.close_and_reap().has_value();
+        }
+        int daemon_status = 0;
+        const bool gone = controlled_child > 0 && ::waitpid(controlled_child, &daemon_status, WNOHANG) == -1 &&
+                          errno == ECHILD;
+        _exit(alive && status_ok && idempotent && gone ? 0 : 1);
+    }
+    int status = 0;
+    REQUIRE(::waitpid(child, &status, 0) == child);
+    REQUIRE(WIFEXITED(status));
+    CHECK(WEXITSTATUS(status) == 0);
+}
+
+TEST_CASE("DaemonClient closes each descriptor once so a reused number stays open", "[durable][issue1232]") {
+    const pid_t child = ::fork();
+    REQUIRE(child >= 0);
+    if (child == 0) {
+        ::alarm(5);
+        std::optional<DaemonClient> daemon(std::in_place, "unused", record_pipe, fork_controlled_daemon);
+        const bool reaped = daemon->alive() && daemon->close_and_reap().has_value();
+        // The numbers just closed are the lowest free descriptors, so this pipe
+        // receives them; destroying the client must not close them again.
+        int reused[2]{};
+        const bool opened = reaped && ::pipe(reused) == 0;
+        daemon.reset();
+        const bool kept_open = opened && ::fcntl(reused[0], F_GETFD) != -1 && ::fcntl(reused[1], F_GETFD) != -1;
+        cch::support::UniqueFd reused_read(opened ? reused[0] : -1);
+        cch::support::UniqueFd reused_write(opened ? reused[1] : -1);
+        _exit(reaped && kept_open ? 0 : 1);
+    }
+    int status = 0;
+    REQUIRE(::waitpid(child, &status, 0) == child);
+    REQUIRE(WIFEXITED(status));
+    CHECK(WEXITSTATUS(status) == 0);
+}
+
+TEST_CASE("DaemonClient's daemon observes stdin EOF and exits", "[durable][issue1232]") {
+    const std::string binary = daemon_path();
+    if (binary.empty() || !fs::exists(binary)) {
+        SKIP("the frozen pi-env daemon is unavailable; build it from the baseline checkout with "
+             "`cargo build --locked --offline` in packages/env/daemon");
+    }
+    // The daemon exits when every copy of its stdin write end is closed, so this
+    // asserts that the child does not keep an inherited copy and that closing
+    // the client's write end is the shutdown signal its destructor relies on.
+    const pid_t child = ::fork();
+    REQUIRE(child >= 0);
+    if (child == 0) {
+        ::alarm(15);
+        DaemonClient daemon(binary);
+        const bool alive = daemon.alive();
+        const auto status = daemon.close_and_reap();
+        const bool exited = status.has_value() && WIFEXITED(*status) && WEXITSTATUS(*status) == 0;
+        _exit(alive && exited ? 0 : 1);
+    }
+    int status = 0;
+    REQUIRE(::waitpid(child, &status, 0) == child);
+    // SIGALRM (0x000e) means the probe waited out its alarm: the daemon never
+    // observed the client's stdin EOF.
+    if (!WIFEXITED(status)) {
+        FAIL_CHECK(std::format("daemon client probe was stopped by signal {} instead of exiting",
+                WTERMSIG(status)));
+        return;
+    }
     CHECK(WEXITSTATUS(status) == 0);
 }
 
