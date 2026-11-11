@@ -2229,7 +2229,7 @@
     },
     {
      "path": "vcpkg.json",
-     "sha256": "dc956d944cb2fcd3e88f4b305931d5b568c1164a8ec5ab9d1688f7418a5814dc"
+     "sha256": "f19c0e240a28de99619e7625635e74160763c3f9c098bfff1a3b77c8916cdf91"
     },
     {
      "path": "cmake/targets/CodingAgent.cmake",
@@ -2237,7 +2237,7 @@
     },
     {
      "path": "cmake/targets/Codemode.cmake",
-     "sha256": "d5c1c594ed8c97f5a9d37cf2f462a4a68db039836d5686f120c9eb9755ef939a"
+     "sha256": "a07926c5cde51829b8532c50c0af5e71da2ba26ab35348c92ad707c82ede4b31"
     },
     {
      "path": "cmake/targets/AgentCore.cmake",
@@ -2405,7 +2405,7 @@
     },
     {
      "path": "tests/support/ModelsFixture.hpp",
-     "sha256": "e3a1015be6e69f31203ab7c90c48bedda450a51efb71f11666592d23f0644bd6"
+     "sha256": "5258f123c896ac1fb7da689b7ee155e1b085e4deedbb460bc5a81e28b77c600f"
     },
     {
      "path": "tests/support/McpTestKit.hpp",
@@ -2491,15 +2491,18 @@
      "vcpkg",
      "-L",
      "issue1118",
+     "--no-tests=error",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1240-pilot-1118-codemode-catalog.xml"
+     "docs/research/pi-v1.3.0/deliveries/1118-revalidation-1232-frame-join.xml",
+     "-j",
+     "1"
     ],
-    "testedRevision": "cde9255c41c3c575c6e9ce20b1432687869a36f7",
-    "recordedAt": "2026-11-07T07:06:07Z",
+    "testedRevision": "44d0fa5c1d52bb834a54b812265b250424ba6844",
+    "recordedAt": "2026-11-11T06:53:11Z",
     "selected": 19,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1240-pilot-1118-codemode-catalog.xml",
-     "sha256": "0b46da47aef31751dfaa15e851818820d8416179cb796001d3bae5ebf074540a"
+     "path": "docs/research/pi-v1.3.0/deliveries/1118-revalidation-1232-frame-join.xml",
+     "sha256": "d50e1cb0440e3c8b9e5001ce92bd69107cbb1922c986cd554423dd8127cce907"
     }
    },
    "rows": [
@@ -3530,6 +3533,32 @@
      "junit": {
       "path": "docs/research/pi-v1.3.0/deliveries/1118-codemode-catalog-revalidation-1244-capture.xml",
       "sha256": "4e64aae053ccb28cac4fc2c46a7dd0d5609533b1abb6ac0ea0243f9e3a2d53b6"
+     }
+    }
+   },
+   "revalidation1232FrameJoin": {
+    "reason": "This rebind re-runs the exact recorded #1118 selection (-L issue1118, 19 cases) on the #1232 integration tree at 44d0fa5c1. Two independent causes changed pinned bytes: (1) this integration adds the deterministic-worker test-gate calls to src/codemode/Deterministic.cpp, src/codemode/Remote.cpp and cmake/tests/CodemodeTests.cmake, and the self-join slice moved cmake/targets/Codemode.cmake, which this catalog receipt pins for the codemode target graph; (2) the newer upstream base 71ad3e83a had already changed files pinned or consumed by these receipts - vcpkg.json, Durable.cmake, tests/support/ModelsFixture.hpp and tests/codemode/CodemodeRemoteTest.cpp among them - so this receipt's vcpkg.json and ModelsFixture.hpp pins predated that base. Rows, comparison scenarios, discriminating cases, implementationCommits and routingSha256 are unchanged; no capability claim is added.",
+    "changedInputs": [
+     "vcpkg.json",
+     "cmake/targets/Codemode.cmake",
+     "tests/support/ModelsFixture.hpp"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-L",
+      "issue1118",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1240-pilot-1118-codemode-catalog.xml"
+     ],
+     "testedRevision": "cde9255c41c3c575c6e9ce20b1432687869a36f7",
+     "recordedAt": "2026-11-07T07:06:07Z",
+     "selected": 19,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1240-pilot-1118-codemode-catalog.xml",
+      "sha256": "0b46da47aef31751dfaa15e851818820d8416179cb796001d3bae5ebf074540a"
      }
     }
    }
@@ -10284,15 +10313,15 @@
     },
     {
      "path": "vcpkg.json",
-     "sha256": "dc956d944cb2fcd3e88f4b305931d5b568c1164a8ec5ab9d1688f7418a5814dc"
+     "sha256": "f19c0e240a28de99619e7625635e74160763c3f9c098bfff1a3b77c8916cdf91"
     },
     {
      "path": "cmake/targets/Codemode.cmake",
-     "sha256": "d5c1c594ed8c97f5a9d37cf2f462a4a68db039836d5686f120c9eb9755ef939a"
+     "sha256": "a07926c5cde51829b8532c50c0af5e71da2ba26ab35348c92ad707c82ede4b31"
     },
     {
      "path": "cmake/tests/CodemodeTests.cmake",
-     "sha256": "ee80abcd89060a440d020e17442a29e3bd15f9edda86fb7d0f310e2b5dc0c37b"
+     "sha256": "fbc4c60f65065558bed9a8039e1cc6a1e3667de1c113962cb4c1b249185b261f"
     },
     {
      "path": "cmake/tests/CodingAgentTests.cmake",
@@ -10308,7 +10337,7 @@
     },
     {
      "path": "src/codemode/Deterministic.cpp",
-     "sha256": "6e89bab080ded46ffd474a11a1c423e47f1692d66486cd8805a005edee45e85e"
+     "sha256": "6db754869d4b442ec77f84414fb5d7bf4adcfc7fb6f06d631bd15e409d51732c"
     },
     {
      "path": "src/codemode/Deterministic.hpp",
@@ -10328,7 +10357,7 @@
     },
     {
      "path": "src/codemode/Remote.cpp",
-     "sha256": "612eb8faaa3a255196dc3498bfbf57f5974a15db07313a7b3cd9942eb7d56e9f"
+     "sha256": "2b3866b02e108bf8468f5b3540b925603665dbc4dcac61d93cfd589588b9de3a"
     },
     {
      "path": "src/codemode/Sandbox.cpp",
@@ -10408,7 +10437,7 @@
     },
     {
      "path": "tests/codemode/CodemodeRemoteTest.cpp",
-     "sha256": "8ecfe916f88be798337525d316509dabdd446451295497495836fa112889a6ba"
+     "sha256": "0e392f85aa5b0ace1a1aef84bae0b630ddbe2d2e210926e339cd58ccfe2f7672"
     },
     {
      "path": "tests/coding_agent/CodemodeSandboxTest.cpp",
@@ -11424,17 +11453,18 @@
      "vcpkg",
      "-R",
      "^(Remote deterministic execution applies reversed answers by result number|Remote deterministic execution runs the script remotely and answers through deliver|RemoteCodemodeSandbox batches output instead of making one exchange per line|RemoteCodemodeSandbox caps the interrupt budget and memory at the remote's limits|RemoteCodemodeSandbox discriminating abort check: does not block on slow remote exit|RemoteCodemodeSandbox reports failing, silent or unreachable remote as sandbox error with transport reason|RemoteCodemodeSandbox runs tools in the caller and the script on the remote|RemoteCodemodeSandbox tells the remote to stop when caller aborts and settles immediately|a normal codemode run is not deterministic while start is|a public codemode caller aborting while a tool waits keeps partial output and cancels the call|a public codemode caller applies reversed answers by result number not arrival order|a public codemode caller binds a dotted global into its frozen namespace and spreads arguments|a public codemode caller catches unknown tools and thrown tool errors with error call status|a public codemode caller collects mixed output in order with the console marker and image MIME|a public codemode caller counts the interrupt budget across tool waits|a public codemode caller fails the run when the guest hits its output item limit|a public codemode caller gets UTC and no WeakRef in a deterministic run|a public codemode caller gets an uncatchable abort and a cancelled record in a deterministic run|a public codemode caller gets during for the result the VM was processing when the script ended|a public codemode caller gets illegal start options refused before any VM exists|a public codemode caller gets the fingerprint before the first call and a reused result number is refused|a public codemode caller keeps a call waiting when its answer cannot be serialized|a public codemode caller numbers globals with tools and gets rejection properties on the script Error|a public codemode caller reads a store snapshot across calls and drops failed writes|a public codemode caller records an unawaited call as cancelled and aborts it|a public codemode caller records settled calls with ok and error statuses|a public codemode caller rejects a reused result number a non-finite clock and an unknown call deterministically|a public codemode caller rejects invalid globals at construction with the frozen errors|a public codemode caller replays a deterministic run from the same start seed and answers|a public codemode caller reports a pre-aborted run with the abort reason and never starts it|a public codemode caller reports a script error with its name message stack and prior output|a public codemode caller reports guest memory exhaustion as an out-of-memory script error|a public codemode caller reports non-Error throws BigInt returns and syntax errors as script errors|a public codemode caller reports the deadline when a tool waits past it and keeps partial output|a public codemode caller returns its value and text output from a successful budgeted run|a public codemode caller sees a seed mismatch change randomness without changing the start time|a public codemode caller stops pure computation with the interrupt budget, not the deadline|a public codemode caller stringifies text and accepts image blocks with the frozen type errors|a public codemode caller treats exit\\(\\) as success with prior output and the write set|a run-supplied jsName overrides the derived script name|an over-limit script is interrupted with a timeout error|codemode worker admission follows wasm load and releases a failed start once|codemode worker results settle before exit while admission stays bounded|the public codemode declaration covers the frozen schema renderings|the public codemode declaration groups tools globals and namespaces with doc comments|the public codemode declaration preserves the relocated tool identifiers|the public codemode declaration renders frozen schema types|the public codemode declaration renders frozen tool signatures samples and blocks|the public codemode prelude is the frozen sandbox prelude with output and store limits|the public codemode source parser keeps only a first-line options command|the public codemode source parser rejects a misplaced options line with its line number|the public codemode source parser rejects invalid options and empty input with typed errors)$",
+     "--no-tests=error",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1179-revalidation-1232-stop-notify.xml",
+     "docs/research/pi-v1.3.0/deliveries/1179-revalidation-1232-frame-join.xml",
      "-j",
      "1"
     ],
-    "testedRevision": "f2b027fc6a246166cb66bc51cb4c914e1cfd43cf",
-    "recordedAt": "2026-11-10T13:10:14Z",
+    "testedRevision": "44d0fa5c1d52bb834a54b812265b250424ba6844",
+    "recordedAt": "2026-11-11T06:53:11Z",
     "selected": 52,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1179-revalidation-1232-stop-notify.xml",
-     "sha256": "6c8aa7d9b0d3a72f517dd807511aa4f2f8b9ab78d159ac6ca2f56f8759ace492"
+     "path": "docs/research/pi-v1.3.0/deliveries/1179-revalidation-1232-frame-join.xml",
+     "sha256": "4fd7317c7fa575a3eff73723fe5956d06c4a62e24291bc64925bbff0e6736fa9"
     }
    },
    "revalidation1179m": {
@@ -12088,6 +12118,37 @@
      "junit": {
       "path": "docs/research/pi-v1.3.0/deliveries/1179-revalidation-1232-codemode-parser.xml",
       "sha256": "e0b7c87333150431e32199a6303d3f878295e06bdae7ffeab2870a9d1125094b"
+     }
+    }
+   },
+   "revalidation1232FrameJoin": {
+    "reason": "This rebind re-runs the exact recorded #1179 selection (52 cases) on the #1232 integration tree at 44d0fa5c1. Two independent causes changed pinned bytes: (1) this integration adds the deterministic-worker test-gate calls to src/codemode/Deterministic.cpp and src/codemode/Remote.cpp and force-includes the gate header in cmake/tests/CodemodeTests.cmake, while the self-join slice moved cmake/targets/Codemode.cmake and cmake/tests/CodemodeTests.cmake; (2) the newer upstream base 71ad3e83a had already changed files pinned or consumed by these receipts - vcpkg.json, Durable.cmake, tests/support/ModelsFixture.hpp and tests/codemode/CodemodeRemoteTest.cpp among them - so the vcpkg.json and CodemodeRemoteTest.cpp pins predated that base. Rows, comparison scenarios, discriminating cases, implementationCommits and routingSha256 are unchanged; no capability claim is added and no new discriminating case is claimed.",
+    "changedInputs": [
+     "vcpkg.json",
+     "cmake/targets/Codemode.cmake",
+     "cmake/tests/CodemodeTests.cmake",
+     "src/codemode/Deterministic.cpp",
+     "src/codemode/Remote.cpp",
+     "tests/codemode/CodemodeRemoteTest.cpp"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-R",
+      "^(Remote deterministic execution applies reversed answers by result number|Remote deterministic execution runs the script remotely and answers through deliver|RemoteCodemodeSandbox batches output instead of making one exchange per line|RemoteCodemodeSandbox caps the interrupt budget and memory at the remote's limits|RemoteCodemodeSandbox discriminating abort check: does not block on slow remote exit|RemoteCodemodeSandbox reports failing, silent or unreachable remote as sandbox error with transport reason|RemoteCodemodeSandbox runs tools in the caller and the script on the remote|RemoteCodemodeSandbox tells the remote to stop when caller aborts and settles immediately|a normal codemode run is not deterministic while start is|a public codemode caller aborting while a tool waits keeps partial output and cancels the call|a public codemode caller applies reversed answers by result number not arrival order|a public codemode caller binds a dotted global into its frozen namespace and spreads arguments|a public codemode caller catches unknown tools and thrown tool errors with error call status|a public codemode caller collects mixed output in order with the console marker and image MIME|a public codemode caller counts the interrupt budget across tool waits|a public codemode caller fails the run when the guest hits its output item limit|a public codemode caller gets UTC and no WeakRef in a deterministic run|a public codemode caller gets an uncatchable abort and a cancelled record in a deterministic run|a public codemode caller gets during for the result the VM was processing when the script ended|a public codemode caller gets illegal start options refused before any VM exists|a public codemode caller gets the fingerprint before the first call and a reused result number is refused|a public codemode caller keeps a call waiting when its answer cannot be serialized|a public codemode caller numbers globals with tools and gets rejection properties on the script Error|a public codemode caller reads a store snapshot across calls and drops failed writes|a public codemode caller records an unawaited call as cancelled and aborts it|a public codemode caller records settled calls with ok and error statuses|a public codemode caller rejects a reused result number a non-finite clock and an unknown call deterministically|a public codemode caller rejects invalid globals at construction with the frozen errors|a public codemode caller replays a deterministic run from the same start seed and answers|a public codemode caller reports a pre-aborted run with the abort reason and never starts it|a public codemode caller reports a script error with its name message stack and prior output|a public codemode caller reports guest memory exhaustion as an out-of-memory script error|a public codemode caller reports non-Error throws BigInt returns and syntax errors as script errors|a public codemode caller reports the deadline when a tool waits past it and keeps partial output|a public codemode caller returns its value and text output from a successful budgeted run|a public codemode caller sees a seed mismatch change randomness without changing the start time|a public codemode caller stops pure computation with the interrupt budget, not the deadline|a public codemode caller stringifies text and accepts image blocks with the frozen type errors|a public codemode caller treats exit\\(\\) as success with prior output and the write set|a run-supplied jsName overrides the derived script name|an over-limit script is interrupted with a timeout error|codemode worker admission follows wasm load and releases a failed start once|codemode worker results settle before exit while admission stays bounded|the public codemode declaration covers the frozen schema renderings|the public codemode declaration groups tools globals and namespaces with doc comments|the public codemode declaration preserves the relocated tool identifiers|the public codemode declaration renders frozen schema types|the public codemode declaration renders frozen tool signatures samples and blocks|the public codemode prelude is the frozen sandbox prelude with output and store limits|the public codemode source parser keeps only a first-line options command|the public codemode source parser rejects a misplaced options line with its line number|the public codemode source parser rejects invalid options and empty input with typed errors)$",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1179-revalidation-1232-stop-notify.xml",
+      "-j",
+      "1"
+     ],
+     "testedRevision": "f2b027fc6a246166cb66bc51cb4c914e1cfd43cf",
+     "recordedAt": "2026-11-10T13:10:14Z",
+     "selected": 52,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1179-revalidation-1232-stop-notify.xml",
+      "sha256": "6c8aa7d9b0d3a72f517dd807511aa4f2f8b9ab78d159ac6ca2f56f8759ace492"
      }
     }
    }
@@ -13650,11 +13711,11 @@
    "inputs": [
     {
      "path": "cmake/targets/Codemode.cmake",
-     "sha256": "d5c1c594ed8c97f5a9d37cf2f462a4a68db039836d5686f120c9eb9755ef939a"
+     "sha256": "a07926c5cde51829b8532c50c0af5e71da2ba26ab35348c92ad707c82ede4b31"
     },
     {
      "path": "cmake/tests/CodemodeTests.cmake",
-     "sha256": "ee80abcd89060a440d020e17442a29e3bd15f9edda86fb7d0f310e2b5dc0c37b"
+     "sha256": "fbc4c60f65065558bed9a8039e1cc6a1e3667de1c113962cb4c1b249185b261f"
     },
     {
      "path": "src/codemode/Sandbox.cpp",
@@ -13686,15 +13747,18 @@
      "architecture",
      "-R",
      "^(a public codemode caller executes a script against an injected nested tool|a public codemode caller keeps prior output when an injected tool rejects|the public codemode tool table registers lists and unregisters with the frozen messages|the public codemode start rejects a later run after close with the frozen spelling|closing codemode settles the run before its worker exit releases admission)$",
+     "--no-tests=error",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1192-codemode.xml"
+     "docs/research/pi-v1.3.0/deliveries/1192-revalidation-1232-frame-join.xml",
+     "-j",
+     "1"
     ],
-    "testedRevision": "2fd077c4dcf3bed89655648e20c214718150387a",
-    "recordedAt": "2026-11-05T01:39:04Z",
+    "testedRevision": "44d0fa5c1d52bb834a54b812265b250424ba6844",
+    "recordedAt": "2026-11-11T06:53:11Z",
     "selected": 5,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1192-codemode.xml",
-     "sha256": "511808591343c155d03abec2afa909d1cf3b41d79f20aabcd4fd15f43954e9d6"
+     "path": "docs/research/pi-v1.3.0/deliveries/1192-revalidation-1232-frame-join.xml",
+     "sha256": "63611617fce06d4e6c7ea8bc998dac091743db1139fd05f39ab648b3d96a4081"
     }
    },
    "rows": [
@@ -13753,7 +13817,34 @@
      }
     }
    ],
-   "routingSha256": "1d0c3a12dbb34f23227caa9fa02d5edb5bfd925a9ed833ad66f3fdaf1707c72c"
+   "routingSha256": "1d0c3a12dbb34f23227caa9fa02d5edb5bfd925a9ed833ad66f3fdaf1707c72c",
+   "revalidation1232FrameJoin": {
+    "reason": "This rebind re-runs the exact recorded #1192 selection (-LE architecture plus the anchored 5-case regex) on the #1232 integration tree at 44d0fa5c1. Two independent causes changed pinned bytes: (1) the self-join slice moved cmake/targets/Codemode.cmake and this integration adds the deterministic-worker test gate to cmake/tests/CodemodeTests.cmake, both pinned here as the build wiring of the close/settle behavior; (2) the newer upstream base 71ad3e83a had already changed files pinned or consumed by these receipts - vcpkg.json, Durable.cmake, tests/support/ModelsFixture.hpp and tests/codemode/CodemodeRemoteTest.cpp among them - a base newer than the one this receipt pinned. Rows, comparison scenarios, discriminating cases, implementationCommits and routingSha256 are unchanged; no capability claim is added.",
+    "changedInputs": [
+     "cmake/targets/Codemode.cmake",
+     "cmake/tests/CodemodeTests.cmake"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-LE",
+      "architecture",
+      "-R",
+      "^(a public codemode caller executes a script against an injected nested tool|a public codemode caller keeps prior output when an injected tool rejects|the public codemode tool table registers lists and unregisters with the frozen messages|the public codemode start rejects a later run after close with the frozen spelling|closing codemode settles the run before its worker exit releases admission)$",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1192-codemode.xml"
+     ],
+     "testedRevision": "2fd077c4dcf3bed89655648e20c214718150387a",
+     "recordedAt": "2026-11-05T01:39:04Z",
+     "selected": 5,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1192-codemode.xml",
+      "sha256": "511808591343c155d03abec2afa909d1cf3b41d79f20aabcd4fd15f43954e9d6"
+     }
+    }
+   }
   },
   {
    "id": "1194-codemode-portable-entry",
@@ -13766,11 +13857,11 @@
    "inputs": [
     {
      "path": "cmake/targets/Codemode.cmake",
-     "sha256": "d5c1c594ed8c97f5a9d37cf2f462a4a68db039836d5686f120c9eb9755ef939a"
+     "sha256": "a07926c5cde51829b8532c50c0af5e71da2ba26ab35348c92ad707c82ede4b31"
     },
     {
      "path": "cmake/tests/CodemodeTests.cmake",
-     "sha256": "ee80abcd89060a440d020e17442a29e3bd15f9edda86fb7d0f310e2b5dc0c37b"
+     "sha256": "fbc4c60f65065558bed9a8039e1cc6a1e3667de1c113962cb4c1b249185b261f"
     },
     {
      "path": "src/codemode/Portable.cpp",
@@ -13810,15 +13901,18 @@
      "architecture",
      "-L",
      "issue1194",
+     "--no-tests=error",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1194-codemode.xml"
+     "docs/research/pi-v1.3.0/deliveries/1194-revalidation-1232-frame-join.xml",
+     "-j",
+     "1"
     ],
-    "testedRevision": "2fd077c4dcf3bed89655648e20c214718150387a",
-    "recordedAt": "2026-11-05T01:39:04Z",
+    "testedRevision": "44d0fa5c1d52bb834a54b812265b250424ba6844",
+    "recordedAt": "2026-11-11T06:53:11Z",
     "selected": 1,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1194-codemode.xml",
-     "sha256": "abae9fc069467315c308991fcbb88869682db769d3f621693adbc5c79469a931"
+     "path": "docs/research/pi-v1.3.0/deliveries/1194-revalidation-1232-frame-join.xml",
+     "sha256": "39ec7e19bc288ef2816554aa0b818e13baa1dc7b75ff0202bd85667584cd94fc"
     }
    },
    "rows": [
@@ -13842,7 +13936,34 @@
      }
     }
    ],
-   "routingSha256": "df36d324c2169070a20ca0ef74e5cf311755bb8b0457303b2396d1fc72d5ad46"
+   "routingSha256": "df36d324c2169070a20ca0ef74e5cf311755bb8b0457303b2396d1fc72d5ad46",
+   "revalidation1232FrameJoin": {
+    "reason": "This rebind re-runs the exact recorded #1194 selection (-LE architecture -L issue1194, 1 case) on the #1232 integration tree at 44d0fa5c1. Two independent causes changed pinned bytes: (1) the self-join slice moved cmake/targets/Codemode.cmake and this integration adds the deterministic-worker test gate to cmake/tests/CodemodeTests.cmake, both pinned here because the portable target graph and its check shard are declared there; (2) the newer upstream base 71ad3e83a had already changed files pinned or consumed by these receipts - vcpkg.json, Durable.cmake, tests/support/ModelsFixture.hpp and tests/codemode/CodemodeRemoteTest.cpp among them - a base newer than the one this receipt pinned. Rows, comparison scenarios, discriminating cases, implementationCommits and routingSha256 are unchanged; no capability claim is added.",
+    "changedInputs": [
+     "cmake/targets/Codemode.cmake",
+     "cmake/tests/CodemodeTests.cmake"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-LE",
+      "architecture",
+      "-L",
+      "issue1194",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1194-codemode.xml"
+     ],
+     "testedRevision": "2fd077c4dcf3bed89655648e20c214718150387a",
+     "recordedAt": "2026-11-05T01:39:04Z",
+     "selected": 1,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1194-codemode.xml",
+      "sha256": "abae9fc069467315c308991fcbb88869682db769d3f621693adbc5c79469a931"
+     }
+    }
+   }
   },
   {
    "id": "1180-sidecar-symlink-parity",

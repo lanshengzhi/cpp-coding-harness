@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="Linux-g++"
+	tests="1"
+	failures="0"
+	disabled="0"
+	skipped="0"
+	hostname="btc"
+	time="0"
+	timestamp="2026-11-11T15:51:59"
+	>
+	<testcase name="the portable codemode entry exposes the frozen source constants and protocol types" classname="the portable codemode entry exposes the frozen source constants and protocol types" time="0.0140488" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;issue1194;portable;spec"/>
+		</properties>
+		<system-out>Filters: "the portable codemode entry exposes the frozen source constants and protocol types"
+Randomness seeded to: 150412882
+===============================================================================
+All tests passed (18 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+</testsuite>
