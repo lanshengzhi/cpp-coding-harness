@@ -201,6 +201,61 @@ if(NOT post_result EQUAL 0)
         "${post_output}${post_error}")
 endif()
 
+# Declared PCH evidence is part of this fixture's contract. `PCH_INPUT` must
+# compile through CMake's target-local precompiled-header mechanism, not decay
+# into a plain forced include. Assert the generated command explicitly so a
+# regression in the constructor, or removal of the fixture's declaration, is
+# diagnosed here instead of only inside the rule it is meant to exercise.
+file(READ "${legal_build_dir}/compile_commands.json" legal_compile_commands_text)
+string(JSON legal_command_count LENGTH "${legal_compile_commands_text}")
+set(legal_pch_commands 0)
+if(legal_command_count GREATER 0)
+    math(EXPR legal_last_command "${legal_command_count} - 1")
+    foreach(command_index RANGE ${legal_last_command})
+        string(JSON legal_command_file GET "${legal_compile_commands_text}" ${command_index} file)
+        if(legal_command_file MATCHES "/CMakeFiles/cch_ai\\.dir/cmake_pch\\.hxx\\.cxx$")
+            math(EXPR legal_pch_commands "${legal_pch_commands} + 1")
+            string(JSON legal_command_line GET "${legal_compile_commands_text}" ${command_index} command)
+            if(NOT legal_command_line MATCHES "-o[ ]+CMakeFiles/cch_ai\\.dir/cmake_pch\\.hxx\\.(gch|pch)")
+                message(FATAL_ERROR
+                    "legal fixture PCH command does not write the target-local PCH artifact: "
+                    "${legal_command_line}")
+            endif()
+            if(NOT legal_command_line MATCHES "-include[ ]+[^ ]*CMakeFiles/cch_ai\\.dir/cmake_pch\\.hxx")
+                message(FATAL_ERROR
+                    "legal fixture PCH command does not include the CMake PCH wrapper: "
+                    "${legal_command_line}")
+            endif()
+        endif()
+    endforeach()
+endif()
+if(NOT legal_pch_commands EQUAL 1)
+    message(FATAL_ERROR
+        "legal fixture must generate exactly one PCH compile command for cch_ai, "
+        "found ${legal_pch_commands}")
+endif()
+
+file(READ "${legal_build_dir}/parity-ownership-index.json" legal_pch_index_text)
+string(JSON legal_target_count LENGTH "${legal_pch_index_text}" targets)
+set(legal_declared_pch "")
+if(legal_target_count GREATER 0)
+    math(EXPR legal_last_target "${legal_target_count} - 1")
+    foreach(target_index RANGE ${legal_last_target})
+        string(JSON legal_target_name GET "${legal_pch_index_text}" targets ${target_index} name)
+        if(legal_target_name STREQUAL "cch_ai")
+            string(JSON legal_pch_type TYPE "${legal_pch_index_text}" targets ${target_index} pch_input)
+            if(legal_pch_type STREQUAL "STRING")
+                string(JSON legal_declared_pch GET "${legal_pch_index_text}" targets ${target_index} pch_input)
+            endif()
+        endif()
+    endforeach()
+endif()
+if(NOT legal_declared_pch MATCHES "/src/ai/include/cch/ai/pch\\.hpp$")
+    message(FATAL_ERROR
+        "legal fixture index must record cch_ai's declared PCH input, got "
+        "'${legal_declared_pch}'")
+endif()
+
 # Build-phase Gate: active dependency evidence (depfiles) is required and
 # missing evidence must fail closed with PARITY-6001.
 execute_process(

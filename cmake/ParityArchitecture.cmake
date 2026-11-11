@@ -79,7 +79,9 @@ endfunction()
 # token names a project target. INTERFACE_DEPENDS names the DEPENDS subset
 # linked PUBLIC (recorded as `visibility: "public"`); every other dependency
 # is linked PRIVATE. Forced includes and the PCH input are declared and
-# scanned by the direct-include lexer; opaque `.gch`/`.pch` artifacts are
+# scanned by the direct-include lexer. PCH_INPUT is compiled through CMake's
+# target-local precompiled-header mechanism, so the declared input yields the
+# generated artifact the Gate validates; opaque `.gch`/`.pch` artifacts are
 # never declared here.
 function(cch_parity_declare_target)
     set(options "")
@@ -268,8 +270,9 @@ function(cch_parity_declare_target)
 
     # The declaration is real configured evidence: the target carries the
     # project warning defaults, interface-visible dependencies become PUBLIC
-    # link edges, private dependencies stay PRIVATE, and declared forced
-    # includes/PCH input become real compile context the Gate validates.
+    # link edges, private dependencies stay PRIVATE, declared forced includes
+    # become real compile options, and the declared PCH input becomes the
+    # target-local precompiled header the Gate validates.
     if(kind STREQUAL "interface")
         add_library(${arg_TARGET} INTERFACE)
     elseif(kind STREQUAL "executable")
@@ -284,7 +287,7 @@ function(cch_parity_declare_target)
             target_compile_options(${arg_TARGET} PRIVATE -include "${forced}")
         endforeach()
         if(NOT "${abs_pch_input}" STREQUAL "")
-            target_compile_options(${arg_TARGET} PRIVATE -include "${abs_pch_input}")
+            target_precompile_headers(${arg_TARGET} PRIVATE "${abs_pch_input}")
         endif()
     endif()
     if(link_dependencies)

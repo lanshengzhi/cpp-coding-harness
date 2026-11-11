@@ -2053,6 +2053,58 @@ class CompileContextTest(unittest.TestCase):
             )
         self.assertEqual(diagnostics, [])
 
+    def test_declared_pch_input_without_generated_command_is_rejected(self):
+        # The old constructor treated PCH_INPUT as a plain `-include` and
+        # emitted no generated PCH command. That is not a precompiled header:
+        # the tightened rule must separate the two, because otherwise a target
+        # can claim PCH context it never compiles.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            build = root / "build"
+            source = root / "src" / "model.cpp"
+            source.parent.mkdir()
+            source.write_text("// fixture source\n")
+            pch_input = root / "cmake" / "Pch.hpp"
+            pch_input.parent.mkdir()
+            pch_input.write_text("#pragma once\n")
+            index = make_index(
+                [
+                    {
+                        "name": "cch_ai",
+                        "role": "owner",
+                        "owner": "cch_ai",
+                        "sources": [str(source)],
+                        "dependencies": [],
+                        "pch_input": str(pch_input),
+                    }
+                ]
+            )
+            direct = make_direct_includes(
+                [
+                    {"path": str(source), "includes": []},
+                    {"path": str(pch_input), "includes": []},
+                ]
+            )
+            commands = make_compile_commands(
+                [
+                    {
+                        "file": str(source),
+                        "directory": str(build),
+                        "command": f"g++ -include {pch_input} -c {source}",
+                    }
+                ]
+            )
+            diagnostics = pg.check(
+                valid_manifest(),
+                index,
+                "d" * 64,
+                direct_includes=direct,
+                compile_commands=commands,
+                project_root=tmp,
+            )
+        self.assertEqual(rule_ids(diagnostics), [pg.RULE_OPAQUE_PCH_FORBIDDEN])
+        self.assertIn("0 generated PCH compile commands", diagnostics[0].message)
+
     def test_unscanned_forced_include_is_rejected(self):
         with tempfile.TemporaryDirectory() as tmp:
             project_root = make_project_tree(tmp)
