@@ -1,0 +1,154 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="Linux-g++"
+	tests="13"
+	failures="0"
+	disabled="0"
+	skipped="0"
+	hostname="btc"
+	time="7"
+	timestamp="2026-11-11T20:30:58"
+	>
+	<testcase name="AltScreen selection preserves the cell range through content and focus changes" classname="AltScreen selection preserves the cell range through content and focus changes" time="0.218712" status="run">
+		<properties>
+			<property name="cmake_labels" value="alt-screen;compat-pi;issue1006;issue1182;selection;tui"/>
+		</properties>
+		<system-out>Filters: "AltScreen selection preserves the cell range through content and focus changes"
+Randomness seeded to: 96606017
+===============================================================================
+All tests passed (25 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="AltScreen selection replays styled CJK cells across wrapped rows and copies frozen text" classname="AltScreen selection replays styled CJK cells across wrapped rows and copies frozen text" time="0.21794" status="run">
+		<properties>
+			<property name="cmake_labels" value="alt-screen;compat-pi;issue1006;issue1182;selection;tui"/>
+		</properties>
+		<system-out>Filters: "AltScreen selection replays styled CJK cells across wrapped rows and copies frozen text"
+Randomness seeded to: 1624402606
+===============================================================================
+All tests passed (64 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="Box padding change invalidates the render cache" classname="Box padding change invalidates the render cache" time="0.0112175" status="run">
+		<properties>
+			<property name="cmake_labels" value="box;issue1121;issue1182;issue1209;issue1220;padding;spec;tui"/>
+		</properties>
+		<system-out>Filters: "Box padding change invalidates the render cache"
+Randomness seeded to: 1376591139
+===============================================================================
+All tests passed (5 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="ITui roots support hardware-cursor preference and IME positioning" classname="ITui roots support hardware-cursor preference and IME positioning" time="1.61771" status="run">
+		<properties>
+			<property name="cmake_labels" value="hardware-cursor;issue1037;issue1182;spec;tui"/>
+		</properties>
+		<system-out>Filters: "ITui roots support hardware-cursor preference and IME positioning"
+Randomness seeded to: 3797762150
+===============================================================================
+All tests passed (127 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="Process Terminal leaves the status unsupported when DA answers before the reply" classname="Process Terminal leaves the status unsupported when DA answers before the reply" time="0.420345" status="run">
+		<properties>
+			<property name="cmake_labels" value="issue1123;issue1182;program-status;spec;terminal;tui"/>
+		</properties>
+		<system-out>Filters: "Process Terminal leaves the status unsupported when DA answers before the reply"
+Randomness seeded to: 2750929964
+===============================================================================
+All tests passed (14 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="Process Terminal reports the latest status once the terminal answers before DA" classname="Process Terminal reports the latest status once the terminal answers before DA" time="0.54041" status="run">
+		<properties>
+			<property name="cmake_labels" value="issue1123;issue1182;program-status;spec;terminal;tui"/>
+		</properties>
+		<system-out>Filters: "Process Terminal reports the latest status once the terminal answers before DA"
+Randomness seeded to: 2871872118
+===============================================================================
+All tests passed (19 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="Process Terminal skips the query and reports immediately with PI_PROGRAM_STATUS=1" classname="Process Terminal skips the query and reports immediately with PI_PROGRAM_STATUS=1" time="0.425532" status="run">
+		<properties>
+			<property name="cmake_labels" value="env;issue1123;issue1182;program-status;spec;terminal;tui"/>
+		</properties>
+		<system-out>Filters: "Process Terminal skips the query and reports immediately with PI_PROGRAM_STATUS=1"
+Randomness seeded to: 2514814329
+===============================================================================
+All tests passed (12 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="Process Terminal skips the query and reports nothing with PI_PROGRAM_STATUS=0" classname="Process Terminal skips the query and reports nothing with PI_PROGRAM_STATUS=0" time="0.516382" status="run">
+		<properties>
+			<property name="cmake_labels" value="env;issue1123;issue1182;program-status;spec;terminal;tui"/>
+		</properties>
+		<system-out>Filters: "Process Terminal skips the query and reports nothing with PI_PROGRAM_STATUS=0"
+Randomness seeded to: 2255230870
+===============================================================================
+All tests passed (12 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="Program status format encodes frozen OSC 7501 fields and limits" classname="Program status format encodes frozen OSC 7501 fields and limits" time="0.210545" status="run">
+		<properties>
+			<property name="cmake_labels" value="issue1123;issue1182;program-status;spec;tui"/>
+		</properties>
+		<system-out>Filters: "Program status format encodes frozen OSC 7501 fields and limits"
+Randomness seeded to: 391192573
+===============================================================================
+All tests passed (12 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="Program status reply recognition accepts only the frozen query echoes" classname="Program status reply recognition accepts only the frozen query echoes" time="0.0105408" status="run">
+		<properties>
+			<property name="cmake_labels" value="issue1123;issue1182;program-status;spec;tui"/>
+		</properties>
+		<system-out>Filters: "Program status reply recognition accepts only the frozen query echoes"
+Randomness seeded to: 1666044497
+===============================================================================
+All tests passed (8 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="Text re-wraps at a new horizontal padding like frozen pi" classname="Text re-wraps at a new horizontal padding like frozen pi" time="0.21018" status="run">
+		<properties>
+			<property name="cmake_labels" value="issue1121;issue1182;issue1220;padding;spec;text;tui"/>
+		</properties>
+		<system-out>Filters: "Text re-wraps at a new horizontal padding like frozen pi"
+Randomness seeded to: 183442457
+===============================================================================
+All tests passed (9 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="frozen hardware-cursor observations replay across MainScreen and AltScreen" classname="frozen hardware-cursor observations replay across MainScreen and AltScreen" time="2.6225" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;hardware-cursor;issue1037;issue1182;spec;tui"/>
+		</properties>
+		<system-out>Filters: "frozen hardware-cursor observations replay across MainScreen and AltScreen"
+Randomness seeded to: 1836132245
+===============================================================================
+All tests passed (281 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="cch_pi_v130_tui_route_batches" classname="cch_pi_v130_tui_route_batches" time="0.955766" status="run">
+		<properties>
+			<property name="cmake_labels" value="consolidation;evidence;issue1182;spec;tui"/>
+		</properties>
+		<system-out>...........
+----------------------------------------------------------------------
+Ran 11 tests in 0.883s
+
+OK
+</system-out>
+	</testcase>
+</testsuite>

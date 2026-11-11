@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="Linux-g++"
+	tests="4"
+	failures="0"
+	disabled="0"
+	skipped="0"
+	hostname="btc"
+	time="0"
+	timestamp="2026-11-11T20:30:58"
+	>
+	<testcase name="progress commits the first change at once then paces later commits by their written bytes" classname="progress commits the first change at once then paces later commits by their written bytes" time="0.00348778" status="run">
+		<properties>
+			<property name="cmake_labels" value="chord;issue1187;output;progress;spec"/>
+		</properties>
+		<system-out>Filters: "progress commits the first change at once then paces later commits by their written bytes"
+Randomness seeded to: 3206490192
+===============================================================================
+All tests passed (8 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="progress keeps the exact fractional byte-rate pause instead of rounding it" classname="progress keeps the exact fractional byte-rate pause instead of rounding it" time="0.00290983" status="run">
+		<properties>
+			<property name="cmake_labels" value="chord;issue1187;output;progress;spec"/>
+		</properties>
+		<system-out>Filters: "progress keeps the exact fractional byte-rate pause instead of rounding it"
+Randomness seeded to: 1517175595
+===============================================================================
+All tests passed (5 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="progress pacing separates a byte-rate pause from a constant interval and rounded bytes" classname="progress pacing separates a byte-rate pause from a constant interval and rounded bytes" time="0.00337047" status="run">
+		<properties>
+			<property name="cmake_labels" value="chord;discriminating;issue1187;output;progress"/>
+		</properties>
+		<system-out>Filters: "progress pacing separates a byte-rate pause from a constant interval and rounded bytes"
+Randomness seeded to: 1070214383
+===============================================================================
+All tests passed (10 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="the progress byte rate is the frozen 100 KiB/s constant" classname="the progress byte rate is the frozen 100 KiB/s constant" time="0.00329211" status="run">
+		<properties>
+			<property name="cmake_labels" value="chord;issue1187;output;progress;spec"/>
+		</properties>
+		<system-out>Filters: "the progress byte rate is the frozen 100 KiB/s constant"
+Randomness seeded to: 4047772409
+===============================================================================
+All tests passed (3 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+</testsuite>

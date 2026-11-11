@@ -2623,16 +2623,16 @@
             "issue1118",
             "--no-tests=error",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1118-revalidation-1232-frame-join.xml",
+            "docs/research/pi-v1.3.0/deliveries/1118-codemode-catalog-revalidation-test-tmp-root.xml",
             "-j",
             "1"
           ],
-          "testedRevision": "44d0fa5c1d52bb834a54b812265b250424ba6844",
-          "recordedAt": "2026-11-11T06:53:11Z",
+          "testedRevision": "2ea9ae1c360f2a3221fd1dcf5326bf2ac471627a",
+          "recordedAt": "2026-11-11T11:30:52Z",
           "selected": 19,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1118-revalidation-1232-frame-join.xml",
-            "sha256": "d50e1cb0440e3c8b9e5001ce92bd69107cbb1922c986cd554423dd8127cce907"
+            "path": "docs/research/pi-v1.3.0/deliveries/1118-codemode-catalog-revalidation-test-tmp-root.xml",
+            "sha256": "13101cc479266c351a18eaff7ae65c66b575c14fdd552af55c1ab3df9877b637"
           }
         },
         "rows": [
@@ -3693,10 +3693,37 @@
           }
         },
         "revalidationTestTmpRoot": {
-          "reason": "The shared Catch2 runner now resolves its isolation root from TMPDIR and exposes it for the isolation regression; this receipt's exact selection, row mapping and JUnit are unchanged and were not rerun for this harness-only change.",
+          "reason": "Harness-only rebind superseded by an actual rerun. The shared Catch2 runner resolves its isolation root from TMPDIR instead of /tmp and exposes the resolved base for the isolation regression; this receipt's exact 19-case selection from validation.command was rerun on the same checkout base plus the changed tests/Catch2Main.cpp input, keeping its byte selection verbatim, into 1118-codemode-catalog-revalidation-test-tmp-root.xml: 19 selected, 19 passed, 0 skipped, 0 failed, 7.28 s wall. This receipt's JUnit again corresponds to the test bytes its inputs pin. The intermediate harness-only rebind that refreshed the input digest and kept the previous JUnit is retained under supersededHarnessOnlyRebind. Rows, comparison scenarios, discriminators and the routing digest are unchanged; the rerun makes no new capability claim.",
           "changedInputs": [
             "tests/Catch2Main.cpp"
-          ]
+          ],
+          "supersededHarnessOnlyRebind": {
+            "recordedAt": "2026-11-11T10:48:59Z",
+            "commit": "d34fc1b30960f598f5ec059f1c82c8791cf85ef4",
+            "reason": "The shared Catch2 runner now resolves its isolation root from TMPDIR and exposes it for the isolation regression; this receipt's exact selection, row mapping and JUnit are unchanged and were not rerun for this harness-only change.",
+            "supersededBy": "docs/research/pi-v1.3.0/deliveries/1118-codemode-catalog-revalidation-test-tmp-root.xml"
+          },
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-L",
+              "issue1118",
+              "--no-tests=error",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1118-revalidation-1232-frame-join.xml",
+              "-j",
+              "1"
+            ],
+            "testedRevision": "44d0fa5c1d52bb834a54b812265b250424ba6844",
+            "recordedAt": "2026-11-11T06:53:11Z",
+            "selected": 19,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1118-revalidation-1232-frame-join.xml",
+              "sha256": "d50e1cb0440e3c8b9e5001ce92bd69107cbb1922c986cd554423dd8127cce907"
+            }
+          }
         }
       },
       {
@@ -3745,14 +3772,14 @@
             "-j",
             "1",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1178-revalidation-upstream-71ad3e83a.xml"
+            "docs/research/pi-v1.3.0/deliveries/1178-chord-comparisons-revalidation-test-tmp-root.xml"
           ],
-          "testedRevision": "c8abe71ba4e8cb988a987ca9337d252acf3c2fe5",
-          "recordedAt": "2026-11-11T07:25:18Z",
+          "testedRevision": "2ea9ae1c360f2a3221fd1dcf5326bf2ac471627a",
+          "recordedAt": "2026-11-11T11:30:53Z",
           "selected": 104,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1178-revalidation-upstream-71ad3e83a.xml",
-            "sha256": "04faa93e89d7bec4aa1ed3df4685ff6220f89e2c9eb76566c2426999c45cd5b6"
+            "path": "docs/research/pi-v1.3.0/deliveries/1178-chord-comparisons-revalidation-test-tmp-root.xml",
+            "sha256": "fe08b9c768d23b6560ff3dd126490f7040f5295e2ec69a808c8019011a6877cd"
           }
         },
         "rows": [
@@ -4809,10 +4836,38 @@
           }
         },
         "revalidationTestTmpRoot": {
-          "reason": "The shared Catch2 runner now resolves its isolation root from TMPDIR and exposes it for the isolation regression; this receipt's exact selection, row mapping and JUnit are unchanged and were not rerun for this harness-only change.",
+          "reason": "Harness-only rebind superseded by an actual rerun. The shared Catch2 runner resolves its isolation root from TMPDIR instead of /tmp and exposes the resolved base for the isolation regression; this receipt's exact 104-case selection from validation.command was rerun on the same checkout base plus the changed tests/Catch2Main.cpp input, keeping its byte selection verbatim, into 1178-chord-comparisons-revalidation-test-tmp-root.xml: 104 selected, 104 passed, 0 skipped, 0 failed, 0.58 s wall. This receipt's JUnit again corresponds to the test bytes its inputs pin. The intermediate harness-only rebind that refreshed the input digest and kept the previous JUnit is retained under supersededHarnessOnlyRebind. Rows, comparison scenarios, discriminators and the routing digest are unchanged; the rerun makes no new capability claim.",
           "changedInputs": [
             "tests/Catch2Main.cpp"
-          ]
+          ],
+          "supersededHarnessOnlyRebind": {
+            "recordedAt": "2026-11-11T10:48:59Z",
+            "commit": "d34fc1b30960f598f5ec059f1c82c8791cf85ef4",
+            "reason": "The shared Catch2 runner now resolves its isolation root from TMPDIR and exposes it for the isolation regression; this receipt's exact selection, row mapping and JUnit are unchanged and were not rerun for this harness-only change.",
+            "supersededBy": "docs/research/pi-v1.3.0/deliveries/1178-chord-comparisons-revalidation-test-tmp-root.xml"
+          },
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-L",
+              "chord",
+              "--no-tests=error",
+              "--output-on-failure",
+              "-j",
+              "1",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1178-revalidation-upstream-71ad3e83a.xml"
+            ],
+            "testedRevision": "c8abe71ba4e8cb988a987ca9337d252acf3c2fe5",
+            "recordedAt": "2026-11-11T07:25:18Z",
+            "selected": 104,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1178-revalidation-upstream-71ad3e83a.xml",
+              "sha256": "04faa93e89d7bec4aa1ed3df4685ff6220f89e2c9eb76566c2426999c45cd5b6"
+            }
+          }
         }
       },
       {
@@ -5191,14 +5246,14 @@
             "-j",
             "1",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1181-revalidation-upstream-71ad3e83a.xml"
+            "docs/research/pi-v1.3.0/deliveries/1181-mcp-comparisons-revalidation-test-tmp-root.xml"
           ],
-          "testedRevision": "c8abe71ba4e8cb988a987ca9337d252acf3c2fe5",
-          "recordedAt": "2026-11-11T07:25:37Z",
+          "testedRevision": "2ea9ae1c360f2a3221fd1dcf5326bf2ac471627a",
+          "recordedAt": "2026-11-11T11:30:56Z",
           "selected": 16,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1181-revalidation-upstream-71ad3e83a.xml",
-            "sha256": "7376bd1833a9bbfb745686c2db5595765838372fe21d9989deea19e2a3f48d4f"
+            "path": "docs/research/pi-v1.3.0/deliveries/1181-mcp-comparisons-revalidation-test-tmp-root.xml",
+            "sha256": "f2d86d3f5e46ba471ed69979c535954b1daf4d344d96aa9d20ac4c8c35a5b152"
           }
         },
         "rows": [
@@ -6218,10 +6273,38 @@
           }
         },
         "revalidationTestTmpRoot": {
-          "reason": "The shared Catch2 runner now resolves its isolation root from TMPDIR and exposes it for the isolation regression; this receipt's exact selection, row mapping and JUnit are unchanged and were not rerun for this harness-only change.",
+          "reason": "Harness-only rebind superseded by an actual rerun. The shared Catch2 runner resolves its isolation root from TMPDIR instead of /tmp and exposes the resolved base for the isolation regression; this receipt's exact 16-case selection from validation.command was rerun on the same checkout base plus the changed tests/Catch2Main.cpp input, keeping its byte selection verbatim, into 1181-mcp-comparisons-revalidation-test-tmp-root.xml: 16 selected, 16 passed, 0 skipped, 0 failed, 3.51 s wall. This receipt's JUnit again corresponds to the test bytes its inputs pin. The intermediate harness-only rebind that refreshed the input digest and kept the previous JUnit is retained under supersededHarnessOnlyRebind. Rows, comparison scenarios, discriminators and the routing digest are unchanged; the rerun makes no new capability claim.",
           "changedInputs": [
             "tests/Catch2Main.cpp"
-          ]
+          ],
+          "supersededHarnessOnlyRebind": {
+            "recordedAt": "2026-11-11T10:48:59Z",
+            "commit": "d34fc1b30960f598f5ec059f1c82c8791cf85ef4",
+            "reason": "The shared Catch2 runner now resolves its isolation root from TMPDIR and exposes it for the isolation regression; this receipt's exact selection, row mapping and JUnit are unchanged and were not rerun for this harness-only change.",
+            "supersededBy": "docs/research/pi-v1.3.0/deliveries/1181-mcp-comparisons-revalidation-test-tmp-root.xml"
+          },
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-R",
+              "^(an MCP HTTP URL must be http or https|streamable HTTP transport connects over plain http|connecting an MCP HTTP server lists its tools with the pi naming and schema|a same-origin redirect is followed and keeps the request auth header|cross-origin redirect is followed without Authorization and is rejected|HTTPS transport rejects an untrusted certificate|an authorization code from another issuer never reaches the token endpoint|authorization server metadata naming another issuer stops before any token request|the MCP HTTP transport attaches a credential only when the server needs one|agent session lists MCP resources only on demand and can call tools after a resource failure|the real stdio fixture lists, templates, and reads over `resources/\\*`|a cancelled MCP OAuth discovery stops before any registration or token request|a cancelled MCP OAuth client registration stops before any token request|a browser callback wait cancelled by the sign-in stop token stops sign-in|a pasted redirect URL completes the MCP OAuth sign-in|protected resource discovery retries the bare origin after a path-suffixed miss)$",
+              "--no-tests=error",
+              "--output-on-failure",
+              "-j",
+              "1",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1181-revalidation-upstream-71ad3e83a.xml"
+            ],
+            "testedRevision": "c8abe71ba4e8cb988a987ca9337d252acf3c2fe5",
+            "recordedAt": "2026-11-11T07:25:37Z",
+            "selected": 16,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1181-revalidation-upstream-71ad3e83a.xml",
+              "sha256": "7376bd1833a9bbfb745686c2db5595765838372fe21d9989deea19e2a3f48d4f"
+            }
+          }
         }
       },
       {
@@ -6264,14 +6347,14 @@
             "-j",
             "1",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1185-revalidation-upstream-71ad3e83a.xml"
+            "docs/research/pi-v1.3.0/deliveries/1185-chord-delta-ingestion-revalidation-test-tmp-root.xml"
           ],
-          "testedRevision": "c8abe71ba4e8cb988a987ca9337d252acf3c2fe5",
-          "recordedAt": "2026-11-11T07:25:42Z",
+          "testedRevision": "2ea9ae1c360f2a3221fd1dcf5326bf2ac471627a",
+          "recordedAt": "2026-11-11T11:30:57Z",
           "selected": 104,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1185-revalidation-upstream-71ad3e83a.xml",
-            "sha256": "d69518e01d5d261d851c92eb589fabc407c73daefa9e2c4cd80ed1f5993ed28b"
+            "path": "docs/research/pi-v1.3.0/deliveries/1185-chord-delta-ingestion-revalidation-test-tmp-root.xml",
+            "sha256": "c12da55b154d3d10f225c3f18517752120689617d8ed89cdf03ae4c86065f19d"
           }
         },
         "rows": [
@@ -6734,10 +6817,38 @@
           }
         },
         "revalidationTestTmpRoot": {
-          "reason": "The shared Catch2 runner now resolves its isolation root from TMPDIR and exposes it for the isolation regression; this receipt's exact selection, row mapping and JUnit are unchanged and were not rerun for this harness-only change.",
+          "reason": "Harness-only rebind superseded by an actual rerun. The shared Catch2 runner resolves its isolation root from TMPDIR instead of /tmp and exposes the resolved base for the isolation regression; this receipt's exact 104-case selection from validation.command was rerun on the same checkout base plus the changed tests/Catch2Main.cpp input, keeping its byte selection verbatim, into 1185-chord-delta-ingestion-revalidation-test-tmp-root.xml: 104 selected, 104 passed, 0 skipped, 0 failed, 0.57 s wall. This receipt's JUnit again corresponds to the test bytes its inputs pin. The intermediate harness-only rebind that refreshed the input digest and kept the previous JUnit is retained under supersededHarnessOnlyRebind. Rows, comparison scenarios, discriminators and the routing digest are unchanged; the rerun makes no new capability claim.",
           "changedInputs": [
             "tests/Catch2Main.cpp"
-          ]
+          ],
+          "supersededHarnessOnlyRebind": {
+            "recordedAt": "2026-11-11T10:48:59Z",
+            "commit": "d34fc1b30960f598f5ec059f1c82c8791cf85ef4",
+            "reason": "The shared Catch2 runner now resolves its isolation root from TMPDIR and exposes it for the isolation regression; this receipt's exact selection, row mapping and JUnit are unchanged and were not rerun for this harness-only change.",
+            "supersededBy": "docs/research/pi-v1.3.0/deliveries/1185-chord-delta-ingestion-revalidation-test-tmp-root.xml"
+          },
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-L",
+              "chord",
+              "--no-tests=error",
+              "--output-on-failure",
+              "-j",
+              "1",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1185-revalidation-upstream-71ad3e83a.xml"
+            ],
+            "testedRevision": "c8abe71ba4e8cb988a987ca9337d252acf3c2fe5",
+            "recordedAt": "2026-11-11T07:25:42Z",
+            "selected": 104,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1185-revalidation-upstream-71ad3e83a.xml",
+              "sha256": "d69518e01d5d261d851c92eb589fabc407c73daefa9e2c4cd80ed1f5993ed28b"
+            }
+          }
         }
       },
       {
@@ -6761,14 +6872,14 @@
             "-j",
             "1",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1184-revalidation-upstream-71ad3e83a.xml"
+            "docs/research/pi-v1.3.0/deliveries/1184-chord-context-cancellation-revalidation-test-tmp-root.xml"
           ],
-          "testedRevision": "c8abe71ba4e8cb988a987ca9337d252acf3c2fe5",
-          "recordedAt": "2026-11-11T07:25:26Z",
+          "testedRevision": "2ea9ae1c360f2a3221fd1dcf5326bf2ac471627a",
+          "recordedAt": "2026-11-11T11:30:57Z",
           "selected": 10,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1184-revalidation-upstream-71ad3e83a.xml",
-            "sha256": "6c15d708b02d45559280c990890c3624e0322b9e8d6651eb0a45e36c607ce2ec"
+            "path": "docs/research/pi-v1.3.0/deliveries/1184-chord-context-cancellation-revalidation-test-tmp-root.xml",
+            "sha256": "b81ca867ab50d54f7bad5b3c75566f543a88513b51d48f52baf421250f8c37c1"
           }
         },
         "rows": [
@@ -7251,10 +7362,38 @@
           }
         },
         "revalidationTestTmpRoot": {
-          "reason": "The shared Catch2 runner now resolves its isolation root from TMPDIR and exposes it for the isolation regression; this receipt's exact selection, row mapping and JUnit are unchanged and were not rerun for this harness-only change.",
+          "reason": "Harness-only rebind superseded by an actual rerun. The shared Catch2 runner resolves its isolation root from TMPDIR instead of /tmp and exposes the resolved base for the isolation regression; this receipt's exact 10-case selection from validation.command was rerun on the same checkout base plus the changed tests/Catch2Main.cpp input, keeping its byte selection verbatim, into 1184-chord-context-cancellation-revalidation-test-tmp-root.xml: 10 selected, 10 passed, 0 skipped, 0 failed, 0.21 s wall. This receipt's JUnit again corresponds to the test bytes its inputs pin. The intermediate harness-only rebind that refreshed the input digest and kept the previous JUnit is retained under supersededHarnessOnlyRebind. Rows, comparison scenarios, discriminators and the routing digest are unchanged; the rerun makes no new capability claim.",
           "changedInputs": [
             "tests/Catch2Main.cpp"
-          ]
+          ],
+          "supersededHarnessOnlyRebind": {
+            "recordedAt": "2026-11-11T10:48:59Z",
+            "commit": "d34fc1b30960f598f5ec059f1c82c8791cf85ef4",
+            "reason": "The shared Catch2 runner now resolves its isolation root from TMPDIR and exposes it for the isolation regression; this receipt's exact selection, row mapping and JUnit are unchanged and were not rerun for this harness-only change.",
+            "supersededBy": "docs/research/pi-v1.3.0/deliveries/1184-chord-context-cancellation-revalidation-test-tmp-root.xml"
+          },
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-L",
+              "issue1184",
+              "--no-tests=error",
+              "--output-on-failure",
+              "-j",
+              "1",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1184-revalidation-upstream-71ad3e83a.xml"
+            ],
+            "testedRevision": "c8abe71ba4e8cb988a987ca9337d252acf3c2fe5",
+            "recordedAt": "2026-11-11T07:25:26Z",
+            "selected": 10,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1184-revalidation-upstream-71ad3e83a.xml",
+              "sha256": "6c15d708b02d45559280c990890c3624e0322b9e8d6651eb0a45e36c607ce2ec"
+            }
+          }
         }
       },
       {
@@ -7296,14 +7435,14 @@
             "-j",
             "1",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1186-revalidation-upstream-71ad3e83a.xml"
+            "docs/research/pi-v1.3.0/deliveries/1186-chord-typed-json-revalidation-test-tmp-root.xml"
           ],
-          "testedRevision": "c8abe71ba4e8cb988a987ca9337d252acf3c2fe5",
-          "recordedAt": "2026-11-11T07:25:43Z",
+          "testedRevision": "2ea9ae1c360f2a3221fd1dcf5326bf2ac471627a",
+          "recordedAt": "2026-11-11T11:30:58Z",
           "selected": 104,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1186-revalidation-upstream-71ad3e83a.xml",
-            "sha256": "ad649941179e533ead6265d4002fd347ea01dfac9f6bcb29ac20fee3eca3d050"
+            "path": "docs/research/pi-v1.3.0/deliveries/1186-chord-typed-json-revalidation-test-tmp-root.xml",
+            "sha256": "b6c33e3299126cbdad5aae06490c764aa1e2c9cb130cb4bd090303fcad8788c8"
           }
         },
         "rows": [
@@ -8292,10 +8431,38 @@
           }
         },
         "revalidationTestTmpRoot": {
-          "reason": "The shared Catch2 runner now resolves its isolation root from TMPDIR and exposes it for the isolation regression; this receipt's exact selection, row mapping and JUnit are unchanged and were not rerun for this harness-only change.",
+          "reason": "Harness-only rebind superseded by an actual rerun. The shared Catch2 runner resolves its isolation root from TMPDIR instead of /tmp and exposes the resolved base for the isolation regression; this receipt's exact 104-case selection from validation.command was rerun on the same checkout base plus the changed tests/Catch2Main.cpp input, keeping its byte selection verbatim, into 1186-chord-typed-json-revalidation-test-tmp-root.xml: 104 selected, 104 passed, 0 skipped, 0 failed, 0.58 s wall. This receipt's JUnit again corresponds to the test bytes its inputs pin. The intermediate harness-only rebind that refreshed the input digest and kept the previous JUnit is retained under supersededHarnessOnlyRebind. Rows, comparison scenarios, discriminators and the routing digest are unchanged; the rerun makes no new capability claim.",
           "changedInputs": [
             "tests/Catch2Main.cpp"
-          ]
+          ],
+          "supersededHarnessOnlyRebind": {
+            "recordedAt": "2026-11-11T10:48:59Z",
+            "commit": "d34fc1b30960f598f5ec059f1c82c8791cf85ef4",
+            "reason": "The shared Catch2 runner now resolves its isolation root from TMPDIR and exposes it for the isolation regression; this receipt's exact selection, row mapping and JUnit are unchanged and were not rerun for this harness-only change.",
+            "supersededBy": "docs/research/pi-v1.3.0/deliveries/1186-chord-typed-json-revalidation-test-tmp-root.xml"
+          },
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-L",
+              "chord",
+              "--no-tests=error",
+              "--output-on-failure",
+              "-j",
+              "1",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1186-revalidation-upstream-71ad3e83a.xml"
+            ],
+            "testedRevision": "c8abe71ba4e8cb988a987ca9337d252acf3c2fe5",
+            "recordedAt": "2026-11-11T07:25:43Z",
+            "selected": 104,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1186-revalidation-upstream-71ad3e83a.xml",
+              "sha256": "ad649941179e533ead6265d4002fd347ea01dfac9f6bcb29ac20fee3eca3d050"
+            }
+          }
         }
       },
       {
@@ -8338,14 +8505,14 @@
             "-j",
             "1",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1188-revalidation-upstream-71ad3e83a.xml"
+            "docs/research/pi-v1.3.0/deliveries/1188-chord-observer-serialization-revalidation-test-tmp-root.xml"
           ],
-          "testedRevision": "c8abe71ba4e8cb988a987ca9337d252acf3c2fe5",
-          "recordedAt": "2026-11-11T07:25:43Z",
+          "testedRevision": "2ea9ae1c360f2a3221fd1dcf5326bf2ac471627a",
+          "recordedAt": "2026-11-11T11:30:58Z",
           "selected": 104,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1188-revalidation-upstream-71ad3e83a.xml",
-            "sha256": "92bfe2775d69cdb1eabb8a4d36d6c82fb2b22d424a442bb6394843171f4f5aaa"
+            "path": "docs/research/pi-v1.3.0/deliveries/1188-chord-observer-serialization-revalidation-test-tmp-root.xml",
+            "sha256": "565e6e114115fa7e00c4dc09e316f145883d26775710c7f0c4d92b69c6d2ee12"
           }
         },
         "rows": [
@@ -9278,10 +9445,38 @@
           }
         },
         "revalidationTestTmpRoot": {
-          "reason": "The shared Catch2 runner now resolves its isolation root from TMPDIR and exposes it for the isolation regression; this receipt's exact selection, row mapping and JUnit are unchanged and were not rerun for this harness-only change.",
+          "reason": "Harness-only rebind superseded by an actual rerun. The shared Catch2 runner resolves its isolation root from TMPDIR instead of /tmp and exposes the resolved base for the isolation regression; this receipt's exact 104-case selection from validation.command was rerun on the same checkout base plus the changed tests/Catch2Main.cpp input, keeping its byte selection verbatim, into 1188-chord-observer-serialization-revalidation-test-tmp-root.xml: 104 selected, 104 passed, 0 skipped, 0 failed, 0.58 s wall. This receipt's JUnit again corresponds to the test bytes its inputs pin. The intermediate harness-only rebind that refreshed the input digest and kept the previous JUnit is retained under supersededHarnessOnlyRebind. Rows, comparison scenarios, discriminators and the routing digest are unchanged; the rerun makes no new capability claim.",
           "changedInputs": [
             "tests/Catch2Main.cpp"
-          ]
+          ],
+          "supersededHarnessOnlyRebind": {
+            "recordedAt": "2026-11-11T10:48:59Z",
+            "commit": "d34fc1b30960f598f5ec059f1c82c8791cf85ef4",
+            "reason": "The shared Catch2 runner now resolves its isolation root from TMPDIR and exposes it for the isolation regression; this receipt's exact selection, row mapping and JUnit are unchanged and were not rerun for this harness-only change.",
+            "supersededBy": "docs/research/pi-v1.3.0/deliveries/1188-chord-observer-serialization-revalidation-test-tmp-root.xml"
+          },
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-L",
+              "chord",
+              "--no-tests=error",
+              "--output-on-failure",
+              "-j",
+              "1",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1188-revalidation-upstream-71ad3e83a.xml"
+            ],
+            "testedRevision": "c8abe71ba4e8cb988a987ca9337d252acf3c2fe5",
+            "recordedAt": "2026-11-11T07:25:43Z",
+            "selected": 104,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1188-revalidation-upstream-71ad3e83a.xml",
+              "sha256": "92bfe2775d69cdb1eabb8a4d36d6c82fb2b22d424a442bb6394843171f4f5aaa"
+            }
+          }
         }
       },
       {
@@ -9304,14 +9499,14 @@
             "-j",
             "1",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1187-revalidation-upstream-71ad3e83a.xml"
+            "docs/research/pi-v1.3.0/deliveries/1187-chord-progress-pacing-revalidation-test-tmp-root.xml"
           ],
-          "testedRevision": "c8abe71ba4e8cb988a987ca9337d252acf3c2fe5",
-          "recordedAt": "2026-11-11T07:25:07Z",
+          "testedRevision": "2ea9ae1c360f2a3221fd1dcf5326bf2ac471627a",
+          "recordedAt": "2026-11-11T11:30:58Z",
           "selected": 4,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1187-revalidation-upstream-71ad3e83a.xml",
-            "sha256": "99b42719d9294c7807f1ebfbaa6b6cf1bc7fabef579b89132d6aefecada3103a"
+            "path": "docs/research/pi-v1.3.0/deliveries/1187-chord-progress-pacing-revalidation-test-tmp-root.xml",
+            "sha256": "738327ad78f98a892504381b7817048abf2a4aee9ed43f2c46673faba1a56d41"
           }
         },
         "inputs": [
@@ -9556,10 +9751,38 @@
           }
         },
         "revalidationTestTmpRoot": {
-          "reason": "The shared Catch2 runner now resolves its isolation root from TMPDIR and exposes it for the isolation regression; this receipt's exact selection, row mapping and JUnit are unchanged and were not rerun for this harness-only change.",
+          "reason": "Harness-only rebind superseded by an actual rerun. The shared Catch2 runner resolves its isolation root from TMPDIR instead of /tmp and exposes the resolved base for the isolation regression; this receipt's exact 4-case selection from validation.command was rerun on the same checkout base plus the changed tests/Catch2Main.cpp input, keeping its byte selection verbatim, into 1187-chord-progress-pacing-revalidation-test-tmp-root.xml: 4 selected, 4 passed, 0 skipped, 0 failed, 0.16 s wall. This receipt's JUnit again corresponds to the test bytes its inputs pin. The intermediate harness-only rebind that refreshed the input digest and kept the previous JUnit is retained under supersededHarnessOnlyRebind. Rows, comparison scenarios, discriminators and the routing digest are unchanged; the rerun makes no new capability claim.",
           "changedInputs": [
             "tests/Catch2Main.cpp"
-          ]
+          ],
+          "supersededHarnessOnlyRebind": {
+            "recordedAt": "2026-11-11T10:48:59Z",
+            "commit": "d34fc1b30960f598f5ec059f1c82c8791cf85ef4",
+            "reason": "The shared Catch2 runner now resolves its isolation root from TMPDIR and exposes it for the isolation regression; this receipt's exact selection, row mapping and JUnit are unchanged and were not rerun for this harness-only change.",
+            "supersededBy": "docs/research/pi-v1.3.0/deliveries/1187-chord-progress-pacing-revalidation-test-tmp-root.xml"
+          },
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-L",
+              "issue1187",
+              "--no-tests=error",
+              "--output-on-failure",
+              "-j",
+              "1",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1187-revalidation-upstream-71ad3e83a.xml"
+            ],
+            "testedRevision": "c8abe71ba4e8cb988a987ca9337d252acf3c2fe5",
+            "recordedAt": "2026-11-11T07:25:07Z",
+            "selected": 4,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1187-revalidation-upstream-71ad3e83a.xml",
+              "sha256": "99b42719d9294c7807f1ebfbaa6b6cf1bc7fabef579b89132d6aefecada3103a"
+            }
+          }
         }
       },
       {
@@ -9581,14 +9804,14 @@
             "-j",
             "1",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1182-revalidation-upstream-71ad3e83a.xml"
+            "docs/research/pi-v1.3.0/deliveries/1182-tui-comparisons-revalidation-test-tmp-root.xml"
           ],
-          "testedRevision": "c8abe71ba4e8cb988a987ca9337d252acf3c2fe5",
-          "recordedAt": "2026-11-11T07:25:34Z",
+          "testedRevision": "2ea9ae1c360f2a3221fd1dcf5326bf2ac471627a",
+          "recordedAt": "2026-11-11T11:31:06Z",
           "selected": 13,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1182-revalidation-upstream-71ad3e83a.xml",
-            "sha256": "ffcf17753c43ddf6a6692ee8472506120c1b4cbca6ef5028f56a2744ceff4330"
+            "path": "docs/research/pi-v1.3.0/deliveries/1182-tui-comparisons-revalidation-test-tmp-root.xml",
+            "sha256": "50936ddd0bd03f33da2619e023fb4f9ed48ed6d9a36cfdcd60c9b909f20907b3"
           }
         },
         "rows": [
@@ -10657,10 +10880,38 @@
           }
         },
         "revalidationTestTmpRoot": {
-          "reason": "The shared Catch2 runner now resolves its isolation root from TMPDIR and exposes it for the isolation regression; this receipt's exact selection, row mapping and JUnit are unchanged and were not rerun for this harness-only change.",
+          "reason": "Harness-only rebind superseded by an actual rerun. The shared Catch2 runner resolves its isolation root from TMPDIR instead of /tmp and exposes the resolved base for the isolation regression; this receipt's exact 13-case selection from validation.command was rerun on the same checkout base plus the changed tests/Catch2Main.cpp input, keeping its byte selection verbatim, into 1182-tui-comparisons-revalidation-test-tmp-root.xml: 13 selected, 13 passed, 0 skipped, 0 failed, 8.12 s wall. This receipt's JUnit again corresponds to the test bytes its inputs pin. The intermediate harness-only rebind that refreshed the input digest and kept the previous JUnit is retained under supersededHarnessOnlyRebind. Rows, comparison scenarios, discriminators and the routing digest are unchanged; the rerun makes no new capability claim.",
           "changedInputs": [
             "tests/Catch2Main.cpp"
-          ]
+          ],
+          "supersededHarnessOnlyRebind": {
+            "recordedAt": "2026-11-11T10:48:59Z",
+            "commit": "d34fc1b30960f598f5ec059f1c82c8791cf85ef4",
+            "reason": "The shared Catch2 runner now resolves its isolation root from TMPDIR and exposes it for the isolation regression; this receipt's exact selection, row mapping and JUnit are unchanged and were not rerun for this harness-only change.",
+            "supersededBy": "docs/research/pi-v1.3.0/deliveries/1182-tui-comparisons-revalidation-test-tmp-root.xml"
+          },
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-L",
+              "issue1182",
+              "--no-tests=error",
+              "--output-on-failure",
+              "-j",
+              "1",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1182-revalidation-upstream-71ad3e83a.xml"
+            ],
+            "testedRevision": "c8abe71ba4e8cb988a987ca9337d252acf3c2fe5",
+            "recordedAt": "2026-11-11T07:25:34Z",
+            "selected": 13,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1182-revalidation-upstream-71ad3e83a.xml",
+              "sha256": "ffcf17753c43ddf6a6692ee8472506120c1b4cbca6ef5028f56a2744ceff4330"
+            }
+          }
         }
       },
       {
@@ -11835,16 +12086,16 @@
             "^(Remote deterministic execution applies reversed answers by result number|Remote deterministic execution runs the script remotely and answers through deliver|RemoteCodemodeSandbox batches output instead of making one exchange per line|RemoteCodemodeSandbox caps the interrupt budget and memory at the remote's limits|RemoteCodemodeSandbox discriminating abort check: does not block on slow remote exit|RemoteCodemodeSandbox reports failing, silent or unreachable remote as sandbox error with transport reason|RemoteCodemodeSandbox runs tools in the caller and the script on the remote|RemoteCodemodeSandbox tells the remote to stop when caller aborts and settles immediately|a normal codemode run is not deterministic while start is|a public codemode caller aborting while a tool waits keeps partial output and cancels the call|a public codemode caller applies reversed answers by result number not arrival order|a public codemode caller binds a dotted global into its frozen namespace and spreads arguments|a public codemode caller catches unknown tools and thrown tool errors with error call status|a public codemode caller collects mixed output in order with the console marker and image MIME|a public codemode caller counts the interrupt budget across tool waits|a public codemode caller fails the run when the guest hits its output item limit|a public codemode caller gets UTC and no WeakRef in a deterministic run|a public codemode caller gets an uncatchable abort and a cancelled record in a deterministic run|a public codemode caller gets during for the result the VM was processing when the script ended|a public codemode caller gets illegal start options refused before any VM exists|a public codemode caller gets the fingerprint before the first call and a reused result number is refused|a public codemode caller keeps a call waiting when its answer cannot be serialized|a public codemode caller numbers globals with tools and gets rejection properties on the script Error|a public codemode caller reads a store snapshot across calls and drops failed writes|a public codemode caller records an unawaited call as cancelled and aborts it|a public codemode caller records settled calls with ok and error statuses|a public codemode caller rejects a reused result number a non-finite clock and an unknown call deterministically|a public codemode caller rejects invalid globals at construction with the frozen errors|a public codemode caller replays a deterministic run from the same start seed and answers|a public codemode caller reports a pre-aborted run with the abort reason and never starts it|a public codemode caller reports a script error with its name message stack and prior output|a public codemode caller reports guest memory exhaustion as an out-of-memory script error|a public codemode caller reports non-Error throws BigInt returns and syntax errors as script errors|a public codemode caller reports the deadline when a tool waits past it and keeps partial output|a public codemode caller returns its value and text output from a successful budgeted run|a public codemode caller sees a seed mismatch change randomness without changing the start time|a public codemode caller stops pure computation with the interrupt budget, not the deadline|a public codemode caller stringifies text and accepts image blocks with the frozen type errors|a public codemode caller treats exit\\(\\) as success with prior output and the write set|a run-supplied jsName overrides the derived script name|an over-limit script is interrupted with a timeout error|codemode worker admission follows wasm load and releases a failed start once|codemode worker results settle before exit while admission stays bounded|the public codemode declaration covers the frozen schema renderings|the public codemode declaration groups tools globals and namespaces with doc comments|the public codemode declaration preserves the relocated tool identifiers|the public codemode declaration renders frozen schema types|the public codemode declaration renders frozen tool signatures samples and blocks|the public codemode prelude is the frozen sandbox prelude with output and store limits|the public codemode source parser keeps only a first-line options command|the public codemode source parser rejects a misplaced options line with its line number|the public codemode source parser rejects invalid options and empty input with typed errors)$",
             "--no-tests=error",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1179-revalidation-1232-frame-join.xml",
+            "docs/research/pi-v1.3.0/deliveries/1179-codemode-comparisons-revalidation-test-tmp-root.xml",
             "-j",
             "1"
           ],
-          "testedRevision": "44d0fa5c1d52bb834a54b812265b250424ba6844",
-          "recordedAt": "2026-11-11T06:53:11Z",
+          "testedRevision": "2ea9ae1c360f2a3221fd1dcf5326bf2ac471627a",
+          "recordedAt": "2026-11-11T11:32:54Z",
           "selected": 52,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1179-revalidation-1232-frame-join.xml",
-            "sha256": "4fd7317c7fa575a3eff73723fe5956d06c4a62e24291bc64925bbff0e6736fa9"
+            "path": "docs/research/pi-v1.3.0/deliveries/1179-codemode-comparisons-revalidation-test-tmp-root.xml",
+            "sha256": "7fa7cda0c893d0d8c18dfb8e33268534feb8c85b6c4d9f87c41feceedeba0b56"
           }
         },
         "revalidation1179m": {
@@ -12533,10 +12784,37 @@
           }
         },
         "revalidationTestTmpRoot": {
-          "reason": "The shared Catch2 runner now resolves its isolation root from TMPDIR and exposes it for the isolation regression; this receipt's exact selection, row mapping and JUnit are unchanged and were not rerun for this harness-only change.",
+          "reason": "Harness-only rebind superseded by an actual rerun. The shared Catch2 runner resolves its isolation root from TMPDIR instead of /tmp and exposes the resolved base for the isolation regression; this receipt's exact 52-case selection from validation.command was rerun on the same checkout base plus the changed tests/Catch2Main.cpp input, keeping its byte selection verbatim, into 1179-codemode-comparisons-revalidation-test-tmp-root.xml: 52 selected, 52 passed, 0 skipped, 0 failed, 107.4 s wall. This receipt's JUnit again corresponds to the test bytes its inputs pin. The intermediate harness-only rebind that refreshed the input digest and kept the previous JUnit is retained under supersededHarnessOnlyRebind. Rows, comparison scenarios, discriminators and the routing digest are unchanged; the rerun makes no new capability claim.",
           "changedInputs": [
             "tests/Catch2Main.cpp"
-          ]
+          ],
+          "supersededHarnessOnlyRebind": {
+            "recordedAt": "2026-11-11T10:48:59Z",
+            "commit": "d34fc1b30960f598f5ec059f1c82c8791cf85ef4",
+            "reason": "The shared Catch2 runner now resolves its isolation root from TMPDIR and exposes it for the isolation regression; this receipt's exact selection, row mapping and JUnit are unchanged and were not rerun for this harness-only change.",
+            "supersededBy": "docs/research/pi-v1.3.0/deliveries/1179-codemode-comparisons-revalidation-test-tmp-root.xml"
+          },
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-R",
+              "^(Remote deterministic execution applies reversed answers by result number|Remote deterministic execution runs the script remotely and answers through deliver|RemoteCodemodeSandbox batches output instead of making one exchange per line|RemoteCodemodeSandbox caps the interrupt budget and memory at the remote's limits|RemoteCodemodeSandbox discriminating abort check: does not block on slow remote exit|RemoteCodemodeSandbox reports failing, silent or unreachable remote as sandbox error with transport reason|RemoteCodemodeSandbox runs tools in the caller and the script on the remote|RemoteCodemodeSandbox tells the remote to stop when caller aborts and settles immediately|a normal codemode run is not deterministic while start is|a public codemode caller aborting while a tool waits keeps partial output and cancels the call|a public codemode caller applies reversed answers by result number not arrival order|a public codemode caller binds a dotted global into its frozen namespace and spreads arguments|a public codemode caller catches unknown tools and thrown tool errors with error call status|a public codemode caller collects mixed output in order with the console marker and image MIME|a public codemode caller counts the interrupt budget across tool waits|a public codemode caller fails the run when the guest hits its output item limit|a public codemode caller gets UTC and no WeakRef in a deterministic run|a public codemode caller gets an uncatchable abort and a cancelled record in a deterministic run|a public codemode caller gets during for the result the VM was processing when the script ended|a public codemode caller gets illegal start options refused before any VM exists|a public codemode caller gets the fingerprint before the first call and a reused result number is refused|a public codemode caller keeps a call waiting when its answer cannot be serialized|a public codemode caller numbers globals with tools and gets rejection properties on the script Error|a public codemode caller reads a store snapshot across calls and drops failed writes|a public codemode caller records an unawaited call as cancelled and aborts it|a public codemode caller records settled calls with ok and error statuses|a public codemode caller rejects a reused result number a non-finite clock and an unknown call deterministically|a public codemode caller rejects invalid globals at construction with the frozen errors|a public codemode caller replays a deterministic run from the same start seed and answers|a public codemode caller reports a pre-aborted run with the abort reason and never starts it|a public codemode caller reports a script error with its name message stack and prior output|a public codemode caller reports guest memory exhaustion as an out-of-memory script error|a public codemode caller reports non-Error throws BigInt returns and syntax errors as script errors|a public codemode caller reports the deadline when a tool waits past it and keeps partial output|a public codemode caller returns its value and text output from a successful budgeted run|a public codemode caller sees a seed mismatch change randomness without changing the start time|a public codemode caller stops pure computation with the interrupt budget, not the deadline|a public codemode caller stringifies text and accepts image blocks with the frozen type errors|a public codemode caller treats exit\\(\\) as success with prior output and the write set|a run-supplied jsName overrides the derived script name|an over-limit script is interrupted with a timeout error|codemode worker admission follows wasm load and releases a failed start once|codemode worker results settle before exit while admission stays bounded|the public codemode declaration covers the frozen schema renderings|the public codemode declaration groups tools globals and namespaces with doc comments|the public codemode declaration preserves the relocated tool identifiers|the public codemode declaration renders frozen schema types|the public codemode declaration renders frozen tool signatures samples and blocks|the public codemode prelude is the frozen sandbox prelude with output and store limits|the public codemode source parser keeps only a first-line options command|the public codemode source parser rejects a misplaced options line with its line number|the public codemode source parser rejects invalid options and empty input with typed errors)$",
+              "--no-tests=error",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1179-revalidation-1232-frame-join.xml",
+              "-j",
+              "1"
+            ],
+            "testedRevision": "44d0fa5c1d52bb834a54b812265b250424ba6844",
+            "recordedAt": "2026-11-11T06:53:11Z",
+            "selected": 52,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1179-revalidation-1232-frame-join.xml",
+              "sha256": "4fd7317c7fa575a3eff73723fe5956d06c4a62e24291bc64925bbff0e6736fa9"
+            }
+          }
         }
       },
       {
@@ -12644,14 +12922,14 @@
             "-j",
             "1",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1176-revalidation-upstream-71ad3e83a.xml"
+            "docs/research/pi-v1.3.0/deliveries/1176-agent-comparisons-revalidation-test-tmp-root.xml"
           ],
-          "testedRevision": "c8abe71ba4e8cb988a987ca9337d252acf3c2fe5",
-          "recordedAt": "2026-11-11T07:25:23Z",
+          "testedRevision": "2ea9ae1c360f2a3221fd1dcf5326bf2ac471627a",
+          "recordedAt": "2026-11-11T11:32:54Z",
           "selected": 5,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1176-revalidation-upstream-71ad3e83a.xml",
-            "sha256": "39eaa2fbc3d3547705a0caff27aa4bffcd4b702422a85431f008481f845c7ab8"
+            "path": "docs/research/pi-v1.3.0/deliveries/1176-agent-comparisons-revalidation-test-tmp-root.xml",
+            "sha256": "f00f81d5902378ece2d6f79edc8f757c93c833076eb292658989b57c3784ee6a"
           }
         },
         "rows": [
@@ -13317,10 +13595,38 @@
           }
         },
         "revalidationTestTmpRoot": {
-          "reason": "The shared Catch2 runner now resolves its isolation root from TMPDIR and exposes it for the isolation regression; this receipt's exact selection, row mapping and JUnit are unchanged and were not rerun for this harness-only change.",
+          "reason": "Harness-only rebind superseded by an actual rerun. The shared Catch2 runner resolves its isolation root from TMPDIR instead of /tmp and exposes the resolved base for the isolation regression; this receipt's exact 5-case selection from validation.command was rerun on the same checkout base plus the changed tests/Catch2Main.cpp input, keeping its byte selection verbatim, into 1176-agent-comparisons-revalidation-test-tmp-root.xml: 5 selected, 5 passed, 0 skipped, 0 failed, 0.17 s wall. This receipt's JUnit again corresponds to the test bytes its inputs pin. The intermediate harness-only rebind that refreshed the input digest and kept the previous JUnit is retained under supersededHarnessOnlyRebind. Rows, comparison scenarios, discriminators and the routing digest are unchanged; the rerun makes no new capability claim.",
           "changedInputs": [
             "tests/Catch2Main.cpp"
-          ]
+          ],
+          "supersededHarnessOnlyRebind": {
+            "recordedAt": "2026-11-11T10:48:59Z",
+            "commit": "d34fc1b30960f598f5ec059f1c82c8791cf85ef4",
+            "reason": "The shared Catch2 runner now resolves its isolation root from TMPDIR and exposes it for the isolation regression; this receipt's exact selection, row mapping and JUnit are unchanged and were not rerun for this harness-only change.",
+            "supersededBy": "docs/research/pi-v1.3.0/deliveries/1176-agent-comparisons-revalidation-test-tmp-root.xml"
+          },
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-R",
+              "^(reset restores the System Message baseline and clears queues while retaining live policy|run_tool_call executes successfully and records execute-only duration|run_tool_call returns error outcome for blocked tool call without executing|stateful Agent queue peek prefers steering and clear removes both queues|stateful Agent rejects a second prompt while its active run is suspended)$",
+              "--no-tests=error",
+              "--output-on-failure",
+              "-j",
+              "1",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1176-revalidation-upstream-71ad3e83a.xml"
+            ],
+            "testedRevision": "c8abe71ba4e8cb988a987ca9337d252acf3c2fe5",
+            "recordedAt": "2026-11-11T07:25:23Z",
+            "selected": 5,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1176-revalidation-upstream-71ad3e83a.xml",
+              "sha256": "39eaa2fbc3d3547705a0caff27aa4bffcd4b702422a85431f008481f845c7ab8"
+            }
+          }
         }
       },
       {
@@ -13444,14 +13750,14 @@
             "-j",
             "1",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1177-revalidation-upstream-71ad3e83a.xml"
+            "docs/research/pi-v1.3.0/deliveries/1177-application-comparisons-revalidation-test-tmp-root.xml"
           ],
-          "testedRevision": "c8abe71ba4e8cb988a987ca9337d252acf3c2fe5",
-          "recordedAt": "2026-11-11T07:25:26Z",
+          "testedRevision": "2ea9ae1c360f2a3221fd1dcf5326bf2ac471627a",
+          "recordedAt": "2026-11-11T11:32:57Z",
           "selected": 9,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1177-revalidation-upstream-71ad3e83a.xml",
-            "sha256": "487e840f14ae7747e424a932838a743583abf638e1d4418745f4945891a1d82e"
+            "path": "docs/research/pi-v1.3.0/deliveries/1177-application-comparisons-revalidation-test-tmp-root.xml",
+            "sha256": "33f733520fbb4da9b33da5ce5ea5fd29ef01be92d643fa65315ee4bbc24e2f53"
           }
         },
         "rows": [
@@ -14148,10 +14454,38 @@
           }
         },
         "revalidationTestTmpRoot": {
-          "reason": "The shared Catch2 runner now resolves its isolation root from TMPDIR and exposes it for the isolation regression; this receipt's exact selection, row mapping and JUnit are unchanged and were not rerun for this harness-only change.",
+          "reason": "Harness-only rebind superseded by an actual rerun. The shared Catch2 runner resolves its isolation root from TMPDIR instead of /tmp and exposes the resolved base for the isolation regression; this receipt's exact 9-case selection from validation.command was rerun on the same checkout base plus the changed tests/Catch2Main.cpp input, keeping its byte selection verbatim, into 1177-application-comparisons-revalidation-test-tmp-root.xml: 9 selected, 9 passed, 0 skipped, 0 failed, 2.81 s wall. This receipt's JUnit again corresponds to the test bytes its inputs pin. The intermediate harness-only rebind that refreshed the input digest and kept the previous JUnit is retained under supersededHarnessOnlyRebind. Rows, comparison scenarios, discriminators and the routing digest are unchanged; the rerun makes no new capability claim.",
           "changedInputs": [
             "tests/Catch2Main.cpp"
-          ]
+          ],
+          "supersededHarnessOnlyRebind": {
+            "recordedAt": "2026-11-11T10:48:59Z",
+            "commit": "d34fc1b30960f598f5ec059f1c82c8791cf85ef4",
+            "reason": "The shared Catch2 runner now resolves its isolation root from TMPDIR and exposes it for the isolation regression; this receipt's exact selection, row mapping and JUnit are unchanged and were not rerun for this harness-only change.",
+            "supersededBy": "docs/research/pi-v1.3.0/deliveries/1177-application-comparisons-revalidation-test-tmp-root.xml"
+          },
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-R",
+              "^(a\\ real\\ session's\\ next\\ request\\ lists\\ MCP\\ tools\\ registered\\ late\\ and\\ executes\\ them|a\\ settings\\ document\\ the\\ schema\\ accepts\\ reshapes\\ the\\ request\\ and\\ reload\\ re\\-reads\\ it|an\\ inline\\ budget\\ omits\\ a\\ namespace's\\ tools\\ with\\ pi's\\ marker|disabling\\ a\\ server\\ and\\ changing\\ its\\ exposure\\ reshape\\ the\\ next\\ request's\\ catalog|namespaces\\ group\\ sections\\ and\\ the\\ inline\\ budget\\ omits\\ tools\\ with\\ an\\ explicit\\ marker|the\\ empty\\ codemode\\ catalog\\ matches\\ the\\ frozen\\ pi\\-v1\\.3\\.0\\ description|the\\ on\\ loadout\\ lists\\ only\\ non\\-direct\\ callable\\ tools\\ and\\ adds\\ script\\-call\\ descriptions|the\\ only\\ loadout\\ lists\\ every\\ callable\\ tool\\ and\\ hides\\ direct\\ declarations|the\\ theme\\ token\\ set\\ matches\\ the\\ frozen\\ pi\\-v1\\.3\\.0\\ capture)$",
+              "--no-tests=error",
+              "--output-on-failure",
+              "-j",
+              "1",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1177-revalidation-upstream-71ad3e83a.xml"
+            ],
+            "testedRevision": "c8abe71ba4e8cb988a987ca9337d252acf3c2fe5",
+            "recordedAt": "2026-11-11T07:25:26Z",
+            "selected": 9,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1177-revalidation-upstream-71ad3e83a.xml",
+              "sha256": "487e840f14ae7747e424a932838a743583abf638e1d4418745f4945891a1d82e"
+            }
+          }
         }
       },
       {
