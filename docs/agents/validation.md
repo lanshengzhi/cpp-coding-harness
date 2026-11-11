@@ -58,7 +58,7 @@ ctest --preset vcpkg
 
 Two environment preconditions cause otherwise-green full runs to fail:
 
-- **Lane lock.** While a code lane holds the checkout, the consolidation CTest cases refuse to run unless the caller proves its lane. Prefix the test command with `CCH_LANE_NAME=<lane>` (for example `CCH_LANE_NAME=lane-1221 ctest --preset vcpkg`); acquire and release the lock with `scripts/dev/lane-lock.sh` as described in [ops-lanes](../wiki/pi-alignment/ops-lanes.md).
+- **Lane lock.** While a code lane holds the checkout, the consolidation CTest cases refuse to run unless the caller proves its lane. Run the command through `scripts/dev/with-lane.sh <lane> -- <command>`, which acquires the lock, exports `CCH_LANE_NAME=<lane>` to the command and its descendants, and releases the lock on exit or HUP/INT/TERM. A hand-managed hold must prefix each command with `CCH_LANE_NAME=<lane>` itself and release with `scripts/dev/lane-lock.sh`; see [ops-lanes](../wiki/pi-alignment/ops-lanes.md).
 - **Herdr PTY case.** `real PTY records Herdr markdown and OSC 52 terminal bytes` is selected by `TERM_PROGRAM=herdr`. Full-suite runs on this host set it; without it the case fails its host precondition, not a code assertion.
 
 ### Formatting gate

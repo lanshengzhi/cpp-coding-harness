@@ -26,6 +26,7 @@ Shared historical record for aligning Pike with upstream pi. Created 2026-11-04 
 - [Ops: lanes and concurrency](ops-lanes.md): lane types, the one-code-lane rule, handoff protocol, and the 2026-11-05 collision record.
 - [Lane preflight: design](lane-preflight-design-2026-11-09.md): the read-only preflight checks, why Git states it refuses to call clean, and the 2026-11-09 design adjustments.
 - [Lane preflight: usage](lane-preflight-usage-2026-11-09.md): how to run the preflight checks, its CLI surface, and the recorded focused and full-suite results.
+- [Lane preflight receipt drift and the lane wrapper, 2026-11-11](lane-preflight-improvements-2026-11-11.md): the three drift classes and their read-only promise, the wrapper that acquires, exports and releases the lane lock as one step, the CI job extension, the measured tests, and why earlier detection still does not replace a reviewed rebind.
 
 ## Sources and maintenance
 - [Source map](sources.md): ADRs, research records and agent docs to read first, with their known quirks.
