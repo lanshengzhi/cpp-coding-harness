@@ -232,7 +232,7 @@ struct DaemonClient {
             int (*pipe_call)(int*) = ::pipe,
             pid_t (*fork_call)() = ::fork,
             pid_t (*wait_call)(pid_t, int*, int) = ::waitpid)
-            : wait_call_(wait_call) {
+        : wait_call_(wait_call) {
         int in_pipe[2], out_pipe[2];
         if (pipe_call(in_pipe) != 0) return;
         cch::support::UniqueFd in_read(in_pipe[0]);
@@ -635,8 +635,8 @@ TEST_CASE("DaemonClient owns parent pipe ends until destruction", "[durable][iss
         // Reaping is asserted by the dedicated cases; an already reaped child is
         // no longer this process's to wait for.
         int daemon_status = 0;
-        const bool reaped = controlled_child > 0 && ::waitpid(controlled_child, &daemon_status, WNOHANG) == -1 &&
-                            errno == ECHILD;
+        const bool reaped =
+                controlled_child > 0 && ::waitpid(controlled_child, &daemon_status, WNOHANG) == -1 && errno == ECHILD;
         _exit(owned && closed && reaped ? 0 : 1);
     }
     int status = 0;
@@ -656,8 +656,7 @@ TEST_CASE("DaemonClient reaps its daemon so no zombie remains", "[durable][issue
             daemon_pid = daemon.alive() ? controlled_child : -1;
         }
         int daemon_status = 0;
-        const bool reaped = daemon_pid > 0 && ::waitpid(daemon_pid, &daemon_status, WNOHANG) == -1 &&
-                            errno == ECHILD;
+        const bool reaped = daemon_pid > 0 && ::waitpid(daemon_pid, &daemon_status, WNOHANG) == -1 && errno == ECHILD;
         _exit(reaped ? 0 : 1);
     }
     int status = 0;
@@ -666,8 +665,7 @@ TEST_CASE("DaemonClient reaps its daemon so no zombie remains", "[durable][issue
     CHECK(WEXITSTATUS(status) == 0);
 }
 
-TEST_CASE("DaemonClient retries an interrupted wait instead of leaving the daemon unreaped",
-        "[durable][issue1232]") {
+TEST_CASE("DaemonClient retries an interrupted wait instead of leaving the daemon unreaped", "[durable][issue1232]") {
     const pid_t child = ::fork();
     REQUIRE(child >= 0);
     if (child == 0) {
@@ -683,8 +681,8 @@ TEST_CASE("DaemonClient retries an interrupted wait instead of leaving the daemo
         // One interrupted call plus one successful call, and destruction must
         // not wait for a child that was already reaped.
         const bool retried = wait_calls == 2;
-        const bool gone = controlled_child > 0 && ::waitpid(controlled_child, &daemon_status, WNOHANG) == -1 &&
-                          errno == ECHILD;
+        const bool gone =
+                controlled_child > 0 && ::waitpid(controlled_child, &daemon_status, WNOHANG) == -1 && errno == ECHILD;
         _exit(reaped && retried && gone ? 0 : 1);
     }
     int status = 0;
@@ -715,8 +713,8 @@ TEST_CASE("DaemonClient reaps a daemon that exited before destruction", "[durabl
             idempotent = !daemon.close_and_reap().has_value();
         }
         int daemon_status = 0;
-        const bool gone = controlled_child > 0 && ::waitpid(controlled_child, &daemon_status, WNOHANG) == -1 &&
-                          errno == ECHILD;
+        const bool gone =
+                controlled_child > 0 && ::waitpid(controlled_child, &daemon_status, WNOHANG) == -1 && errno == ECHILD;
         _exit(alive && status_ok && idempotent && gone ? 0 : 1);
     }
     int status = 0;
@@ -772,8 +770,7 @@ TEST_CASE("DaemonClient's daemon observes stdin EOF and exits", "[durable][issue
     // SIGALRM (0x000e) means the probe waited out its alarm: the daemon never
     // observed the client's stdin EOF.
     if (!WIFEXITED(status)) {
-        FAIL_CHECK(std::format("daemon client probe was stopped by signal {} instead of exiting",
-                WTERMSIG(status)));
+        FAIL_CHECK(std::format("daemon client probe was stopped by signal {} instead of exiting", WTERMSIG(status)));
         return;
     }
     CHECK(WEXITSTATUS(status) == 0);
