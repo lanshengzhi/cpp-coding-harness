@@ -4,19 +4,23 @@ include_guard(GLOBAL)
 
 # Reusable codemode sandbox, source grammar and declaration rendering (pi
 # `packages/codemode`). It owns no application Session or tool-registry
-# integration; coding-agent and durable call it directly.
+# integration; coding-agent and durable call it directly. The source list is
+# shared with the #1232 test-only variant in cmake/tests/CodemodeTests.cmake so
+# the variant cannot silently drift from the production translation units.
+set(CCH_CODEMODE_SOURCES
+    src/codemode/Declarations.cpp
+    src/codemode/Deterministic.cpp
+    src/codemode/Guest.cpp
+    src/codemode/Remote.cpp
+    src/codemode/Sandbox.cpp
+    src/codemode/Shared.cpp
+    src/codemode/Source.cpp
+)
 cch_parity_declare_target(
     TARGET cch_codemode
     ROLE owner
     OWNER cch_codemode
-    SOURCES
-        src/codemode/Declarations.cpp
-        src/codemode/Deterministic.cpp
-        src/codemode/Guest.cpp
-        src/codemode/Remote.cpp
-        src/codemode/Sandbox.cpp
-        src/codemode/Shared.cpp
-        src/codemode/Source.cpp
+    SOURCES ${CCH_CODEMODE_SOURCES}
     DEPENDS
         cch_ai
         cch_support

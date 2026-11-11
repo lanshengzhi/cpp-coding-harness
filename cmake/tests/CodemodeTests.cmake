@@ -10,29 +10,99 @@ include_guard(GLOBAL)
         tests/codemode/CodemodeOwnerTest.cpp
         tests/codemode/CodemodeRemoteTest.cpp
         tests/codemode/RemoteWorkerLifetimeTest.cpp
-        tests/codemode/RemoteWithTestHooks.cpp
 )
     target_include_directories(cch_tests_codemode PRIVATE ${CCH_FORMAL_TEST_INCLUDE_DIRS})
-    target_link_libraries(cch_tests_codemode
-        PRIVATE
-            cch_codemode
-            Catch2::Catch2
-)
     target_compile_definitions(cch_tests_codemode PRIVATE
+        CCH_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
+)
+    target_compile_options(cch_tests_codemode PRIVATE ${CCH_WARNING_OPTIONS})
+
+    # #1232 compiles the codemode owner a second time for the lifetime case with
+    # its test-only worker gate enabled. This is a real static library, so the
+    # test executable links exactly one codemode implementation instead of the
+    # production archive plus an included translation unit. The variant compiles
+    # configure-time copies of the same source list: compiling a production
+    # source path twice would violate the Parity Gate's
+    # RULE_DUPLICATE_SOURCE_COMPILATION, and an `#include` wrapper would instead
+    # reintroduce the GCC -Wsubobject-linkage diagnostic that an included
+    # Remote.cpp triggers. A copied source is its own translation unit, so the
+    # production path still compiles exactly once and the variant stays free of
+    # warning suppressions. The copies live under the build tree and are never
+    # part of the production archive.
+    set(cch_codemode_variant_dir "${CMAKE_CURRENT_BINARY_DIR}/codemode_test_variant")
+    set(cch_codemode_variant_sources "")
+    foreach(cch_codemode_source IN LISTS CCH_CODEMODE_SOURCES)
+        set(cch_codemode_variant_source "${cch_codemode_variant_dir}/${cch_codemode_source}")
+        get_filename_component(cch_codemode_variant_parent "${cch_codemode_variant_source}" DIRECTORY)
+        file(MAKE_DIRECTORY "${cch_codemode_variant_parent}")
+        configure_file(
+            "${CMAKE_CURRENT_SOURCE_DIR}/${cch_codemode_source}"
+            "${cch_codemode_variant_source}"
+            COPYONLY)
+        list(APPEND cch_codemode_variant_sources "${cch_codemode_variant_source}")
+    endforeach()
+
+    add_library(cch_tests_codemode_worker_variant STATIC ${cch_codemode_variant_sources})
+    target_include_directories(cch_tests_codemode_worker_variant
+        PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/src/codemode/include
+            ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+    target_link_libraries(cch_tests_codemode_worker_variant
+        PUBLIC
+            cch_ai
+            cch_support
+        PRIVATE
+            Boost::headers
+            Threads::Threads
+            wasmedge
+)
+    target_compile_definitions(cch_tests_codemode_worker_variant PRIVATE
         CCH_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
         # The deterministic worker's lifetime regression (#1232) drives the
         # implementation's private parking seam instead of racing a real
         # retirement; the production archive never defines this.
         CCH_REMOTE_WORKER_TEST_HOOKS
 )
-    target_compile_options(cch_tests_codemode PRIVATE ${CCH_WARNING_OPTIONS})
-    catch_discover_tests(cch_tests_codemode TEST_SPEC "~[issue1232remote]" ADD_TAGS_AS_LABELS)
+    target_compile_options(cch_tests_codemode_worker_variant PRIVATE ${CCH_WARNING_OPTIONS})
+    # Force-include the test-owned gate into the Remote translation unit only, so
+    # production source contains no include of a tests/support header
+    # (CODING_STANDARDS.md section 11.5). Other variant sources stay byte-for-byte
+    # the production compilation.
+    set_property(SOURCE "${cch_codemode_variant_dir}/src/codemode/Remote.cpp"
+        APPEND PROPERTY COMPILE_OPTIONS
+        -include "${CMAKE_CURRENT_SOURCE_DIR}/tests/support/DeterministicWorkerTestGate.hpp")
+
+    target_link_libraries(cch_tests_codemode
+        PRIVATE
+            cch_tests_codemode_worker_variant
+            Catch2::Catch2
+)
+    # The archive symbol check below executes `nm` on the production archive, so
+    # building this shard must also build the production archive.
+    add_dependencies(cch_tests_codemode cch_codemode)
+
+    catch_discover_tests(cch_tests_codemode TEST_SPEC "~[issue1232]" ADD_TAGS_AS_LABELS)
     # The lifetime case parks a worker and can abort the process on the recorded
     # defect: a hard timeout is its only backstop, and its gate is process-wide,
-    # so it never overlaps another case.
-    catch_discover_tests(cch_tests_codemode TEST_SPEC "[issue1232remote]"
-        PROPERTIES TIMEOUT 30 RUN_SERIAL TRUE ADD_TAGS_AS_LABELS)
+    # so it never overlaps another case. Its three internal waits are 5 s each
+    # (15 s total), well under the 60 s timeout.
+    catch_discover_tests(cch_tests_codemode TEST_SPEC "[issue1232]"
+        PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE ADD_TAGS_AS_LABELS)
     add_dependencies(cch_tests_codemode ${CCH_PARITY_BUILD_GATE_TARGET})
+
+    # Verify that the test executable links one Remote implementation and that
+    # the production archive carries no test-gate symbols (#1232).
+    add_test(NAME codemode_remote_symbol_ownership
+        COMMAND
+            ${CMAKE_COMMAND}
+            -DCMAKE_NM=${CMAKE_NM}
+            -DARCHIVE=$<TARGET_FILE:cch_codemode>
+            -DBINARY=$<TARGET_FILE:cch_tests_codemode>
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/tests/RemoteProductionSymbols.cmake
+    )
+    set_tests_properties(codemode_remote_symbol_ownership PROPERTIES
+        LABELS "codemode;issue1232")
 
     # The portable no-Node entry's check shard (#1194): it links only
     # cch_codemode_portable, so a portable subset that secretly pulls a

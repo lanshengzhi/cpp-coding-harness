@@ -39,29 +39,39 @@ reaches this state.
 
 - `RemoteDeterministicServe` is pure shared state again (`guest`, `queue`, `exchange`, `run`,
   `stop`); no thread handle, no destructor.
-- New frame-local `DeterministicWorkerJoin` in `src/codemode/Remote.cpp`. The serve coroutine
+- New frame-local `ScopedDeterministicWorker` in `src/codemode/Remote.cpp`. The serve coroutine
   declares it immediately after `served`, so it destroys first, while the frame still owns the
   state. Its destructor: no-op when the handle is not joinable; `state.stop.request_stop()` when
   the run is not finished, so a driver parked on a caller answer is woken instead of waited on;
   `std::terminate()` when `worker.get_id() == std::this_thread::get_id()` — an unreachable
-  invariant, fail-closed rather than a detach; otherwise `worker.join()`.
-- Worker creation assigns the guard's `worker` member; the lambda still captures only `served`.
+  invariant, fail-closed rather than a detach; otherwise `worker.join()`. The member carries a
+  lifetime comment (non-owning reference to the frame's `served`) and a `std::thread`-not-
+  `std::jthread` comment: a jthread's `request_stop()` reaches only its own stop source, not
+  `state.stop`, and the scope owner must control the request-stop-then-join ordering.
+- Worker creation assigns the owner's `worker` member; the lambda still captures only `served`.
 - Protocol messages, buffering, `dispatch`, the exchange reply handling and the terminal settle
   point (`co_await served->exchange(batch)` immediately before `co_return`) are unchanged.
 
 ## Regression and red/green evidence
 
-Test-only seam `src/codemode/RemoteWorkerTestHook.hpp`, behind `CCH_REMOTE_WORKER_TEST_HOOKS`,
-which only the `cch_tests_codemode` target defines. That shard compiles a second copy of
-`Remote.cpp` through `tests/codemode/RemoteWithTestHooks.cpp`, so the archive's `Remote.o` is not
-linked there and the production archive cannot carry the seam. With no gate installed the hooks
-are one atomic load and a no-op.
+Test-only seam `tests/support/DeterministicWorkerTestGate.hpp` (renamed from the production-tree
+`*Hook` header so it cannot be mistaken for a §3.3 `move_only_function` alias). The test-only
+`cch_tests_codemode_worker_variant` static library compiles configure-time copies of the same
+`CCH_CODEMODE_SOURCES` with `CCH_REMOTE_WORKER_TEST_HOOKS` and force-includes the gate only into
+the copied `Remote.cpp`; `cch_tests_codemode` links that variant instead of `cch_codemode`. The
+copies are test build artifacts, not a second production compilation: compiling the production
+source path twice would fail the Parity Gate's `RULE_DUPLICATE_SOURCE_COMPILATION`, and an
+`#include` wrapper reintroduced GCC's `-Wsubobject-linkage` diagnostic. A copied source is its own
+translation unit, so the production path compiles exactly once, the variant needs no warning
+suppression, and the shard's binary contains one codemode implementation. Production source never
+includes the tests/support header; with no gate installed the hooks are an atomic load and a no-op,
+and the production archive is compiled without either the macro or the header.
 
 `tests/codemode/RemoteWorkerLifetimeTest.cpp` — `Remote deterministic worker is joined by the serve
-frame, never by the worker` (`[codemode][remote][deterministic][issue1232remote]`). The schedule
-is forced, not raced:
+frame, never by the worker` (`[codemode][remote][deterministic][issue1232]`, so `ctest -L issue1232`
+selects it). The schedule is forced, not raced:
 
-1. the hook parks the worker immediately after `drive()` returns and before its closure releases
+1. the gate parks the worker immediately after `drive()` returns and before its closure releases
    the state;
 2. the serve coroutine has taken its terminal message and is returning;
 3. the case records whether the frame joined, from which thread, whether the parked closure was
@@ -71,23 +81,29 @@ is forced, not raced:
    failing assertion in this `-fno-exceptions` TU runs no destructor, so no gate or thread may be
    live when it can fail).
 
-Every wait carries a 20 s bound as a liveness backstop; correctness is read from the latched
-observations, never from "the wait returned". The only process-level backstop is CTest
-`TIMEOUT 30` with `RUN_SERIAL TRUE` on this case.
+The gate uses the standard library's counting/binary semaphores as the cross-thread latched
+release facility; `tests::ReleaseGate` is bound to the thread that pumps its Asio executor and is
+not a cross-thread primitive. The release is unconditional, so even a timed-out wait reaches
+`driver.join()` instead of leaving the driver blocked. The case has three bounded waits of 5 s
+each (15 s total), well under its CTest `TIMEOUT 60` with `RUN_SERIAL TRUE`; correctness is read
+from the latched observations, never from "the wait returned". An earlier 2 s × 4 draft timed out
+once in a 10-run post-build repeat; the 5 s × 3 shape then passed 100/100.
 
-**Red** (hook present, baseline state-owned handle): CTest fails in 1.23 s with
-`Subprocess aborted`, `terminate called after throwing an instance of 'std::system_error'` /
-`what(): Resource deadlock avoided`, SIGABRT. gdb at `std::__throw_system_error(int)` stops on
-the worker thread with `~RemoteDeterministicServe` (`Remote.cpp:757`) ←
-`_Sp_counted_base::_M_release_last_use` — the closure's release *was* the last use — ←
-`~<lambda>` (`Remote.cpp:845`, the worker closure) ← `std::thread::_Invoker`/`_State_impl`. That
-is the self-join and the last-owner property in one stack.
+**Red** (temporary re-introduction of the baseline state-owned handle, same hook calls, not
+committed): CTest fails in 1.49 s with `Subprocess aborted`, `terminate called after throwing an
+instance of 'std::system_error'` / `what(): Resource deadlock avoided`, SIGABRT. gdb at
+`std::__throw_system_error(int)` stops on the worker thread with
+`~RemoteDeterministicServe` (`build/codemode_test_variant/src/codemode/Remote.cpp:762`), reached
+through `std::destroy_at`/`_Destroy`/`allocator_traits::destroy` — the worker closure's release
+was the last use, so the destructor joined that same worker thread. That is the self-join and the
+last-owner property in one stack.
 
-**Green** (form A): measured at the release point in the green binary —
+**Green** (restored tree, rebuilt): measured at the release point in the green binary —
 `worker_parked=true`, `join_started=true`, `join_thread_differs_from_worker=true`,
 `owners_while_parked=2`, `join_finished=false`, `serve_completed=false`; after the release
 `join_finished=true`, `serve_completed=true`, `serve_completed_after_join=true`,
-`serve_completed_ok=true`. The case passed 10/10 consecutive runs.
+`serve_completed_ok=true`. The restored case passed 100/100 consecutive runs (and the shard's
+full label run is below).
 
 ### Does the serve's internal `AsyncResult` now complete after the worker exits?
 
@@ -127,11 +143,11 @@ last owner, completion after the join) with the corrected premise.
   (`build/parity-build-gate.json`). The only warning in the tree is pre-existing and unrelated
   (`tests/coding_agent/tui/SystemThemeTest.cpp`, unused function).
 - Focused, owning shard label after the full build: `ctest --test-dir build -L codemode -j4` →
-  **178/178 passed**; with only the codemode shard registered the same label was **82/82 passed**
-  (40.09 s), including reversed answers, the pending missing result, the abort/settle cases and the
-  local worker-admission cases; the new case 1.16 s.
+  **179/179 passed** (75.54 s), including the new case and the symbol-ownership check; the previous
+  178-case run is superseded by this follow-up. The new case alone passed 100/100 consecutive
+  runs at 1.10-1.14 s.
 - ASan/UBSan focused: `ctest --test-dir build/asan-ubsan -R "Remote|deterministic" -j2` →
-  **20/20 passed** (new case 1.21 s), rerun on the final tree. The wider ASan label run (shard-only
+  **20/20 passed** (new case 1.20 s), rerun on the final tree. The wider ASan label run (shard-only
   ASan tree) was **78/82**: the four failures are the pre-existing local-sandbox timer-service
   heap-use-after-free in `CodemodeOwnerTest.cpp` cases (`issue1096`/`issue1196` worker cases; that
   file never constructs a Remote), recorded separately in the main workspace's
@@ -155,10 +171,48 @@ last owner, completion after the join) with the corrected premise.
   and clipped cursor coordinates and protocol across mode switch in both directions`, passed in the
   first run and passes alone (1/1, 1.25 s): a TUI case sensitive to `-j4` load, in a module this
   change does not touch.
+- Warning gate: `cch_warning_gate` recompiles every project-owned translation unit with
+  `-Werror`; the variant's seven copied TUs and the forced gate header are part of that set and
+  compile clean, with no `-Wsubobject-linkage` suppression anywhere. See the follow-up validation
+  run below.
 - Formatting: `scripts/format-check.sh` clean on the committed branch (CI form,
   `scripts/format-check.sh origin/main`); one line of the new test was reflowed by `git clang-format`
   before the commit and the shard and ASan selections were rebuilt and rerun afterwards.
 - `fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py check`: **FAIL**, see below.
+
+### Standards review follow-up validation (2026-11-11)
+
+The follow-up replaced the included `Remote.cpp` shard TU with the test-only variant library, moved
+the gate to `tests/support`, renamed the frame owner, and removed the warning suppression. Measured
+on the rebuilt Debug tree:
+
+- `cmake --build /home/lansy/.cache/cch-remote-selfjoin-slice/build -j4`: full build **PASS**, build
+  phase Parity Architecture Gate **PASS**. The variant adds seven copied codemode TUs (one focused
+  build: 17 steps / 46.7 s including the production archive and `pike`; a variant-only rebuild:
+  9 steps / 9.2 s; the subsequent full build: 6 steps / 24.5 s), which is below the cost threshold
+  that would have justified a narrower variant.
+- `ctest --test-dir build -L codemode -j4`: **179/179 passed** (75.54 s), including
+  `codemode_remote_symbol_ownership` and the new lifetime case.
+- New lifetime case: **100/100 consecutive passes** at 1.10-1.14 s with the final 5 s × 3 wait
+  shape; the earlier 2 s × 4 draft produced one timeout failure in a 10-run post-build repeat.
+- ASan/UBSan (`build/asan-ubsan`, `-R "Remote|deterministic" -j2`): **20/20 passed** (new case
+  1.20 s).
+- #1179 receipt selection, rerun with the record's own 52-case regex: **52/52 passed**.
+- `cch_warning_gate`: **PASS** with `-Werror` over the project graph, including the seven variant
+  copies and the forced-include gate header; no `-Wsubobject-linkage` pragma remains.
+- `scripts/format-check.sh`: **clean**.
+
+`nm` evidence:
+
+- `nm -C --defined-only build/libcch_codemode.a | grep -E
+  'DeterministicWorkerTestGate|park_deterministic_worker|record_deterministic_worker|deterministic_worker_test_gate'`
+  → no output: the production archive has no gate symbol.
+- `nm -C --defined-only build/cch_tests_codemode | grep -c ' T cch::codemode::serve_codemode_remote'`
+  → `1`: the test executable has one strong `serve_codemode_remote` definition.
+- The executable also contains `deterministic_worker_test_gate` and the
+  `RemoteDeterministicServe`/`ScopedDeterministicWorker` implementation, proving it linked the
+  hook-enabled variant rather than the production archive. `codemode_remote_symbol_ownership`
+  automates these three checks.
 
 ## Delivery receipt impact
 
@@ -197,5 +251,6 @@ digest changes, and the ticket's other items remain open. No push, no external m
   worker thread; `RemoteWorkerReaper` static shutdown/admission questions; the local sandbox timer
   UAF; `DaemonClient` FDs, number parsers and `format_size`.
 - The test seam is kept out of the archive by the `CCH_REMOTE_WORKER_TEST_HOOKS` definition living
-  only on the test target; unlike the mixed candidate there is no `nm` gate proving it, so the next
-  slice that touches this CMake file may want to add one.
+  only on the test variant target. `codemode_remote_symbol_ownership` now proves with `nm` that the
+  production archive has no gate symbol and the test executable has exactly one
+  `serve_codemode_remote` definition plus the hook-enabled variant.

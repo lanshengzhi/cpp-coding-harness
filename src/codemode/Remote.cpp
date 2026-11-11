@@ -3,9 +3,6 @@
 
 #include "codemode/Deterministic.hpp"
 #include "codemode/Guest.hpp"
-#ifdef CCH_REMOTE_WORKER_TEST_HOOKS
-#include "codemode/RemoteWorkerTestHook.hpp"
-#endif
 #include <cch/codemode/Prelude.hpp>
 #include "codemode/Shared.hpp"
 #include "support/AsyncResultBridge.hpp"
@@ -746,7 +743,7 @@ struct RemoteAstOwner {
 /// hold, so no member needs its own. The driver owns no thread (the sandbox's
 /// worker-host seam starts it there), so the serve side drives it on its own
 /// worker, whose thread handle the serve coroutine frame owns
-/// (`DeterministicWorkerJoin`): a handle stored here would be destroyed with
+/// (`ScopedDeterministicWorker`): a handle stored here would be destroyed with
 /// this state, and the worker's closure is what releases the last reference.
 struct RemoteDeterministicServe {
     RemoteAstOwner guest;
@@ -761,25 +758,33 @@ struct RemoteDeterministicServe {
 ///
 /// The closure holds `served`, so a state-owned handle let that closure's
 /// release destroy the state on the worker thread and join the worker there:
-/// `std::system_error: Resource deadlock avoided`. Declaring this guard after
+/// `std::system_error: Resource deadlock avoided`. Declaring this owner after
 /// `served` makes it destroy first, while the frame still owns the state, so the
 /// join always runs on a thread that is not the worker. A run that has not
 /// finished is stopped first, so a driver parked on a caller answer is woken
 /// rather than waited on. Detaching is never an option: a detached worker would
 /// outlive the state its closure keeps alive.
-struct DeterministicWorkerJoin {
-    explicit DeterministicWorkerJoin(RemoteDeterministicServe& serve) : state(serve) {}
+struct ScopedDeterministicWorker {
+    explicit ScopedDeterministicWorker(RemoteDeterministicServe& serve) : state(serve) {}
 
+    // Non-owning reference to the coroutine frame's `served`. This owner is
+    // declared after `served`, so it is destroyed while that shared state is
+    // still alive; the worker closure may hold the state's last reference.
     RemoteDeterministicServe& state;
+
+    // std::thread, not std::jthread: a jthread's request_stop() signals only
+    // its own stop_source, not the run's `state.stop`, and its destructor would
+    // hide the request-stop-then-join ordering this scope owner must perform on
+    // the frame thread (CODING_STANDARDS.md section 9.13).
     std::thread worker;
 
-    ~DeterministicWorkerJoin() {
+    ~ScopedDeterministicWorker() {
         if (!worker.joinable()) return;
         if (state.run.has_value() && !state.run->finished()) state.stop.request_stop();
 #ifdef CCH_REMOTE_WORKER_TEST_HOOKS
         detail::record_deterministic_worker_join_started();
 #endif
-        // Unreachable by construction: only the serve frame destroys this guard
+        // Unreachable by construction: only the serve frame destroys this owner
         // and the worker never enters it. A violated invariant fails closed
         // instead of detaching a live worker.
         if (worker.get_id() == std::this_thread::get_id()) std::terminate();
@@ -805,7 +810,7 @@ support::AsyncResult<void> serve_deterministic_remote(
         auto served = std::make_shared<RemoteDeterministicServe>();
         // Declared after `served` so it destroys first: the frame joins the
         // worker while it still owns the state the worker's closure shares.
-        DeterministicWorkerJoin worker_join{*served};
+        ScopedDeterministicWorker worker_owner{*served};
         served->exchange = std::move(exchange);
 
         const auto path = wasm_path.string();
@@ -877,8 +882,8 @@ support::AsyncResult<void> serve_deterministic_remote(
         if (!served->run->finished()) {
             // The remote's worker is this serve's own thread; a pre-aborted run
             // settled during construction and has no worker to drive. The frame
-            // keeps the handle in `worker_join`, never in the shared state.
-            worker_join.worker = std::thread([served]() {
+            // keeps the handle in `worker_owner`, never in the shared state.
+            worker_owner.worker = std::thread([served]() {
                 served->run->drive();
 #ifdef CCH_REMOTE_WORKER_TEST_HOOKS
                 detail::park_deterministic_worker(served);
