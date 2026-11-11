@@ -7,6 +7,8 @@
 
 #include <algorithm>
 #include <array>
+#include <charconv>
+#include <cmath>
 #include <cstdint>
 #include <cstring>
 #include <format>
@@ -379,6 +381,20 @@ std::string json_escape(std::string_view text) {
     return out;
 }
 
+/// Parses the JSON number that starts at `at` without throwing (CODING_STANDARDS
+/// 9.3). A malformed number is reported as nothing so the caller fails the
+/// comparison instead of substituting a value; the delimiter check keeps the
+/// prefix of a longer token from being read as the whole field.
+std::optional<double> json_number_at(std::string_view text, std::size_t at) {
+    double value = 0;
+    const auto [end, error] = std::from_chars(text.data() + at, text.data() + text.size(), value);
+    if (error != std::errc{} || !std::isfinite(value)) return std::nullopt;
+    if (end != text.data() + text.size() && *end != ',' && *end != '}' && *end != ']' && *end != ' ' && *end != '\t' &&
+            *end != '\n' && *end != '\r')
+        return std::nullopt;
+    return value;
+}
+
 /// Runs one fixture tree through both listings and reports the first
 /// divergence with the entry index and field, not a pass/fail boolean.
 void compare_listing(const fs::path& root,
@@ -391,18 +407,22 @@ void compare_listing(const fs::path& root,
             std::format(R"({{"op":"listFiles","path":"{}"{}}})", json_escape(root.string()), options_json));
     REQUIRE(reply.has_value());
     // Minimal JSON field extraction for the two scalar result fields.
-    const auto number_field = [&reply](std::string_view key) -> double {
+    const auto number_field = [&reply](std::string_view key) -> std::optional<double> {
         const std::string needle = std::string("\"") + std::string(key) + "\":";
         const std::size_t at = reply->json.find(needle);
-        if (at == std::string::npos) return -1;
-        return std::strtod(reply->json.c_str() + at + needle.size(), nullptr);
+        if (at == std::string::npos) return std::nullopt;
+        return json_number_at(reply->json, at + needle.size());
     };
     const std::string truncated_field = [&reply] {
         const std::string needle = "\"truncated\":";
         const std::size_t at = reply->json.find(needle);
         return at == std::string::npos ? "" : reply->json.substr(at + needle.size(), 4);
     }();
-    const double daemon_count = number_field("count");
+    const auto daemon_count = number_field("count");
+    if (!daemon_count.has_value()) {
+        FAIL_CHECK("daemon reply has no complete numeric count field");
+        return;
+    }
     const bool daemon_truncated = truncated_field.starts_with("true");
 
     cch::durable::TreeListingOptions options;
@@ -412,7 +432,9 @@ void compare_listing(const fs::path& root,
         const std::string needle = std::format("\"{}\":", key);
         const std::size_t at = options_json.find(needle);
         if (at == std::string::npos) return std::nullopt;
-        return std::strtod(options_json.c_str() + at + needle.size(), nullptr);
+        const auto value = json_number_at(options_json, at + needle.size());
+        if (!value.has_value()) FAIL_CHECK(std::format("option {} is not a JSON number: {}", key, options_json));
+        return value;
     };
     if (const auto entries = number_option("maxEntries")) options.max_entries = static_cast<std::size_t>(*entries);
     if (const auto bytes = number_option("maxBytes")) options.max_bytes = static_cast<std::size_t>(*bytes);
@@ -431,8 +453,8 @@ void compare_listing(const fs::path& root,
     }
     auto actual = env->list_files(root.string(), options, {});
     REQUIRE(actual.has_value());
-    if (actual->entries.size() != static_cast<std::size_t>(daemon_count)) {
-        FAIL_CHECK(std::format("entry count diverges: C++ {} vs daemon {}", actual->entries.size(), daemon_count));
+    if (actual->entries.size() != static_cast<std::size_t>(*daemon_count)) {
+        FAIL_CHECK(std::format("entry count diverges: C++ {} vs daemon {}", actual->entries.size(), *daemon_count));
         return;
     }
     if (actual->truncated != daemon_truncated) {
@@ -755,6 +777,20 @@ TEST_CASE("DaemonClient's daemon observes stdin EOF and exits", "[durable][issue
         return;
     }
     CHECK(WEXITSTATUS(status) == 0);
+}
+
+TEST_CASE("the differential number reader accepts only a complete JSON number", "[durable][issue1232]") {
+    // The old reader was `std::strtod`, which reads a prefix and reports 0 for
+    // garbage; a malformed field must fail the comparison instead.
+    const auto read = [](std::string_view json) { return json_number_at(json, json.find(':') + 1); };
+    CHECK(read(R"("count":1500,"truncated":false)") == 1500.0);
+    CHECK(read(R"("count":0)") == 0.0);
+    CHECK(read(R"("count":-2.5e3})") == -2500.0);
+    CHECK(read(R"("count":12  ,"x":1)") == 12.0);
+    CHECK_FALSE(read(R"("count":,)").has_value());
+    CHECK_FALSE(read(R"("count":12x,)").has_value());
+    CHECK_FALSE(read(R"("count":1e999,)").has_value());
+    CHECK_FALSE(read(R"("count":nan,)").has_value());
 }
 
 TEST_CASE("Durable tree listing is byte-for-byte identical to the frozen listFiles daemon",

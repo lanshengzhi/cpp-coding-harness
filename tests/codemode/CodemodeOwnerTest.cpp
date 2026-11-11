@@ -38,6 +38,8 @@
 #include <array>
 #include <atomic>
 #include <chrono>
+#include <charconv>
+#include <cmath>
 #include <cstdint>
 #include <cstdlib>
 #include <ctime>
@@ -70,6 +72,17 @@ namespace {
 
 [[nodiscard]] std::filesystem::path audit_1093_root() {
     return std::filesystem::path{CCH_SOURCE_DIR} / "fixtures" / "pi-v1.3.0" / "audit-1093";
+}
+
+/// Parses a complete JSON number without throwing (CODING_STANDARDS 5.7, 9.3):
+/// the run result must be one finite number and nothing else. A throwing parser
+/// is excluded from the strict no-exception build, and its throw escapes as an
+/// unexpected failure rather than as the rejected value this reader reports.
+[[nodiscard]] std::optional<double> parse_json_number(std::string_view text) {
+    double value = 0;
+    const auto [end, error] = std::from_chars(text.data(), text.data() + text.size(), value);
+    if (error != std::errc{} || end != text.data() + text.size() || !std::isfinite(value)) return std::nullopt;
+    return value;
 }
 
 [[nodiscard]] std::string read_text(const std::filesystem::path& path) {
@@ -900,7 +913,23 @@ TEST_CASE("the public codemode create validates the guest eagerly with an explic
     REQUIRE(result.has_value());
     REQUIRE_FALSE(result->error.has_value());
     REQUIRE(result->value_json.has_value());
-    CHECK(std::stod(*result->value_json) == member(*present, "expected").get_object().at("value").get_number());
+    const auto value = parse_json_number(*result->value_json);
+    REQUIRE(value.has_value());
+    CHECK(*value == member(*present, "expected").get_object().at("value").get_number());
+}
+
+TEST_CASE("the codemode run result reader rejects a malformed number without terminating", "[codemode][issue1232]") {
+    // `std::stod` is excluded by the strict no-exception build and its throw
+    // would surface as an unexpected exception; a malformed value is now a
+    // rejected read the assertions can check.
+    CHECK(parse_json_number("1") == 1.0);
+    CHECK(parse_json_number("-2.5e3") == -2500.0);
+    CHECK_FALSE(parse_json_number("").has_value());
+    CHECK_FALSE(parse_json_number("x").has_value());
+    CHECK_FALSE(parse_json_number("1x").has_value());
+    CHECK_FALSE(parse_json_number(" 1").has_value());
+    CHECK_FALSE(parse_json_number("1e999").has_value());
+    CHECK_FALSE(parse_json_number("nan").has_value());
 }
 
 TEST_CASE("the public codemode tool table registers lists and unregisters with the frozen messages",
