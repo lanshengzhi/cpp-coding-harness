@@ -790,7 +790,19 @@ struct ScopedDeterministicWorker {
 
     ~ScopedDeterministicWorker() {
         if (!worker.joinable()) return;
-        if (state.run.has_value() && !state.run->finished()) state.stop.request_stop();
+        if (state.run.has_value() && !state.run->finished()) {
+#ifdef CCH_REMOTE_WORKER_TEST_HOOKS
+            // Test seam (#1232): the `finished()` check above and the request
+            // below are two separate `shared.mutex` acquisitions, so the run
+            // can enter the delivery wait between them. This park only makes
+            // that interleaving repeatable.
+            detail::park_before_deterministic_worker_stop_request();
+#endif
+            state.stop.request_stop();
+#ifdef CCH_REMOTE_WORKER_TEST_HOOKS
+            detail::record_deterministic_worker_stop_requested();
+#endif
+        }
 #ifdef CCH_REMOTE_WORKER_TEST_HOOKS
         detail::record_deterministic_worker_join_started();
 #endif

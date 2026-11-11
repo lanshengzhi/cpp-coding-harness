@@ -65,11 +65,15 @@ include_guard(GLOBAL)
         CCH_REMOTE_WORKER_TEST_HOOKS
 )
     target_compile_options(cch_tests_codemode_worker_variant PRIVATE ${CCH_WARNING_OPTIONS})
-    # Force-include the test-owned gate into the Remote translation unit only, so
-    # production source contains no include of a tests/support header
-    # (CODING_STANDARDS.md section 11.5). Other variant sources stay byte-for-byte
-    # the production compilation.
-    set_property(SOURCE "${cch_codemode_variant_dir}/src/codemode/Remote.cpp"
+    # Force-include the test-owned gate into the Remote and Deterministic
+    # translation units only, so production source contains no include of a
+    # tests/support header (CODING_STANDARDS.md section 11.5). Other variant
+    # sources stay byte-for-byte the production compilation. Deterministic.cpp
+    # needs it for the delivery-loop parks and the stop-notification phases the
+    # lost-wake case observes.
+    set_property(SOURCE
+        "${cch_codemode_variant_dir}/src/codemode/Remote.cpp"
+        "${cch_codemode_variant_dir}/src/codemode/Deterministic.cpp"
         APPEND PROPERTY COMPILE_OPTIONS
         -include "${CMAKE_CURRENT_SOURCE_DIR}/tests/support/DeterministicWorkerTestGate.hpp")
 
@@ -88,8 +92,13 @@ include_guard(GLOBAL)
     # so they never overlap another case. Each internal wait is 5 s and the
     # abandonment case's measured bound on the destroyed frame is 10 s, all well
     # under the 60 s timeout.
-    catch_discover_tests(cch_tests_codemode TEST_SPEC "[issue1232]"
+    catch_discover_tests(cch_tests_codemode TEST_SPEC "[issue1232]~[issue1232wake]"
         PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE ADD_TAGS_AS_LABELS)
+    # The lost-wake discriminator's red is an unbounded join on the unpaired
+    # callback: its 30 s timeout is that recorded defect's backstop, and its own
+    # internal waits are 5 s each.
+    catch_discover_tests(cch_tests_codemode TEST_SPEC "[issue1232wake]"
+        PROPERTIES TIMEOUT 30 RUN_SERIAL TRUE ADD_TAGS_AS_LABELS)
     add_dependencies(cch_tests_codemode ${CCH_PARITY_BUILD_GATE_TARGET})
 
     # Verify that the test executable links one Remote implementation and that

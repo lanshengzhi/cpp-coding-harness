@@ -20,6 +20,7 @@
 #include <atomic>
 #include <chrono>
 #include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <semaphore>
 #include <stop_token>
@@ -39,6 +40,15 @@ enum class WorkerParkPoint {
     /// parks on an answer the case never sends. The case destroys the serve
     /// frame with the run unfinished.
     inside_drive,
+    /// Inside the delivery loop's `cv.wait` for a caller answer: the worker
+    /// parks once at the loop's top and once inside the wait predicate, and the
+    /// serve frame parks between its `finished()` check and its
+    /// `request_stop()`. The three parks only order the frame's destruction
+    /// into the predicate's mutex hold, which is the window an unpaired stop
+    /// notification misses; every state they stop at is one the production code
+    /// reaches on its own, so the parks remove the race without inventing a
+    /// schedule.
+    delivery_wait,
 };
 
 /// The one observation surface a lifetime case installs. Each producer publishes
@@ -73,13 +83,52 @@ struct DeterministicWorkerTestGate {
     std::atomic<bool> serve_completed{false};
     std::atomic<bool> serve_completed_ok{false};
 
+    // `delivery_wait` schedule: the worker's two parks and the serve frame's
+    // pre-request park, each with its own release permit so no park can consume
+    // another's.
+    std::atomic<bool> loop_top_parked{false};
+    std::atomic<bool> delivery_wait_parked{false};
+    std::atomic<bool> delivery_wait_left_park{false};
+    std::atomic<bool> stop_request_pending{false};
+    std::atomic<bool> frame_stop_requested{false};
+    std::atomic<bool> stop_notify_entered{false};
+    std::atomic<bool> stop_notify_mutex_acquired{false};
+    std::atomic<bool> stop_notify_notified{false};
+
+    /// Monotonic ordinal of every `delivery_wait` phase. A case asserts the
+    /// order the wake depended on — the callback entered while the predicate
+    /// held the mutex, acquired it only after the predicate released it, and
+    /// notified before the worker left `drive()` — instead of only that each
+    /// step happened at some point.
+    std::atomic<std::uint64_t> phase{0};
+    std::atomic<std::uint64_t> loop_top_parked_seq{0};
+    std::atomic<std::uint64_t> stop_request_pending_seq{0};
+    std::atomic<std::uint64_t> delivery_wait_parked_seq{0};
+    std::atomic<std::uint64_t> delivery_wait_released_seq{0};
+    std::atomic<std::uint64_t> stop_notify_entered_seq{0};
+    std::atomic<std::uint64_t> stop_notify_mutex_acquired_seq{0};
+    std::atomic<std::uint64_t> stop_notify_notified_seq{0};
+    std::atomic<std::uint64_t> frame_stop_requested_seq{0};
+    std::atomic<std::uint64_t> drive_returned_seq{0};
+    std::atomic<std::uint64_t> join_started_seq{0};
+    std::atomic<std::uint64_t> join_finished_seq{0};
+
     std::counting_semaphore<> changed{0};
     /// Release for the after-drive park.
     std::binary_semaphore release{0};
     /// Release for the inside-drive park; a separate permit so the two park
     /// points cannot consume each other's release.
     std::binary_semaphore release_in_drive{0};
+    std::binary_semaphore release_loop_top{0};
+    std::binary_semaphore release_delivery_wait{0};
+    std::binary_semaphore release_stop_request{0};
 };
+
+/// Publishes the next `delivery_wait` ordinal. Release ordering pairs the store
+/// with the `changed` release that publishes the matching field.
+inline std::uint64_t next_deterministic_worker_phase(DeterministicWorkerTestGate& gate) {
+    return gate.phase.fetch_add(1, std::memory_order_acq_rel) + 1;
+}
 
 inline std::atomic<std::shared_ptr<DeterministicWorkerTestGate>> deterministic_worker_test_gate;
 
@@ -107,6 +156,7 @@ template <typename State> inline void record_deterministic_worker_started(const 
 inline void record_deterministic_worker_drive_returned() {
     auto gate = current_deterministic_worker_gate();
     if (!gate) return;
+    gate->drive_returned_seq.store(next_deterministic_worker_phase(*gate));
     gate->drive_returned.store(true);
     gate->changed.release();
 }
@@ -143,6 +193,7 @@ inline void park_deterministic_worker_in_drive(std::stop_token token) {
 inline void record_deterministic_worker_join_started() {
     auto gate = current_deterministic_worker_gate();
     if (!gate) return;
+    gate->join_started_seq.store(next_deterministic_worker_phase(*gate));
     gate->join_thread.store(std::this_thread::get_id());
     gate->join_started.store(true);
     gate->changed.release();
@@ -158,7 +209,93 @@ inline void record_deterministic_worker_join_finished() {
     const auto remaining = gate->state.lock();
     gate->state_alive_after_join.store(remaining != nullptr);
     gate->owners_after_join.store(remaining == nullptr ? 0 : remaining.use_count() - 1);
+    gate->join_finished_seq.store(next_deterministic_worker_phase(*gate));
     gate->join_finished.store(true);
+    gate->changed.release();
+}
+
+/// Parks the delivery loop at the top of one iteration, before it samples the
+/// stop token or takes `shared.mutex`. Parks only at the delivery-wait point.
+/// Inert without a gate.
+inline void park_deterministic_delivery_loop_top() {
+    auto gate = current_deterministic_worker_gate();
+    if (!gate || gate->park_point.load() != WorkerParkPoint::delivery_wait) return;
+    // One iteration only: the loop revisits its top after the wake, and a second
+    // park would have no releaser.
+    if (gate->loop_top_parked.exchange(true)) return;
+    gate->loop_top_parked_seq.store(next_deterministic_worker_phase(*gate));
+    gate->changed.release();
+    (void)gate->release_loop_top.try_acquire_for(kWorkerParkBound);
+}
+
+/// Parks the delivery loop inside `cv.wait`'s predicate, on the branch that
+/// would return false: the predicate still holds `shared.mutex` and the waiter
+/// is not yet enqueued, which is exactly the window an unpaired stop
+/// notification misses. Parks only at the delivery-wait point. Inert without a
+/// gate.
+inline void park_deterministic_delivery_wait() {
+    auto gate = current_deterministic_worker_gate();
+    if (!gate || gate->park_point.load() != WorkerParkPoint::delivery_wait) return;
+    // One predicate evaluation only: a later false evaluation would have no
+    // releaser, and the case's window is the first entry into the wait.
+    if (gate->delivery_wait_parked.exchange(true)) return;
+    gate->delivery_wait_parked_seq.store(next_deterministic_worker_phase(*gate));
+    gate->changed.release();
+    (void)gate->release_delivery_wait.try_acquire_for(kWorkerParkBound);
+    gate->delivery_wait_released_seq.store(next_deterministic_worker_phase(*gate));
+    gate->delivery_wait_left_park.store(true);
+    gate->changed.release();
+}
+
+/// Parks the serve frame between its `finished()` check and its
+/// `request_stop()`. The two are separate mutex acquisitions, so the run can
+/// enter the wait between them; this park makes that interleaving repeatable.
+/// Inert without a gate.
+inline void park_before_deterministic_worker_stop_request() {
+    auto gate = current_deterministic_worker_gate();
+    if (!gate || gate->park_point.load() != WorkerParkPoint::delivery_wait) return;
+    gate->stop_request_pending_seq.store(next_deterministic_worker_phase(*gate));
+    gate->stop_request_pending.store(true);
+    gate->changed.release();
+    (void)gate->release_stop_request.try_acquire_for(kWorkerParkBound);
+}
+
+/// Records that the serve frame's `request_stop()` returned. Inert without a
+/// gate.
+inline void record_deterministic_worker_stop_requested() {
+    auto gate = current_deterministic_worker_gate();
+    if (!gate) return;
+    gate->frame_stop_requested_seq.store(next_deterministic_worker_phase(*gate));
+    gate->frame_stop_requested.store(true);
+    gate->changed.release();
+}
+
+/// Records that the run's stop callback was entered. Inert without a gate.
+inline void record_deterministic_stop_notify_entered() {
+    auto gate = current_deterministic_worker_gate();
+    if (!gate) return;
+    gate->stop_notify_entered_seq.store(next_deterministic_worker_phase(*gate));
+    gate->stop_notify_entered.store(true);
+    gate->changed.release();
+}
+
+/// Records that the stop callback acquired `shared.mutex`, i.e. that it could
+/// not run while the wait predicate held it. Inert without a gate.
+inline void record_deterministic_stop_notify_mutex_acquired() {
+    auto gate = current_deterministic_worker_gate();
+    if (!gate) return;
+    gate->stop_notify_mutex_acquired_seq.store(next_deterministic_worker_phase(*gate));
+    gate->stop_notify_mutex_acquired.store(true);
+    gate->changed.release();
+}
+
+/// Records that the stop callback notified the delivery loop's condition
+/// variable. Inert without a gate.
+inline void record_deterministic_stop_notify_notified() {
+    auto gate = current_deterministic_worker_gate();
+    if (!gate) return;
+    gate->stop_notify_notified_seq.store(next_deterministic_worker_phase(*gate));
+    gate->stop_notify_notified.store(true);
     gate->changed.release();
 }
 

@@ -27,6 +27,12 @@
 // destroyed while the run is unfinished (the caller never answers the call the
 // worker reported). Destroying the frame must request stop on the run and join
 // the worker, from the destroying thread, before the frame is gone.
+//
+// Case 3 closes the cross-repair dependency between that frame join and the
+// run's stop notification: a run that is already parked in the delivery loop's
+// `cv.wait` for a caller answer can only be woken by the run's `stop_notify`
+// callback, and an unpaired callback can miss the wake. The frame's join is
+// then unbounded, so the two repairs are only sufficient together.
 
 #include <cch/codemode/Remote.hpp>
 
@@ -42,6 +48,7 @@
 #include <atomic>
 #include <chrono>
 #include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <memory>
 #include <semaphore>
@@ -362,5 +369,190 @@ TEST_CASE("Remote deterministic worker is stopped and joined when an abandoned s
     // An abandoned frame delivers no terminal outcome to its consumer.
     CHECK_FALSE(observation.serve_completed);
     // The whole abandonment is bounded well below the 60 s CTest timeout.
+    CHECK(observation.abandon_elapsed < kBoundedAbandon);
+}
+
+/// Case 3's observations, recorded before the first assertion.
+struct DeliveryWaitObservation {
+    bool loop_top_parked{false};
+    bool call_reported{false};
+    bool frame_destroyed{false};
+    bool stop_request_pending{false};
+    bool delivery_wait_parked{false};
+    bool delivery_wait_released{false};
+    bool stop_notify_entered{false};
+    bool stop_notify_mutex_acquired{false};
+    bool stop_notify_notified{false};
+    bool frame_stop_requested{false};
+    bool join_started{false};
+    bool join_thread_is_destroying_thread{false};
+    bool join_thread_differs_from_worker{false};
+    bool join_finished{false};
+    bool drive_returned{false};
+    bool state_alive_after_join{false};
+    bool state_released_after_destroy{false};
+    bool serve_completed{false};
+    std::uint64_t stop_request_pending_seq{0};
+    std::uint64_t delivery_wait_parked_seq{0};
+    std::uint64_t delivery_wait_released_seq{0};
+    std::uint64_t stop_notify_entered_seq{0};
+    std::uint64_t stop_notify_mutex_acquired_seq{0};
+    std::uint64_t stop_notify_notified_seq{0};
+    std::uint64_t frame_stop_requested_seq{0};
+    std::uint64_t drive_returned_seq{0};
+    std::uint64_t join_started_seq{0};
+    std::uint64_t join_finished_seq{0};
+    std::chrono::steady_clock::duration abandon_elapsed{};
+};
+
+// Ticket #1232 cross-repair case: the frame-local worker requests stop and
+// joins on destruction, but a run already parked in the delivery loop's
+// `cv.wait` for a caller answer can only be woken by the run's `stop_notify`
+// callback. The parks below order three threads into that interleaving; they do
+// not invent a state. The run sits between the delivery loop's top and its wait,
+// and the serve frame sits between the `finished()` check and the
+// `request_stop()` that follow it. Those are two separate `shared.mutex`
+// acquisitions, so the run can enter the wait between them on its own; the
+// request then lands inside `cv.wait`'s predicate, which holds the mutex from
+// the predicate's evaluation until the waiter is enqueued.
+//
+// With the callback paired to `shared.mutex` it cannot run inside that hold, so
+// its notification is delivered after the waiter is enqueued. Without the
+// pairing it notifies into the window, the wake is lost, the run never settles
+// and the frame's join never returns: the recorded red is a CTest timeout at
+// the case's 30 s bound, with the process still alive on its two threads.
+TEST_CASE("An abandoned serve frame stops and joins a deterministic run parked in the caller-answer wait",
+        "[codemode][remote][deterministic][issue1232][issue1232wake]") {
+    GateInstall install;
+    const auto gate = install.gate;
+    gate->park_point.store(ParkPoint::delivery_wait);
+    DeliveryWaitObservation observation;
+    const auto destroying_thread = std::this_thread::get_id();
+
+    // The run reports a caller call and then waits for an answer this case never
+    // sends, so `drive()` cannot settle on its own and the run's stop token is
+    // the only thing that can end it.
+    auto request = deterministic_request("const value = await tools.wait(1); return value;");
+    request.data.tools = {
+            {.name = "wait", .js_name = "wait", .description = "Wait for the caller's answer."},
+    };
+    codemode::CodemodeServeOptions options;
+    options.wasm_path = guest_wasm();
+    auto caller = std::make_shared<CallerWitness>();
+    auto context = std::make_unique<boost::asio::io_context>();
+    std::atomic<std::thread::id> serve_thread{};
+    std::thread driver = spawn_serve(*context,
+            codemode::serve_codemode_remote(
+                    request,
+                    [caller](std::vector<codemode::CodemodeRemoteMessageVariant> messages) {
+                        return never_answer(caller, std::move(messages));
+                    },
+                    options),
+            gate,
+            serve_thread);
+
+    // 1. The run issued the call and reached the delivery loop's top.
+    observation.loop_top_parked = wait_for_gate(gate, [](const Gate& g) { return g.loop_top_parked.load(); });
+    observation.call_reported = wait_until(caller->changed, [&] { return caller->call_reported.load(); });
+
+    // 2. The sequencer walks the frame's destruction into the wait window and
+    //    then releases each park in turn. Every wait is bounded, so a missing
+    //    signal reaches the assertions instead of hanging here; a genuinely
+    //    unbounded join is left to the case's CTest timeout, which is the
+    //    recorded defect.
+    std::thread sequencer([gate] {
+        (void)wait_for_gate(gate, [](const Gate& g) { return g.stop_request_pending.load(); });
+        gate->release_loop_top.release();
+        (void)wait_for_gate(gate, [](const Gate& g) { return g.delivery_wait_parked.load(); });
+        gate->release_stop_request.release();
+        (void)wait_for_gate(gate, [](const Gate& g) { return g.stop_notify_entered.load(); });
+        gate->release_delivery_wait.release();
+    });
+
+    // 3. Abandon the frame: stop the context, let its run return, then destroy
+    //    the context. Destroying it destroys the suspended serve frame, whose
+    //    scope owner requests stop on the unfinished run and joins the worker
+    //    from this thread.
+    const auto abandon_started = std::chrono::steady_clock::now();
+    context->stop();
+    driver.join();
+    context.reset();
+    observation.abandon_elapsed = std::chrono::steady_clock::now() - abandon_started;
+    observation.frame_destroyed = true;
+    sequencer.join();
+
+    // 4. Read everything back. No assertion runs while the worker, the driver or
+    //    the sequencer is live.
+    observation.stop_request_pending = gate->stop_request_pending.load();
+    observation.delivery_wait_parked = gate->delivery_wait_parked.load();
+    observation.delivery_wait_released = gate->delivery_wait_left_park.load();
+    observation.stop_notify_entered = gate->stop_notify_entered.load();
+    observation.stop_notify_mutex_acquired = gate->stop_notify_mutex_acquired.load();
+    observation.stop_notify_notified = gate->stop_notify_notified.load();
+    observation.frame_stop_requested = gate->frame_stop_requested.load();
+    observation.join_started = gate->join_started.load();
+    observation.join_thread_differs_from_worker =
+            observation.join_started && gate->join_thread.load() != gate->worker_thread.load();
+    observation.join_thread_is_destroying_thread =
+            observation.join_started && gate->join_thread.load() == destroying_thread;
+    observation.join_finished = gate->join_finished.load();
+    observation.drive_returned = gate->drive_returned.load();
+    observation.state_alive_after_join = gate->state_alive_after_join.load();
+    observation.state_released_after_destroy = gate->state.expired();
+    observation.serve_completed = gate->serve_completed.load();
+    observation.stop_request_pending_seq = gate->stop_request_pending_seq.load();
+    observation.delivery_wait_parked_seq = gate->delivery_wait_parked_seq.load();
+    observation.delivery_wait_released_seq = gate->delivery_wait_released_seq.load();
+    observation.stop_notify_entered_seq = gate->stop_notify_entered_seq.load();
+    observation.stop_notify_mutex_acquired_seq = gate->stop_notify_mutex_acquired_seq.load();
+    observation.stop_notify_notified_seq = gate->stop_notify_notified_seq.load();
+    observation.frame_stop_requested_seq = gate->frame_stop_requested_seq.load();
+    observation.drive_returned_seq = gate->drive_returned_seq.load();
+    observation.join_started_seq = gate->join_started_seq.load();
+    observation.join_finished_seq = gate->join_finished_seq.load();
+
+    INFO("frame destruction took "
+            << std::chrono::duration_cast<std::chrono::microseconds>(observation.abandon_elapsed).count() << " us");
+
+    CHECK(observation.loop_top_parked);
+    CHECK(observation.call_reported);
+    CHECK(observation.frame_destroyed);
+    // (a) The frame's scope owner requested stop on the run it had just found
+    //     unfinished, and the run was parked in the caller-answer wait by then.
+    CHECK(observation.stop_request_pending);
+    CHECK(observation.frame_stop_requested);
+    CHECK(observation.frame_stop_requested_seq > observation.stop_request_pending_seq);
+    CHECK(observation.delivery_wait_parked);
+    CHECK(observation.delivery_wait_released);
+    CHECK(observation.stop_request_pending_seq < observation.delivery_wait_released_seq);
+    // (b) The wake went through Deterministic.cpp's `stop_notify` callback, and
+    //     the callback could acquire `shared.mutex` only after the wait
+    //     predicate released it: that pairing is what carries the wake to an
+    //     enqueued waiter instead of notifying into the window.
+    CHECK(observation.stop_notify_entered);
+    CHECK(observation.stop_notify_entered_seq > observation.delivery_wait_parked_seq);
+    CHECK(observation.stop_notify_entered_seq < observation.delivery_wait_released_seq);
+    CHECK(observation.stop_notify_mutex_acquired);
+    CHECK(observation.stop_notify_mutex_acquired_seq > observation.delivery_wait_released_seq);
+    CHECK(observation.stop_notify_notified);
+    CHECK(observation.stop_notify_notified_seq > observation.stop_notify_mutex_acquired_seq);
+    // The worker left `drive()` after that notification, and nothing else could
+    // have woken it: the caller never answered.
+    CHECK(observation.drive_returned);
+    CHECK(observation.drive_returned_seq > observation.stop_notify_notified_seq);
+    // (c) The frame destroyed its scope owner (no detach) and joined the worker
+    //     from the destroying thread, never from the worker.
+    CHECK(observation.join_started);
+    CHECK(observation.join_thread_differs_from_worker);
+    CHECK(observation.join_thread_is_destroying_thread);
+    CHECK(observation.join_finished);
+    CHECK(observation.join_finished_seq > observation.drive_returned_seq);
+    // The state outlived the worker's thread and was released when the frame was
+    // destroyed, so the frame owned it across the whole join.
+    CHECK(observation.state_alive_after_join);
+    CHECK(observation.state_released_after_destroy);
+    // An abandoned frame delivers no terminal outcome to its consumer.
+    CHECK_FALSE(observation.serve_completed);
+    // (d) The whole abandonment is bounded far below the case's 30 s timeout.
     CHECK(observation.abandon_elapsed < kBoundedAbandon);
 }

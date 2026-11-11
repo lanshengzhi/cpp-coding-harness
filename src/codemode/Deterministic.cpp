@@ -248,6 +248,30 @@ struct GuestRun {
 
 } // namespace
 
+namespace {
+
+/// Test seam (#1232): with the test-only worker gate installed, parks the
+/// delivery loop at one iteration's top, before it samples the stop token or
+/// takes `shared.mutex`. The production archive is compiled without the hook
+/// macro, so this is an empty call there.
+void after_deterministic_delivery_loop_top() {
+#ifdef CCH_REMOTE_WORKER_TEST_HOOKS
+    park_deterministic_delivery_loop_top();
+#endif
+}
+
+/// Test seam (#1232): with the test-only worker gate installed, parks the
+/// delivery loop inside `cv.wait`'s predicate on the branch that would return
+/// false, while it still holds `shared.mutex` and before the waiter is
+/// enqueued. Empty call in production.
+void after_deterministic_delivery_wait() {
+#ifdef CCH_REMOTE_WORKER_TEST_HOOKS
+    park_deterministic_delivery_wait();
+#endif
+}
+
+} // namespace
+
 /// The deterministic `host_call` import: unpack the guest's argument vector and
 /// hand it to the run, which forwards the call to the caller's `on_call`. The
 /// caller must not re-enter the VM from the callback (pi's `post` contract):
@@ -343,10 +367,19 @@ DeterministicRun::Impl::Impl(
     // result number: the worker parks without a deadline and cannot poll the
     // token inside `condition_variable::wait`'s predicate without a notify.
     shared.stop_notify.emplace(start.stop_token, [&]() {
+#ifdef CCH_REMOTE_WORKER_TEST_HOOKS
+        record_deterministic_stop_notify_entered();
+#endif
         {
             std::lock_guard lock(shared.mutex);
+#ifdef CCH_REMOTE_WORKER_TEST_HOOKS
+            record_deterministic_stop_notify_mutex_acquired();
+#endif
         }
         shared.cv.notify_all();
+#ifdef CCH_REMOTE_WORKER_TEST_HOOKS
+        record_deterministic_stop_notify_notified();
+#endif
     });
     if (start.stop_token.stop_requested()) {
         // pi decides an already-requested abort during `start`, before the
@@ -756,6 +789,7 @@ void DeterministicRun::Impl::drive() {
     if (!finished() && host.on_idle) host.on_idle(0, issued);
 
     while (true) {
+        after_deterministic_delivery_loop_top();
         if (poll.stop_token.stop_requested()) {
             // pi's abort is an error the script cannot catch: the VM is
             // interrupted and the pending calls keep their `cancelled` record.
@@ -792,6 +826,7 @@ void DeterministicRun::Impl::drive() {
                 for (const auto& queued : shared.queued) {
                     if (queued.seq == next_seq) return true;
                 }
+                after_deterministic_delivery_wait();
                 return false;
             };
             if (deadline.has_value())
