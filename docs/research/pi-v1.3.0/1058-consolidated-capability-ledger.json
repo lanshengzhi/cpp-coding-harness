@@ -52,7 +52,7 @@
           },
           {
             "path": "vcpkg.json",
-            "sha256": "dc956d944cb2fcd3e88f4b305931d5b568c1164a8ec5ab9d1688f7418a5814dc"
+            "sha256": "f19c0e240a28de99619e7625635e74160763c3f9c098bfff1a3b77c8916cdf91"
           },
           {
             "path": "cmake/targets/Mcp.cmake",
@@ -258,15 +258,19 @@
             "vcpkg",
             "-L",
             "^(issue1090|issue1101|issue1104)$",
+            "--no-tests=error",
+            "--output-on-failure",
+            "-j",
+            "1",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1240-pilot-1101-structured-content.xml"
+            "docs/research/pi-v1.3.0/deliveries/1101-revalidation-upstream-71ad3e83a.xml"
           ],
-          "testedRevision": "cde9255c41c3c575c6e9ce20b1432687869a36f7",
-          "recordedAt": "2026-11-07T07:06:07Z",
+          "testedRevision": "c8abe71ba4e8cb988a987ca9337d252acf3c2fe5",
+          "recordedAt": "2026-11-11T07:25:42Z",
           "selected": 36,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1240-pilot-1101-structured-content.xml",
-            "sha256": "21ed42b919f687199f13f40f4aaa8bf30edd98eb71055f77485f4601658e5dea"
+            "path": "docs/research/pi-v1.3.0/deliveries/1101-revalidation-upstream-71ad3e83a.xml",
+            "sha256": "080b903d5c3ab80c18e2490c487b2ecd3743a656b8c2ba73a5db206ae7cbacc3"
           }
         },
         "rows": [
@@ -1166,6 +1170,30 @@
               "sha256": "a6295e17cea620948bd3515823a3ca6c383a1556a824e995f5db5b2cf53129ba"
             }
           }
+        },
+        "revalidation1232ReceiptDebt": {
+          "reason": "Upstream commit 71ad3e83a added boost-uuid to vcpkg.json and Boost::uuid to the durable target's declared dependencies, changing pinned inputs of this receipt (vcpkg.json). The delivered rows, comparison scenarios and routing digest are unchanged, and no #1232 change touches this receipt. The receipt's exact selection was rerun at this base into a fresh JUnit artifact, and this change makes no new verification claim about those rows.",
+          "changedInputs": [
+            "vcpkg.json"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-L",
+              "^(issue1090|issue1101|issue1104)$",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1240-pilot-1101-structured-content.xml"
+            ],
+            "testedRevision": "cde9255c41c3c575c6e9ce20b1432687869a36f7",
+            "recordedAt": "2026-11-07T07:06:07Z",
+            "selected": 36,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1240-pilot-1101-structured-content.xml",
+              "sha256": "21ed42b919f687199f13f40f4aaa8bf30edd98eb71055f77485f4601658e5dea"
+            }
+          }
         }
       },
       {
@@ -1184,21 +1212,25 @@
             "vcpkg",
             "-L",
             "^(issue1090|issue1101|issue1104)$",
+            "--no-tests=error",
+            "--output-on-failure",
+            "-j",
+            "1",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1090-durable-images-revalidation-1232.xml"
+            "docs/research/pi-v1.3.0/deliveries/1090-revalidation-upstream-71ad3e83a.xml"
           ],
-          "testedRevision": "d655d396eb86a16d2174a78c9d12439a830ea94d",
-          "recordedAt": "2026-11-08T04:38:07Z",
+          "testedRevision": "c8abe71ba4e8cb988a987ca9337d252acf3c2fe5",
+          "recordedAt": "2026-11-11T07:25:39Z",
           "selected": 36,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1090-durable-images-revalidation-1232.xml",
-            "sha256": "a813457b9e9d3032818b95d95c7c4b96f69d89aac3346d5e36b015b41ddc8deb"
+            "path": "docs/research/pi-v1.3.0/deliveries/1090-revalidation-upstream-71ad3e83a.xml",
+            "sha256": "d703ed6143e98fe6bc567c1d7fa3cb2b6e23a0b8c0abb7d7ad65c7aebadf9a10"
           }
         },
         "inputs": [
           {
             "path": "cmake/targets/Durable.cmake",
-            "sha256": "9feff05ddef3c098ea115e9e34558271b9d68b448721404a3c2fa07129eeac44"
+            "sha256": "05a4970a8ecb0601cd6601536bf135fe9b7203de2c869e0a212104cfc0bc9714"
           },
           {
             "path": "cmake/tests/DurableTests.cmake",
@@ -2246,6 +2278,30 @@
               "sha256": "42d44f7914bde911845fb31e389b8d7a5734dee2ea816fe9b6c51a2898d449b4"
             }
           }
+        },
+        "revalidation1232ReceiptDebt": {
+          "reason": "Upstream commit 71ad3e83a added boost-uuid to vcpkg.json and Boost::uuid to the durable target's declared dependencies, changing pinned inputs of this receipt (cmake/targets/Durable.cmake). The delivered rows, comparison scenarios and routing digest are unchanged, and no #1232 change touches this receipt. The receipt's exact selection was rerun at this base into a fresh JUnit artifact, and this change makes no new verification claim about those rows.",
+          "changedInputs": [
+            "cmake/targets/Durable.cmake"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-L",
+              "^(issue1090|issue1101|issue1104)$",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1090-durable-images-revalidation-1232.xml"
+            ],
+            "testedRevision": "d655d396eb86a16d2174a78c9d12439a830ea94d",
+            "recordedAt": "2026-11-08T04:38:07Z",
+            "selected": 36,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1090-durable-images-revalidation-1232.xml",
+              "sha256": "a813457b9e9d3032818b95d95c7c4b96f69d89aac3346d5e36b015b41ddc8deb"
+            }
+          }
         }
       },
       {
@@ -2269,7 +2325,7 @@
           },
           {
             "path": "vcpkg.json",
-            "sha256": "dc956d944cb2fcd3e88f4b305931d5b568c1164a8ec5ab9d1688f7418a5814dc"
+            "sha256": "f19c0e240a28de99619e7625635e74160763c3f9c098bfff1a3b77c8916cdf91"
           },
           {
             "path": "cmake/targets/CodingAgent.cmake",
@@ -2277,7 +2333,7 @@
           },
           {
             "path": "cmake/targets/Codemode.cmake",
-            "sha256": "d5c1c594ed8c97f5a9d37cf2f462a4a68db039836d5686f120c9eb9755ef939a"
+            "sha256": "a07926c5cde51829b8532c50c0af5e71da2ba26ab35348c92ad707c82ede4b31"
           },
           {
             "path": "cmake/targets/AgentCore.cmake",
@@ -2445,7 +2501,7 @@
           },
           {
             "path": "tests/support/ModelsFixture.hpp",
-            "sha256": "e3a1015be6e69f31203ab7c90c48bedda450a51efb71f11666592d23f0644bd6"
+            "sha256": "5258f123c896ac1fb7da689b7ee155e1b085e4deedbb460bc5a81e28b77c600f"
           },
           {
             "path": "tests/support/McpTestKit.hpp",
@@ -2531,15 +2587,18 @@
             "vcpkg",
             "-L",
             "issue1118",
+            "--no-tests=error",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1240-pilot-1118-codemode-catalog.xml"
+            "docs/research/pi-v1.3.0/deliveries/1118-revalidation-1232-frame-join.xml",
+            "-j",
+            "1"
           ],
-          "testedRevision": "cde9255c41c3c575c6e9ce20b1432687869a36f7",
-          "recordedAt": "2026-11-07T07:06:07Z",
+          "testedRevision": "44d0fa5c1d52bb834a54b812265b250424ba6844",
+          "recordedAt": "2026-11-11T06:53:11Z",
           "selected": 19,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1240-pilot-1118-codemode-catalog.xml",
-            "sha256": "0b46da47aef31751dfaa15e851818820d8416179cb796001d3bae5ebf074540a"
+            "path": "docs/research/pi-v1.3.0/deliveries/1118-revalidation-1232-frame-join.xml",
+            "sha256": "d50e1cb0440e3c8b9e5001ce92bd69107cbb1922c986cd554423dd8127cce907"
           }
         },
         "rows": [
@@ -3572,6 +3631,32 @@
               "sha256": "4e64aae053ccb28cac4fc2c46a7dd0d5609533b1abb6ac0ea0243f9e3a2d53b6"
             }
           }
+        },
+        "revalidation1232FrameJoin": {
+          "reason": "This rebind re-runs the exact recorded #1118 selection (-L issue1118, 19 cases) on the #1232 integration tree at 44d0fa5c1. Two independent causes changed pinned bytes: (1) this integration adds the deterministic-worker test-gate calls to src/codemode/Deterministic.cpp, src/codemode/Remote.cpp and cmake/tests/CodemodeTests.cmake, and the self-join slice moved cmake/targets/Codemode.cmake, which this catalog receipt pins for the codemode target graph; (2) the newer upstream base 71ad3e83a had already changed files pinned or consumed by these receipts - vcpkg.json, Durable.cmake, tests/support/ModelsFixture.hpp and tests/codemode/CodemodeRemoteTest.cpp among them - so this receipt's vcpkg.json and ModelsFixture.hpp pins predated that base. Rows, comparison scenarios, discriminating cases, implementationCommits and routingSha256 are unchanged; no capability claim is added.",
+          "changedInputs": [
+            "vcpkg.json",
+            "cmake/targets/Codemode.cmake",
+            "tests/support/ModelsFixture.hpp"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-L",
+              "issue1118",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1240-pilot-1118-codemode-catalog.xml"
+            ],
+            "testedRevision": "cde9255c41c3c575c6e9ce20b1432687869a36f7",
+            "recordedAt": "2026-11-07T07:06:07Z",
+            "selected": 19,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1240-pilot-1118-codemode-catalog.xml",
+              "sha256": "0b46da47aef31751dfaa15e851818820d8416179cb796001d3bae5ebf074540a"
+            }
+          }
         }
       },
       {
@@ -3615,16 +3700,19 @@
             "vcpkg",
             "-L",
             "chord",
+            "--no-tests=error",
             "--output-on-failure",
+            "-j",
+            "1",
             "--output-junit",
-            "../docs/research/pi-v1.3.0/deliveries/1240-remaining-chord.xml"
+            "docs/research/pi-v1.3.0/deliveries/1178-revalidation-upstream-71ad3e83a.xml"
           ],
-          "testedRevision": "0e52577e3679167a7dd66db597066882b03378ae",
-          "recordedAt": "2026-11-07T09:51:28Z",
+          "testedRevision": "c8abe71ba4e8cb988a987ca9337d252acf3c2fe5",
+          "recordedAt": "2026-11-11T07:25:18Z",
           "selected": 104,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1240-remaining-chord.xml",
-            "sha256": "6bc16df2e57437a5100d915ce2c51a766ff4d270c8459402290bf15619e0e997"
+            "path": "docs/research/pi-v1.3.0/deliveries/1178-revalidation-upstream-71ad3e83a.xml",
+            "sha256": "04faa93e89d7bec4aa1ed3df4685ff6220f89e2c9eb76566c2426999c45cd5b6"
           }
         },
         "rows": [
@@ -4193,7 +4281,7 @@
           },
           {
             "path": "vcpkg.json",
-            "sha256": "dc956d944cb2fcd3e88f4b305931d5b568c1164a8ec5ab9d1688f7418a5814dc"
+            "sha256": "f19c0e240a28de99619e7625635e74160763c3f9c098bfff1a3b77c8916cdf91"
           },
           {
             "path": "cmake/targets/Chord.cmake",
@@ -4654,6 +4742,31 @@
               "sha256": "24e34050c9f175d4fc285909dd5e70b3419ca7672c1ab03c882754953411a3bc"
             }
           }
+        },
+        "revalidation1232ReceiptDebt": {
+          "reason": "Upstream commit 71ad3e83a added boost-uuid to vcpkg.json and Boost::uuid to the durable target's declared dependencies, changing pinned inputs of this receipt (vcpkg.json). The delivered rows, comparison scenarios and routing digest are unchanged, and no #1232 change touches this receipt. The receipt's exact selection was rerun at this base into a fresh JUnit artifact, and this change makes no new verification claim about those rows.",
+          "changedInputs": [
+            "vcpkg.json"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-L",
+              "chord",
+              "--output-on-failure",
+              "--output-junit",
+              "../docs/research/pi-v1.3.0/deliveries/1240-remaining-chord.xml"
+            ],
+            "testedRevision": "0e52577e3679167a7dd66db597066882b03378ae",
+            "recordedAt": "2026-11-07T09:51:28Z",
+            "selected": 104,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1240-remaining-chord.xml",
+              "sha256": "6bc16df2e57437a5100d915ce2c51a766ff4d270c8459402290bf15619e0e997"
+            }
+          }
         }
       },
       {
@@ -4681,7 +4794,7 @@
           },
           {
             "path": "vcpkg.json",
-            "sha256": "dc956d944cb2fcd3e88f4b305931d5b568c1164a8ec5ab9d1688f7418a5814dc"
+            "sha256": "f19c0e240a28de99619e7625635e74160763c3f9c098bfff1a3b77c8916cdf91"
           },
           {
             "path": "cmake/targets/Mcp.cmake",
@@ -5027,15 +5140,19 @@
             "vcpkg",
             "-R",
             "^(an MCP HTTP URL must be http or https|streamable HTTP transport connects over plain http|connecting an MCP HTTP server lists its tools with the pi naming and schema|a same-origin redirect is followed and keeps the request auth header|cross-origin redirect is followed without Authorization and is rejected|HTTPS transport rejects an untrusted certificate|an authorization code from another issuer never reaches the token endpoint|authorization server metadata naming another issuer stops before any token request|the MCP HTTP transport attaches a credential only when the server needs one|agent session lists MCP resources only on demand and can call tools after a resource failure|the real stdio fixture lists, templates, and reads over `resources/\\*`|a cancelled MCP OAuth discovery stops before any registration or token request|a cancelled MCP OAuth client registration stops before any token request|a browser callback wait cancelled by the sign-in stop token stops sign-in|a pasted redirect URL completes the MCP OAuth sign-in|protected resource discovery retries the bare origin after a path-suffixed miss)$",
+            "--no-tests=error",
+            "--output-on-failure",
+            "-j",
+            "1",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1240-pilot-1181-mcp-comparisons.xml"
+            "docs/research/pi-v1.3.0/deliveries/1181-revalidation-upstream-71ad3e83a.xml"
           ],
-          "testedRevision": "cde9255c41c3c575c6e9ce20b1432687869a36f7",
-          "recordedAt": "2026-11-07T07:06:07Z",
+          "testedRevision": "c8abe71ba4e8cb988a987ca9337d252acf3c2fe5",
+          "recordedAt": "2026-11-11T07:25:37Z",
           "selected": 16,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1240-pilot-1181-mcp-comparisons.xml",
-            "sha256": "7973f283cba59b78b83bb43eac8ccfa6ad8ba6dd43d822e68ff97e2ffecab859"
+            "path": "docs/research/pi-v1.3.0/deliveries/1181-revalidation-upstream-71ad3e83a.xml",
+            "sha256": "7376bd1833a9bbfb745686c2db5595765838372fe21d9989deea19e2a3f48d4f"
           }
         },
         "rows": [
@@ -6029,6 +6146,30 @@
               "sha256": "19cd2fe05dac7cff7adafe2cc9f68d4b5922773496669f4818b3d6b83785c578"
             }
           }
+        },
+        "revalidation1232ReceiptDebt": {
+          "reason": "Upstream commit 71ad3e83a added boost-uuid to vcpkg.json and Boost::uuid to the durable target's declared dependencies, changing pinned inputs of this receipt (vcpkg.json). The delivered rows, comparison scenarios and routing digest are unchanged, and no #1232 change touches this receipt. The receipt's exact selection was rerun at this base into a fresh JUnit artifact, and this change makes no new verification claim about those rows.",
+          "changedInputs": [
+            "vcpkg.json"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-R",
+              "^(an MCP HTTP URL must be http or https|streamable HTTP transport connects over plain http|connecting an MCP HTTP server lists its tools with the pi naming and schema|a same-origin redirect is followed and keeps the request auth header|cross-origin redirect is followed without Authorization and is rejected|HTTPS transport rejects an untrusted certificate|an authorization code from another issuer never reaches the token endpoint|authorization server metadata naming another issuer stops before any token request|the MCP HTTP transport attaches a credential only when the server needs one|agent session lists MCP resources only on demand and can call tools after a resource failure|the real stdio fixture lists, templates, and reads over `resources/\\*`|a cancelled MCP OAuth discovery stops before any registration or token request|a cancelled MCP OAuth client registration stops before any token request|a browser callback wait cancelled by the sign-in stop token stops sign-in|a pasted redirect URL completes the MCP OAuth sign-in|protected resource discovery retries the bare origin after a path-suffixed miss)$",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1240-pilot-1181-mcp-comparisons.xml"
+            ],
+            "testedRevision": "cde9255c41c3c575c6e9ce20b1432687869a36f7",
+            "recordedAt": "2026-11-07T07:06:07Z",
+            "selected": 16,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1240-pilot-1181-mcp-comparisons.xml",
+              "sha256": "7973f283cba59b78b83bb43eac8ccfa6ad8ba6dd43d822e68ff97e2ffecab859"
+            }
+          }
         }
       },
       {
@@ -6066,16 +6207,19 @@
             "vcpkg",
             "-L",
             "chord",
+            "--no-tests=error",
             "--output-on-failure",
+            "-j",
+            "1",
             "--output-junit",
-            "../docs/research/pi-v1.3.0/deliveries/1240-remaining-chord.xml"
+            "docs/research/pi-v1.3.0/deliveries/1185-revalidation-upstream-71ad3e83a.xml"
           ],
-          "testedRevision": "0e52577e3679167a7dd66db597066882b03378ae",
-          "recordedAt": "2026-11-07T09:51:28Z",
+          "testedRevision": "c8abe71ba4e8cb988a987ca9337d252acf3c2fe5",
+          "recordedAt": "2026-11-11T07:25:42Z",
           "selected": 104,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1240-remaining-chord.xml",
-            "sha256": "6bc16df2e57437a5100d915ce2c51a766ff4d270c8459402290bf15619e0e997"
+            "path": "docs/research/pi-v1.3.0/deliveries/1185-revalidation-upstream-71ad3e83a.xml",
+            "sha256": "d69518e01d5d261d851c92eb589fabc407c73daefa9e2c4cd80ed1f5993ed28b"
           }
         },
         "rows": [
@@ -6181,7 +6325,7 @@
           },
           {
             "path": "vcpkg.json",
-            "sha256": "dc956d944cb2fcd3e88f4b305931d5b568c1164a8ec5ab9d1688f7418a5814dc"
+            "sha256": "f19c0e240a28de99619e7625635e74160763c3f9c098bfff1a3b77c8916cdf91"
           },
           {
             "path": "cmake/targets/Chord.cmake",
@@ -6511,6 +6655,31 @@
               "sha256": "24e34050c9f175d4fc285909dd5e70b3419ca7672c1ab03c882754953411a3bc"
             }
           }
+        },
+        "revalidation1232ReceiptDebt": {
+          "reason": "Upstream commit 71ad3e83a added boost-uuid to vcpkg.json and Boost::uuid to the durable target's declared dependencies, changing pinned inputs of this receipt (vcpkg.json). The delivered rows, comparison scenarios and routing digest are unchanged, and no #1232 change touches this receipt. The receipt's exact selection was rerun at this base into a fresh JUnit artifact, and this change makes no new verification claim about those rows.",
+          "changedInputs": [
+            "vcpkg.json"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-L",
+              "chord",
+              "--output-on-failure",
+              "--output-junit",
+              "../docs/research/pi-v1.3.0/deliveries/1240-remaining-chord.xml"
+            ],
+            "testedRevision": "0e52577e3679167a7dd66db597066882b03378ae",
+            "recordedAt": "2026-11-07T09:51:28Z",
+            "selected": 104,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1240-remaining-chord.xml",
+              "sha256": "6bc16df2e57437a5100d915ce2c51a766ff4d270c8459402290bf15619e0e997"
+            }
+          }
         }
       },
       {
@@ -6529,16 +6698,19 @@
             "vcpkg",
             "-L",
             "issue1184",
+            "--no-tests=error",
             "--output-on-failure",
+            "-j",
+            "1",
             "--output-junit",
-            "../docs/research/pi-v1.3.0/deliveries/1240-remaining-1184.xml"
+            "docs/research/pi-v1.3.0/deliveries/1184-revalidation-upstream-71ad3e83a.xml"
           ],
-          "testedRevision": "0e52577e3679167a7dd66db597066882b03378ae",
-          "recordedAt": "2026-11-07T09:51:28Z",
+          "testedRevision": "c8abe71ba4e8cb988a987ca9337d252acf3c2fe5",
+          "recordedAt": "2026-11-11T07:25:26Z",
           "selected": 10,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1240-remaining-1184.xml",
-            "sha256": "5210be29e5c022d3816d9cdfb9cb250238a6050c266aa31e336cdabe751cd111"
+            "path": "docs/research/pi-v1.3.0/deliveries/1184-revalidation-upstream-71ad3e83a.xml",
+            "sha256": "6c15d708b02d45559280c990890c3624e0322b9e8d6651eb0a45e36c607ce2ec"
           }
         },
         "rows": [
@@ -6623,7 +6795,7 @@
           },
           {
             "path": "vcpkg.json",
-            "sha256": "dc956d944cb2fcd3e88f4b305931d5b568c1164a8ec5ab9d1688f7418a5814dc"
+            "sha256": "f19c0e240a28de99619e7625635e74160763c3f9c098bfff1a3b77c8916cdf91"
           },
           {
             "path": "cmake/targets/Chord.cmake",
@@ -6631,7 +6803,7 @@
           },
           {
             "path": "cmake/targets/Durable.cmake",
-            "sha256": "9feff05ddef3c098ea115e9e34558271b9d68b448721404a3c2fa07129eeac44"
+            "sha256": "05a4970a8ecb0601cd6601536bf135fe9b7203de2c869e0a212104cfc0bc9714"
           },
           {
             "path": "cmake/tests/ChordTests.cmake",
@@ -6993,6 +7165,32 @@
               "sha256": "1e5a545a00488ca9071b4324a9122edda68d0f316a2e188b4f8c29c00edecfdc"
             }
           }
+        },
+        "revalidation1232ReceiptDebt": {
+          "reason": "Upstream commit 71ad3e83a added boost-uuid to vcpkg.json and Boost::uuid to the durable target's declared dependencies, changing pinned inputs of this receipt (cmake/targets/Durable.cmake, vcpkg.json). The delivered rows, comparison scenarios and routing digest are unchanged, and no #1232 change touches this receipt. The receipt's exact selection was rerun at this base into a fresh JUnit artifact, and this change makes no new verification claim about those rows.",
+          "changedInputs": [
+            "cmake/targets/Durable.cmake",
+            "vcpkg.json"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-L",
+              "issue1184",
+              "--output-on-failure",
+              "--output-junit",
+              "../docs/research/pi-v1.3.0/deliveries/1240-remaining-1184.xml"
+            ],
+            "testedRevision": "0e52577e3679167a7dd66db597066882b03378ae",
+            "recordedAt": "2026-11-07T09:51:28Z",
+            "selected": 10,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1240-remaining-1184.xml",
+              "sha256": "5210be29e5c022d3816d9cdfb9cb250238a6050c266aa31e336cdabe751cd111"
+            }
+          }
         }
       },
       {
@@ -7029,16 +7227,19 @@
             "vcpkg",
             "-L",
             "chord",
+            "--no-tests=error",
             "--output-on-failure",
+            "-j",
+            "1",
             "--output-junit",
-            "../docs/research/pi-v1.3.0/deliveries/1240-remaining-chord.xml"
+            "docs/research/pi-v1.3.0/deliveries/1186-revalidation-upstream-71ad3e83a.xml"
           ],
-          "testedRevision": "0e52577e3679167a7dd66db597066882b03378ae",
-          "recordedAt": "2026-11-07T09:51:28Z",
+          "testedRevision": "c8abe71ba4e8cb988a987ca9337d252acf3c2fe5",
+          "recordedAt": "2026-11-11T07:25:43Z",
           "selected": 104,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1240-remaining-chord.xml",
-            "sha256": "6bc16df2e57437a5100d915ce2c51a766ff4d270c8459402290bf15619e0e997"
+            "path": "docs/research/pi-v1.3.0/deliveries/1186-revalidation-upstream-71ad3e83a.xml",
+            "sha256": "ad649941179e533ead6265d4002fd347ea01dfac9f6bcb29ac20fee3eca3d050"
           }
         },
         "rows": [
@@ -7158,7 +7359,7 @@
           },
           {
             "path": "vcpkg.json",
-            "sha256": "dc956d944cb2fcd3e88f4b305931d5b568c1164a8ec5ab9d1688f7418a5814dc"
+            "sha256": "f19c0e240a28de99619e7625635e74160763c3f9c098bfff1a3b77c8916cdf91"
           },
           {
             "path": "cmake/targets/Chord.cmake",
@@ -8000,6 +8201,31 @@
               "sha256": "24e34050c9f175d4fc285909dd5e70b3419ca7672c1ab03c882754953411a3bc"
             }
           }
+        },
+        "revalidation1232ReceiptDebt": {
+          "reason": "Upstream commit 71ad3e83a added boost-uuid to vcpkg.json and Boost::uuid to the durable target's declared dependencies, changing pinned inputs of this receipt (vcpkg.json). The delivered rows, comparison scenarios and routing digest are unchanged, and no #1232 change touches this receipt. The receipt's exact selection was rerun at this base into a fresh JUnit artifact, and this change makes no new verification claim about those rows.",
+          "changedInputs": [
+            "vcpkg.json"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-L",
+              "chord",
+              "--output-on-failure",
+              "--output-junit",
+              "../docs/research/pi-v1.3.0/deliveries/1240-remaining-chord.xml"
+            ],
+            "testedRevision": "0e52577e3679167a7dd66db597066882b03378ae",
+            "recordedAt": "2026-11-07T09:51:28Z",
+            "selected": 104,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1240-remaining-chord.xml",
+              "sha256": "6bc16df2e57437a5100d915ce2c51a766ff4d270c8459402290bf15619e0e997"
+            }
+          }
         }
       },
       {
@@ -8037,16 +8263,19 @@
             "vcpkg",
             "-L",
             "chord",
+            "--no-tests=error",
             "--output-on-failure",
+            "-j",
+            "1",
             "--output-junit",
-            "../docs/research/pi-v1.3.0/deliveries/1240-remaining-chord.xml"
+            "docs/research/pi-v1.3.0/deliveries/1188-revalidation-upstream-71ad3e83a.xml"
           ],
-          "testedRevision": "0e52577e3679167a7dd66db597066882b03378ae",
-          "recordedAt": "2026-11-07T09:51:28Z",
+          "testedRevision": "c8abe71ba4e8cb988a987ca9337d252acf3c2fe5",
+          "recordedAt": "2026-11-11T07:25:43Z",
           "selected": 104,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1240-remaining-chord.xml",
-            "sha256": "6bc16df2e57437a5100d915ce2c51a766ff4d270c8459402290bf15619e0e997"
+            "path": "docs/research/pi-v1.3.0/deliveries/1188-revalidation-upstream-71ad3e83a.xml",
+            "sha256": "92bfe2775d69cdb1eabb8a4d36d6c82fb2b22d424a442bb6394843171f4f5aaa"
           }
         },
         "rows": [
@@ -8129,7 +8358,7 @@
           },
           {
             "path": "vcpkg.json",
-            "sha256": "dc956d944cb2fcd3e88f4b305931d5b568c1164a8ec5ab9d1688f7418a5814dc"
+            "sha256": "f19c0e240a28de99619e7625635e74160763c3f9c098bfff1a3b77c8916cdf91"
           },
           {
             "path": "cmake/targets/Chord.cmake",
@@ -8952,6 +9181,31 @@
               "sha256": "24e34050c9f175d4fc285909dd5e70b3419ca7672c1ab03c882754953411a3bc"
             }
           }
+        },
+        "revalidation1232ReceiptDebt": {
+          "reason": "Upstream commit 71ad3e83a added boost-uuid to vcpkg.json and Boost::uuid to the durable target's declared dependencies, changing pinned inputs of this receipt (vcpkg.json). The delivered rows, comparison scenarios and routing digest are unchanged, and no #1232 change touches this receipt. The receipt's exact selection was rerun at this base into a fresh JUnit artifact, and this change makes no new verification claim about those rows.",
+          "changedInputs": [
+            "vcpkg.json"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-L",
+              "chord",
+              "--output-on-failure",
+              "--output-junit",
+              "../docs/research/pi-v1.3.0/deliveries/1240-remaining-chord.xml"
+            ],
+            "testedRevision": "0e52577e3679167a7dd66db597066882b03378ae",
+            "recordedAt": "2026-11-07T09:51:28Z",
+            "selected": 104,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1240-remaining-chord.xml",
+              "sha256": "6bc16df2e57437a5100d915ce2c51a766ff4d270c8459402290bf15619e0e997"
+            }
+          }
         }
       },
       {
@@ -8969,16 +9223,19 @@
             "vcpkg",
             "-L",
             "issue1187",
+            "--no-tests=error",
             "--output-on-failure",
+            "-j",
+            "1",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1240-pilot-1187-chord-progress-pacing.xml"
+            "docs/research/pi-v1.3.0/deliveries/1187-revalidation-upstream-71ad3e83a.xml"
           ],
-          "testedRevision": "cde9255c41c3c575c6e9ce20b1432687869a36f7",
-          "recordedAt": "2026-11-07T07:06:07Z",
+          "testedRevision": "c8abe71ba4e8cb988a987ca9337d252acf3c2fe5",
+          "recordedAt": "2026-11-11T07:25:07Z",
           "selected": 4,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1240-pilot-1187-chord-progress-pacing.xml",
-            "sha256": "96379d561959ccc4f98e373121859490ae934e90cb41e614fc9750b5c5d926fc"
+            "path": "docs/research/pi-v1.3.0/deliveries/1187-revalidation-upstream-71ad3e83a.xml",
+            "sha256": "99b42719d9294c7807f1ebfbaa6b6cf1bc7fabef579b89132d6aefecada3103a"
           }
         },
         "inputs": [
@@ -8992,7 +9249,7 @@
           },
           {
             "path": "vcpkg.json",
-            "sha256": "dc956d944cb2fcd3e88f4b305931d5b568c1164a8ec5ab9d1688f7418a5814dc"
+            "sha256": "f19c0e240a28de99619e7625635e74160763c3f9c098bfff1a3b77c8916cdf91"
           },
           {
             "path": "cmake/targets/Chord.cmake",
@@ -9196,6 +9453,31 @@
               "sha256": "4b66373a8e4551c5e1a962523c961758e34f4256a6e36715fb2b2276cb7b51fc"
             }
           }
+        },
+        "revalidation1232ReceiptDebt": {
+          "reason": "Upstream commit 71ad3e83a added boost-uuid to vcpkg.json and Boost::uuid to the durable target's declared dependencies, changing pinned inputs of this receipt (vcpkg.json). The delivered rows, comparison scenarios and routing digest are unchanged, and no #1232 change touches this receipt. The receipt's exact selection was rerun at this base into a fresh JUnit artifact, and this change makes no new verification claim about those rows.",
+          "changedInputs": [
+            "vcpkg.json"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-L",
+              "issue1187",
+              "--output-on-failure",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1240-pilot-1187-chord-progress-pacing.xml"
+            ],
+            "testedRevision": "cde9255c41c3c575c6e9ce20b1432687869a36f7",
+            "recordedAt": "2026-11-07T07:06:07Z",
+            "selected": 4,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1240-pilot-1187-chord-progress-pacing.xml",
+              "sha256": "96379d561959ccc4f98e373121859490ae934e90cb41e614fc9750b5c5d926fc"
+            }
+          }
         }
       },
       {
@@ -9212,15 +9494,19 @@
             "vcpkg",
             "-L",
             "issue1182",
+            "--no-tests=error",
+            "--output-on-failure",
+            "-j",
+            "1",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1240-pilot-1182-tui-comparisons.xml"
+            "docs/research/pi-v1.3.0/deliveries/1182-revalidation-upstream-71ad3e83a.xml"
           ],
-          "testedRevision": "cde9255c41c3c575c6e9ce20b1432687869a36f7",
-          "recordedAt": "2026-11-07T07:06:07Z",
+          "testedRevision": "c8abe71ba4e8cb988a987ca9337d252acf3c2fe5",
+          "recordedAt": "2026-11-11T07:25:34Z",
           "selected": 13,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1240-pilot-1182-tui-comparisons.xml",
-            "sha256": "5c8a8372f5fda844603c4402707f2d03baf23734fada0a810ebbac8d530d2c3c"
+            "path": "docs/research/pi-v1.3.0/deliveries/1182-revalidation-upstream-71ad3e83a.xml",
+            "sha256": "ffcf17753c43ddf6a6692ee8472506120c1b4cbca6ef5028f56a2744ceff4330"
           }
         },
         "rows": [
@@ -9355,7 +9641,7 @@
           },
           {
             "path": "vcpkg.json",
-            "sha256": "dc956d944cb2fcd3e88f4b305931d5b568c1164a8ec5ab9d1688f7418a5814dc"
+            "sha256": "f19c0e240a28de99619e7625635e74160763c3f9c098bfff1a3b77c8916cdf91"
           },
           {
             "path": "cmake/tests/TuiTests.cmake",
@@ -10263,6 +10549,30 @@
               "sha256": "dc5aa87866954f38c244d747fb0c9a89abf8ef6062e4db3d7a0c54f82abfcfe9"
             }
           }
+        },
+        "revalidation1232ReceiptDebt": {
+          "reason": "Upstream commit 71ad3e83a added boost-uuid to vcpkg.json and Boost::uuid to the durable target's declared dependencies, changing pinned inputs of this receipt (vcpkg.json). The delivered rows, comparison scenarios and routing digest are unchanged, and no #1232 change touches this receipt. The receipt's exact selection was rerun at this base into a fresh JUnit artifact, and this change makes no new verification claim about those rows.",
+          "changedInputs": [
+            "vcpkg.json"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-L",
+              "issue1182",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1240-pilot-1182-tui-comparisons.xml"
+            ],
+            "testedRevision": "cde9255c41c3c575c6e9ce20b1432687869a36f7",
+            "recordedAt": "2026-11-07T07:06:07Z",
+            "selected": 13,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1240-pilot-1182-tui-comparisons.xml",
+              "sha256": "5c8a8372f5fda844603c4402707f2d03baf23734fada0a810ebbac8d530d2c3c"
+            }
+          }
         }
       },
       {
@@ -10295,15 +10605,15 @@
           },
           {
             "path": "vcpkg.json",
-            "sha256": "dc956d944cb2fcd3e88f4b305931d5b568c1164a8ec5ab9d1688f7418a5814dc"
+            "sha256": "f19c0e240a28de99619e7625635e74160763c3f9c098bfff1a3b77c8916cdf91"
           },
           {
             "path": "cmake/targets/Codemode.cmake",
-            "sha256": "d5c1c594ed8c97f5a9d37cf2f462a4a68db039836d5686f120c9eb9755ef939a"
+            "sha256": "a07926c5cde51829b8532c50c0af5e71da2ba26ab35348c92ad707c82ede4b31"
           },
           {
             "path": "cmake/tests/CodemodeTests.cmake",
-            "sha256": "ee80abcd89060a440d020e17442a29e3bd15f9edda86fb7d0f310e2b5dc0c37b"
+            "sha256": "fbc4c60f65065558bed9a8039e1cc6a1e3667de1c113962cb4c1b249185b261f"
           },
           {
             "path": "cmake/tests/CodingAgentTests.cmake",
@@ -10319,7 +10629,7 @@
           },
           {
             "path": "src/codemode/Deterministic.cpp",
-            "sha256": "6e89bab080ded46ffd474a11a1c423e47f1692d66486cd8805a005edee45e85e"
+            "sha256": "6db754869d4b442ec77f84414fb5d7bf4adcfc7fb6f06d631bd15e409d51732c"
           },
           {
             "path": "src/codemode/Deterministic.hpp",
@@ -10339,7 +10649,7 @@
           },
           {
             "path": "src/codemode/Remote.cpp",
-            "sha256": "612eb8faaa3a255196dc3498bfbf57f5974a15db07313a7b3cd9942eb7d56e9f"
+            "sha256": "2b3866b02e108bf8468f5b3540b925603665dbc4dcac61d93cfd589588b9de3a"
           },
           {
             "path": "src/codemode/Sandbox.cpp",
@@ -10419,7 +10729,7 @@
           },
           {
             "path": "tests/codemode/CodemodeRemoteTest.cpp",
-            "sha256": "8ecfe916f88be798337525d316509dabdd446451295497495836fa112889a6ba"
+            "sha256": "0e392f85aa5b0ace1a1aef84bae0b630ddbe2d2e210926e339cd58ccfe2f7672"
           },
           {
             "path": "tests/coding_agent/CodemodeSandboxTest.cpp",
@@ -11435,17 +11745,18 @@
             "vcpkg",
             "-R",
             "^(Remote deterministic execution applies reversed answers by result number|Remote deterministic execution runs the script remotely and answers through deliver|RemoteCodemodeSandbox batches output instead of making one exchange per line|RemoteCodemodeSandbox caps the interrupt budget and memory at the remote's limits|RemoteCodemodeSandbox discriminating abort check: does not block on slow remote exit|RemoteCodemodeSandbox reports failing, silent or unreachable remote as sandbox error with transport reason|RemoteCodemodeSandbox runs tools in the caller and the script on the remote|RemoteCodemodeSandbox tells the remote to stop when caller aborts and settles immediately|a normal codemode run is not deterministic while start is|a public codemode caller aborting while a tool waits keeps partial output and cancels the call|a public codemode caller applies reversed answers by result number not arrival order|a public codemode caller binds a dotted global into its frozen namespace and spreads arguments|a public codemode caller catches unknown tools and thrown tool errors with error call status|a public codemode caller collects mixed output in order with the console marker and image MIME|a public codemode caller counts the interrupt budget across tool waits|a public codemode caller fails the run when the guest hits its output item limit|a public codemode caller gets UTC and no WeakRef in a deterministic run|a public codemode caller gets an uncatchable abort and a cancelled record in a deterministic run|a public codemode caller gets during for the result the VM was processing when the script ended|a public codemode caller gets illegal start options refused before any VM exists|a public codemode caller gets the fingerprint before the first call and a reused result number is refused|a public codemode caller keeps a call waiting when its answer cannot be serialized|a public codemode caller numbers globals with tools and gets rejection properties on the script Error|a public codemode caller reads a store snapshot across calls and drops failed writes|a public codemode caller records an unawaited call as cancelled and aborts it|a public codemode caller records settled calls with ok and error statuses|a public codemode caller rejects a reused result number a non-finite clock and an unknown call deterministically|a public codemode caller rejects invalid globals at construction with the frozen errors|a public codemode caller replays a deterministic run from the same start seed and answers|a public codemode caller reports a pre-aborted run with the abort reason and never starts it|a public codemode caller reports a script error with its name message stack and prior output|a public codemode caller reports guest memory exhaustion as an out-of-memory script error|a public codemode caller reports non-Error throws BigInt returns and syntax errors as script errors|a public codemode caller reports the deadline when a tool waits past it and keeps partial output|a public codemode caller returns its value and text output from a successful budgeted run|a public codemode caller sees a seed mismatch change randomness without changing the start time|a public codemode caller stops pure computation with the interrupt budget, not the deadline|a public codemode caller stringifies text and accepts image blocks with the frozen type errors|a public codemode caller treats exit\\(\\) as success with prior output and the write set|a run-supplied jsName overrides the derived script name|an over-limit script is interrupted with a timeout error|codemode worker admission follows wasm load and releases a failed start once|codemode worker results settle before exit while admission stays bounded|the public codemode declaration covers the frozen schema renderings|the public codemode declaration groups tools globals and namespaces with doc comments|the public codemode declaration preserves the relocated tool identifiers|the public codemode declaration renders frozen schema types|the public codemode declaration renders frozen tool signatures samples and blocks|the public codemode prelude is the frozen sandbox prelude with output and store limits|the public codemode source parser keeps only a first-line options command|the public codemode source parser rejects a misplaced options line with its line number|the public codemode source parser rejects invalid options and empty input with typed errors)$",
+            "--no-tests=error",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1179-revalidation-1232-stop-notify.xml",
+            "docs/research/pi-v1.3.0/deliveries/1179-revalidation-1232-frame-join.xml",
             "-j",
             "1"
           ],
-          "testedRevision": "f2b027fc6a246166cb66bc51cb4c914e1cfd43cf",
-          "recordedAt": "2026-11-10T13:10:14Z",
+          "testedRevision": "44d0fa5c1d52bb834a54b812265b250424ba6844",
+          "recordedAt": "2026-11-11T06:53:11Z",
           "selected": 52,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1179-revalidation-1232-stop-notify.xml",
-            "sha256": "6c8aa7d9b0d3a72f517dd807511aa4f2f8b9ab78d159ac6ca2f56f8759ace492"
+            "path": "docs/research/pi-v1.3.0/deliveries/1179-revalidation-1232-frame-join.xml",
+            "sha256": "4fd7317c7fa575a3eff73723fe5956d06c4a62e24291bc64925bbff0e6736fa9"
           }
         },
         "revalidation1179m": {
@@ -12101,6 +12412,37 @@
               "sha256": "e0b7c87333150431e32199a6303d3f878295e06bdae7ffeab2870a9d1125094b"
             }
           }
+        },
+        "revalidation1232FrameJoin": {
+          "reason": "This rebind re-runs the exact recorded #1179 selection (52 cases) on the #1232 integration tree at 44d0fa5c1. Two independent causes changed pinned bytes: (1) this integration adds the deterministic-worker test-gate calls to src/codemode/Deterministic.cpp and src/codemode/Remote.cpp and force-includes the gate header in cmake/tests/CodemodeTests.cmake, while the self-join slice moved cmake/targets/Codemode.cmake and cmake/tests/CodemodeTests.cmake; (2) the newer upstream base 71ad3e83a had already changed files pinned or consumed by these receipts - vcpkg.json, Durable.cmake, tests/support/ModelsFixture.hpp and tests/codemode/CodemodeRemoteTest.cpp among them - so the vcpkg.json and CodemodeRemoteTest.cpp pins predated that base. Rows, comparison scenarios, discriminating cases, implementationCommits and routingSha256 are unchanged; no capability claim is added and no new discriminating case is claimed.",
+          "changedInputs": [
+            "vcpkg.json",
+            "cmake/targets/Codemode.cmake",
+            "cmake/tests/CodemodeTests.cmake",
+            "src/codemode/Deterministic.cpp",
+            "src/codemode/Remote.cpp",
+            "tests/codemode/CodemodeRemoteTest.cpp"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-R",
+              "^(Remote deterministic execution applies reversed answers by result number|Remote deterministic execution runs the script remotely and answers through deliver|RemoteCodemodeSandbox batches output instead of making one exchange per line|RemoteCodemodeSandbox caps the interrupt budget and memory at the remote's limits|RemoteCodemodeSandbox discriminating abort check: does not block on slow remote exit|RemoteCodemodeSandbox reports failing, silent or unreachable remote as sandbox error with transport reason|RemoteCodemodeSandbox runs tools in the caller and the script on the remote|RemoteCodemodeSandbox tells the remote to stop when caller aborts and settles immediately|a normal codemode run is not deterministic while start is|a public codemode caller aborting while a tool waits keeps partial output and cancels the call|a public codemode caller applies reversed answers by result number not arrival order|a public codemode caller binds a dotted global into its frozen namespace and spreads arguments|a public codemode caller catches unknown tools and thrown tool errors with error call status|a public codemode caller collects mixed output in order with the console marker and image MIME|a public codemode caller counts the interrupt budget across tool waits|a public codemode caller fails the run when the guest hits its output item limit|a public codemode caller gets UTC and no WeakRef in a deterministic run|a public codemode caller gets an uncatchable abort and a cancelled record in a deterministic run|a public codemode caller gets during for the result the VM was processing when the script ended|a public codemode caller gets illegal start options refused before any VM exists|a public codemode caller gets the fingerprint before the first call and a reused result number is refused|a public codemode caller keeps a call waiting when its answer cannot be serialized|a public codemode caller numbers globals with tools and gets rejection properties on the script Error|a public codemode caller reads a store snapshot across calls and drops failed writes|a public codemode caller records an unawaited call as cancelled and aborts it|a public codemode caller records settled calls with ok and error statuses|a public codemode caller rejects a reused result number a non-finite clock and an unknown call deterministically|a public codemode caller rejects invalid globals at construction with the frozen errors|a public codemode caller replays a deterministic run from the same start seed and answers|a public codemode caller reports a pre-aborted run with the abort reason and never starts it|a public codemode caller reports a script error with its name message stack and prior output|a public codemode caller reports guest memory exhaustion as an out-of-memory script error|a public codemode caller reports non-Error throws BigInt returns and syntax errors as script errors|a public codemode caller reports the deadline when a tool waits past it and keeps partial output|a public codemode caller returns its value and text output from a successful budgeted run|a public codemode caller sees a seed mismatch change randomness without changing the start time|a public codemode caller stops pure computation with the interrupt budget, not the deadline|a public codemode caller stringifies text and accepts image blocks with the frozen type errors|a public codemode caller treats exit\\(\\) as success with prior output and the write set|a run-supplied jsName overrides the derived script name|an over-limit script is interrupted with a timeout error|codemode worker admission follows wasm load and releases a failed start once|codemode worker results settle before exit while admission stays bounded|the public codemode declaration covers the frozen schema renderings|the public codemode declaration groups tools globals and namespaces with doc comments|the public codemode declaration preserves the relocated tool identifiers|the public codemode declaration renders frozen schema types|the public codemode declaration renders frozen tool signatures samples and blocks|the public codemode prelude is the frozen sandbox prelude with output and store limits|the public codemode source parser keeps only a first-line options command|the public codemode source parser rejects a misplaced options line with its line number|the public codemode source parser rejects invalid options and empty input with typed errors)$",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1179-revalidation-1232-stop-notify.xml",
+              "-j",
+              "1"
+            ],
+            "testedRevision": "f2b027fc6a246166cb66bc51cb4c914e1cfd43cf",
+            "recordedAt": "2026-11-10T13:10:14Z",
+            "selected": 52,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1179-revalidation-1232-stop-notify.xml",
+              "sha256": "6c8aa7d9b0d3a72f517dd807511aa4f2f8b9ab78d159ac6ca2f56f8759ace492"
+            }
+          }
         }
       },
       {
@@ -12121,7 +12463,7 @@
           },
           {
             "path": "vcpkg.json",
-            "sha256": "dc956d944cb2fcd3e88f4b305931d5b568c1164a8ec5ab9d1688f7418a5814dc"
+            "sha256": "f19c0e240a28de99619e7625635e74160763c3f9c098bfff1a3b77c8916cdf91"
           },
           {
             "path": "cmake/tests/AgentTests.cmake",
@@ -12203,17 +12545,19 @@
             "vcpkg",
             "-R",
             "^(reset restores the System Message baseline and clears queues while retaining live policy|run_tool_call executes successfully and records execute-only duration|run_tool_call returns error outcome for blocked tool call without executing|stateful Agent queue peek prefers steering and clear removes both queues|stateful Agent rejects a second prompt while its active run is suspended)$",
-            "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1240-pilot-1176-agent-comparisons.xml",
+            "--no-tests=error",
+            "--output-on-failure",
             "-j",
-            "1"
+            "1",
+            "--output-junit",
+            "docs/research/pi-v1.3.0/deliveries/1176-revalidation-upstream-71ad3e83a.xml"
           ],
-          "testedRevision": "cde9255c41c3c575c6e9ce20b1432687869a36f7",
-          "recordedAt": "2026-11-07T07:06:07Z",
+          "testedRevision": "c8abe71ba4e8cb988a987ca9337d252acf3c2fe5",
+          "recordedAt": "2026-11-11T07:25:23Z",
           "selected": 5,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1240-pilot-1176-agent-comparisons.xml",
-            "sha256": "c259864a7defd2a8b14849e3b77499ac4e5520fd503d2f6df3d5928b900afd6b"
+            "path": "docs/research/pi-v1.3.0/deliveries/1176-revalidation-upstream-71ad3e83a.xml",
+            "sha256": "39eaa2fbc3d3547705a0caff27aa4bffcd4b702422a85431f008481f845c7ab8"
           }
         },
         "rows": [
@@ -12851,6 +13195,32 @@
               "sha256": "78d6aefe643d47a9bdd33109b15031a8fb235108a5bed796cfc347950e53e9c1"
             }
           }
+        },
+        "revalidation1232ReceiptDebt": {
+          "reason": "Upstream commit 71ad3e83a added boost-uuid to vcpkg.json and Boost::uuid to the durable target's declared dependencies, changing pinned inputs of this receipt (vcpkg.json). The delivered rows, comparison scenarios and routing digest are unchanged, and no #1232 change touches this receipt. The receipt's exact selection was rerun at this base into a fresh JUnit artifact, and this change makes no new verification claim about those rows.",
+          "changedInputs": [
+            "vcpkg.json"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-R",
+              "^(reset restores the System Message baseline and clears queues while retaining live policy|run_tool_call executes successfully and records execute-only duration|run_tool_call returns error outcome for blocked tool call without executing|stateful Agent queue peek prefers steering and clear removes both queues|stateful Agent rejects a second prompt while its active run is suspended)$",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1240-pilot-1176-agent-comparisons.xml",
+              "-j",
+              "1"
+            ],
+            "testedRevision": "cde9255c41c3c575c6e9ce20b1432687869a36f7",
+            "recordedAt": "2026-11-07T07:06:07Z",
+            "selected": 5,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1240-pilot-1176-agent-comparisons.xml",
+              "sha256": "c259864a7defd2a8b14849e3b77499ac4e5520fd503d2f6df3d5928b900afd6b"
+            }
+          }
         }
       },
       {
@@ -12871,7 +13241,7 @@
           },
           {
             "path": "vcpkg.json",
-            "sha256": "dc956d944cb2fcd3e88f4b305931d5b568c1164a8ec5ab9d1688f7418a5814dc"
+            "sha256": "f19c0e240a28de99619e7625635e74160763c3f9c098bfff1a3b77c8916cdf91"
           },
           {
             "path": "cmake/tests/CodingAgentTests.cmake",
@@ -12969,17 +13339,19 @@
             "vcpkg",
             "-R",
             "^(a\\ real\\ session's\\ next\\ request\\ lists\\ MCP\\ tools\\ registered\\ late\\ and\\ executes\\ them|a\\ settings\\ document\\ the\\ schema\\ accepts\\ reshapes\\ the\\ request\\ and\\ reload\\ re\\-reads\\ it|an\\ inline\\ budget\\ omits\\ a\\ namespace's\\ tools\\ with\\ pi's\\ marker|disabling\\ a\\ server\\ and\\ changing\\ its\\ exposure\\ reshape\\ the\\ next\\ request's\\ catalog|namespaces\\ group\\ sections\\ and\\ the\\ inline\\ budget\\ omits\\ tools\\ with\\ an\\ explicit\\ marker|the\\ empty\\ codemode\\ catalog\\ matches\\ the\\ frozen\\ pi\\-v1\\.3\\.0\\ description|the\\ on\\ loadout\\ lists\\ only\\ non\\-direct\\ callable\\ tools\\ and\\ adds\\ script\\-call\\ descriptions|the\\ only\\ loadout\\ lists\\ every\\ callable\\ tool\\ and\\ hides\\ direct\\ declarations|the\\ theme\\ token\\ set\\ matches\\ the\\ frozen\\ pi\\-v1\\.3\\.0\\ capture)$",
-            "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1240-pilot-1177-application-comparisons.xml",
+            "--no-tests=error",
+            "--output-on-failure",
             "-j",
-            "1"
+            "1",
+            "--output-junit",
+            "docs/research/pi-v1.3.0/deliveries/1177-revalidation-upstream-71ad3e83a.xml"
           ],
-          "testedRevision": "cde9255c41c3c575c6e9ce20b1432687869a36f7",
-          "recordedAt": "2026-11-07T07:06:07Z",
+          "testedRevision": "c8abe71ba4e8cb988a987ca9337d252acf3c2fe5",
+          "recordedAt": "2026-11-11T07:25:26Z",
           "selected": 9,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1240-pilot-1177-application-comparisons.xml",
-            "sha256": "10dde98ca54d5fd6fee1aeebf4e7d1f3a8b08ddc9a172f4fa6f0a7e63457f03f"
+            "path": "docs/research/pi-v1.3.0/deliveries/1177-revalidation-upstream-71ad3e83a.xml",
+            "sha256": "487e840f14ae7747e424a932838a743583abf638e1d4418745f4945891a1d82e"
           }
         },
         "rows": [
@@ -13648,6 +14020,32 @@
               "sha256": "84d7a758d173cfb2b47da10b23b1472e39f67b4cc09008a99a67dd432a5a8f07"
             }
           }
+        },
+        "revalidation1232ReceiptDebt": {
+          "reason": "Upstream commit 71ad3e83a added boost-uuid to vcpkg.json and Boost::uuid to the durable target's declared dependencies, changing pinned inputs of this receipt (vcpkg.json). The delivered rows, comparison scenarios and routing digest are unchanged, and no #1232 change touches this receipt. The receipt's exact selection was rerun at this base into a fresh JUnit artifact, and this change makes no new verification claim about those rows.",
+          "changedInputs": [
+            "vcpkg.json"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-R",
+              "^(a\\ real\\ session's\\ next\\ request\\ lists\\ MCP\\ tools\\ registered\\ late\\ and\\ executes\\ them|a\\ settings\\ document\\ the\\ schema\\ accepts\\ reshapes\\ the\\ request\\ and\\ reload\\ re\\-reads\\ it|an\\ inline\\ budget\\ omits\\ a\\ namespace's\\ tools\\ with\\ pi's\\ marker|disabling\\ a\\ server\\ and\\ changing\\ its\\ exposure\\ reshape\\ the\\ next\\ request's\\ catalog|namespaces\\ group\\ sections\\ and\\ the\\ inline\\ budget\\ omits\\ tools\\ with\\ an\\ explicit\\ marker|the\\ empty\\ codemode\\ catalog\\ matches\\ the\\ frozen\\ pi\\-v1\\.3\\.0\\ description|the\\ on\\ loadout\\ lists\\ only\\ non\\-direct\\ callable\\ tools\\ and\\ adds\\ script\\-call\\ descriptions|the\\ only\\ loadout\\ lists\\ every\\ callable\\ tool\\ and\\ hides\\ direct\\ declarations|the\\ theme\\ token\\ set\\ matches\\ the\\ frozen\\ pi\\-v1\\.3\\.0\\ capture)$",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1240-pilot-1177-application-comparisons.xml",
+              "-j",
+              "1"
+            ],
+            "testedRevision": "cde9255c41c3c575c6e9ce20b1432687869a36f7",
+            "recordedAt": "2026-11-07T07:06:07Z",
+            "selected": 9,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1240-pilot-1177-application-comparisons.xml",
+              "sha256": "10dde98ca54d5fd6fee1aeebf4e7d1f3a8b08ddc9a172f4fa6f0a7e63457f03f"
+            }
+          }
         }
       },
       {
@@ -13661,11 +14059,11 @@
         "inputs": [
           {
             "path": "cmake/targets/Codemode.cmake",
-            "sha256": "d5c1c594ed8c97f5a9d37cf2f462a4a68db039836d5686f120c9eb9755ef939a"
+            "sha256": "a07926c5cde51829b8532c50c0af5e71da2ba26ab35348c92ad707c82ede4b31"
           },
           {
             "path": "cmake/tests/CodemodeTests.cmake",
-            "sha256": "ee80abcd89060a440d020e17442a29e3bd15f9edda86fb7d0f310e2b5dc0c37b"
+            "sha256": "fbc4c60f65065558bed9a8039e1cc6a1e3667de1c113962cb4c1b249185b261f"
           },
           {
             "path": "src/codemode/Sandbox.cpp",
@@ -13697,15 +14095,18 @@
             "architecture",
             "-R",
             "^(a public codemode caller executes a script against an injected nested tool|a public codemode caller keeps prior output when an injected tool rejects|the public codemode tool table registers lists and unregisters with the frozen messages|the public codemode start rejects a later run after close with the frozen spelling|closing codemode settles the run before its worker exit releases admission)$",
+            "--no-tests=error",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1192-codemode.xml"
+            "docs/research/pi-v1.3.0/deliveries/1192-revalidation-1232-frame-join.xml",
+            "-j",
+            "1"
           ],
-          "testedRevision": "2fd077c4dcf3bed89655648e20c214718150387a",
-          "recordedAt": "2026-11-05T01:39:04Z",
+          "testedRevision": "44d0fa5c1d52bb834a54b812265b250424ba6844",
+          "recordedAt": "2026-11-11T06:53:11Z",
           "selected": 5,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1192-codemode.xml",
-            "sha256": "511808591343c155d03abec2afa909d1cf3b41d79f20aabcd4fd15f43954e9d6"
+            "path": "docs/research/pi-v1.3.0/deliveries/1192-revalidation-1232-frame-join.xml",
+            "sha256": "63611617fce06d4e6c7ea8bc998dac091743db1139fd05f39ab648b3d96a4081"
           }
         },
         "rows": [
@@ -13764,7 +14165,34 @@
             }
           }
         ],
-        "routingSha256": "1d0c3a12dbb34f23227caa9fa02d5edb5bfd925a9ed833ad66f3fdaf1707c72c"
+        "routingSha256": "1d0c3a12dbb34f23227caa9fa02d5edb5bfd925a9ed833ad66f3fdaf1707c72c",
+        "revalidation1232FrameJoin": {
+          "reason": "This rebind re-runs the exact recorded #1192 selection (-LE architecture plus the anchored 5-case regex) on the #1232 integration tree at 44d0fa5c1. Two independent causes changed pinned bytes: (1) the self-join slice moved cmake/targets/Codemode.cmake and this integration adds the deterministic-worker test gate to cmake/tests/CodemodeTests.cmake, both pinned here as the build wiring of the close/settle behavior; (2) the newer upstream base 71ad3e83a had already changed files pinned or consumed by these receipts - vcpkg.json, Durable.cmake, tests/support/ModelsFixture.hpp and tests/codemode/CodemodeRemoteTest.cpp among them - a base newer than the one this receipt pinned. Rows, comparison scenarios, discriminating cases, implementationCommits and routingSha256 are unchanged; no capability claim is added.",
+          "changedInputs": [
+            "cmake/targets/Codemode.cmake",
+            "cmake/tests/CodemodeTests.cmake"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-LE",
+              "architecture",
+              "-R",
+              "^(a public codemode caller executes a script against an injected nested tool|a public codemode caller keeps prior output when an injected tool rejects|the public codemode tool table registers lists and unregisters with the frozen messages|the public codemode start rejects a later run after close with the frozen spelling|closing codemode settles the run before its worker exit releases admission)$",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1192-codemode.xml"
+            ],
+            "testedRevision": "2fd077c4dcf3bed89655648e20c214718150387a",
+            "recordedAt": "2026-11-05T01:39:04Z",
+            "selected": 5,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1192-codemode.xml",
+              "sha256": "511808591343c155d03abec2afa909d1cf3b41d79f20aabcd4fd15f43954e9d6"
+            }
+          }
+        }
       },
       {
         "id": "1194-codemode-portable-entry",
@@ -13777,11 +14205,11 @@
         "inputs": [
           {
             "path": "cmake/targets/Codemode.cmake",
-            "sha256": "d5c1c594ed8c97f5a9d37cf2f462a4a68db039836d5686f120c9eb9755ef939a"
+            "sha256": "a07926c5cde51829b8532c50c0af5e71da2ba26ab35348c92ad707c82ede4b31"
           },
           {
             "path": "cmake/tests/CodemodeTests.cmake",
-            "sha256": "ee80abcd89060a440d020e17442a29e3bd15f9edda86fb7d0f310e2b5dc0c37b"
+            "sha256": "fbc4c60f65065558bed9a8039e1cc6a1e3667de1c113962cb4c1b249185b261f"
           },
           {
             "path": "src/codemode/Portable.cpp",
@@ -13821,15 +14249,18 @@
             "architecture",
             "-L",
             "issue1194",
+            "--no-tests=error",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1194-codemode.xml"
+            "docs/research/pi-v1.3.0/deliveries/1194-revalidation-1232-frame-join.xml",
+            "-j",
+            "1"
           ],
-          "testedRevision": "2fd077c4dcf3bed89655648e20c214718150387a",
-          "recordedAt": "2026-11-05T01:39:04Z",
+          "testedRevision": "44d0fa5c1d52bb834a54b812265b250424ba6844",
+          "recordedAt": "2026-11-11T06:53:11Z",
           "selected": 1,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1194-codemode.xml",
-            "sha256": "abae9fc069467315c308991fcbb88869682db769d3f621693adbc5c79469a931"
+            "path": "docs/research/pi-v1.3.0/deliveries/1194-revalidation-1232-frame-join.xml",
+            "sha256": "39ec7e19bc288ef2816554aa0b818e13baa1dc7b75ff0202bd85667584cd94fc"
           }
         },
         "rows": [
@@ -13853,7 +14284,34 @@
             }
           }
         ],
-        "routingSha256": "df36d324c2169070a20ca0ef74e5cf311755bb8b0457303b2396d1fc72d5ad46"
+        "routingSha256": "df36d324c2169070a20ca0ef74e5cf311755bb8b0457303b2396d1fc72d5ad46",
+        "revalidation1232FrameJoin": {
+          "reason": "This rebind re-runs the exact recorded #1194 selection (-LE architecture -L issue1194, 1 case) on the #1232 integration tree at 44d0fa5c1. Two independent causes changed pinned bytes: (1) the self-join slice moved cmake/targets/Codemode.cmake and this integration adds the deterministic-worker test gate to cmake/tests/CodemodeTests.cmake, both pinned here because the portable target graph and its check shard are declared there; (2) the newer upstream base 71ad3e83a had already changed files pinned or consumed by these receipts - vcpkg.json, Durable.cmake, tests/support/ModelsFixture.hpp and tests/codemode/CodemodeRemoteTest.cpp among them - a base newer than the one this receipt pinned. Rows, comparison scenarios, discriminating cases, implementationCommits and routingSha256 are unchanged; no capability claim is added.",
+          "changedInputs": [
+            "cmake/targets/Codemode.cmake",
+            "cmake/tests/CodemodeTests.cmake"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-LE",
+              "architecture",
+              "-L",
+              "issue1194",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1194-codemode.xml"
+            ],
+            "testedRevision": "2fd077c4dcf3bed89655648e20c214718150387a",
+            "recordedAt": "2026-11-05T01:39:04Z",
+            "selected": 1,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1194-codemode.xml",
+              "sha256": "abae9fc069467315c308991fcbb88869682db769d3f621693adbc5c79469a931"
+            }
+          }
+        }
       },
       {
         "id": "1180-sidecar-symlink-parity",

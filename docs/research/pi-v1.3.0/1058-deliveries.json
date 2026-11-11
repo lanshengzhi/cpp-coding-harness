@@ -22,7 +22,7 @@
     },
     {
      "path": "vcpkg.json",
-     "sha256": "dc956d944cb2fcd3e88f4b305931d5b568c1164a8ec5ab9d1688f7418a5814dc"
+     "sha256": "f19c0e240a28de99619e7625635e74160763c3f9c098bfff1a3b77c8916cdf91"
     },
     {
      "path": "cmake/targets/Mcp.cmake",
@@ -228,15 +228,19 @@
      "vcpkg",
      "-L",
      "^(issue1090|issue1101|issue1104)$",
+     "--no-tests=error",
+     "--output-on-failure",
+     "-j",
+     "1",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1240-pilot-1101-structured-content.xml"
+     "docs/research/pi-v1.3.0/deliveries/1101-revalidation-upstream-71ad3e83a.xml"
     ],
-    "testedRevision": "cde9255c41c3c575c6e9ce20b1432687869a36f7",
-    "recordedAt": "2026-11-07T07:06:07Z",
+    "testedRevision": "c8abe71ba4e8cb988a987ca9337d252acf3c2fe5",
+    "recordedAt": "2026-11-11T07:25:42Z",
     "selected": 36,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1240-pilot-1101-structured-content.xml",
-     "sha256": "21ed42b919f687199f13f40f4aaa8bf30edd98eb71055f77485f4601658e5dea"
+     "path": "docs/research/pi-v1.3.0/deliveries/1101-revalidation-upstream-71ad3e83a.xml",
+     "sha256": "080b903d5c3ab80c18e2490c487b2ecd3743a656b8c2ba73a5db206ae7cbacc3"
     }
    },
    "rows": [
@@ -1136,6 +1140,30 @@
       "sha256": "a6295e17cea620948bd3515823a3ca6c383a1556a824e995f5db5b2cf53129ba"
      }
     }
+   },
+   "revalidation1232ReceiptDebt": {
+    "reason": "Upstream commit 71ad3e83a added boost-uuid to vcpkg.json and Boost::uuid to the durable target's declared dependencies, changing pinned inputs of this receipt (vcpkg.json). The delivered rows, comparison scenarios and routing digest are unchanged, and no #1232 change touches this receipt. The receipt's exact selection was rerun at this base into a fresh JUnit artifact, and this change makes no new verification claim about those rows.",
+    "changedInputs": [
+     "vcpkg.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-L",
+      "^(issue1090|issue1101|issue1104)$",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1240-pilot-1101-structured-content.xml"
+     ],
+     "testedRevision": "cde9255c41c3c575c6e9ce20b1432687869a36f7",
+     "recordedAt": "2026-11-07T07:06:07Z",
+     "selected": 36,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1240-pilot-1101-structured-content.xml",
+      "sha256": "21ed42b919f687199f13f40f4aaa8bf30edd98eb71055f77485f4601658e5dea"
+     }
+    }
    }
   },
   {
@@ -1154,21 +1182,25 @@
      "vcpkg",
      "-L",
      "^(issue1090|issue1101|issue1104)$",
+     "--no-tests=error",
+     "--output-on-failure",
+     "-j",
+     "1",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1090-durable-images-revalidation-1232.xml"
+     "docs/research/pi-v1.3.0/deliveries/1090-revalidation-upstream-71ad3e83a.xml"
     ],
-    "testedRevision": "d655d396eb86a16d2174a78c9d12439a830ea94d",
-    "recordedAt": "2026-11-08T04:38:07Z",
+    "testedRevision": "c8abe71ba4e8cb988a987ca9337d252acf3c2fe5",
+    "recordedAt": "2026-11-11T07:25:39Z",
     "selected": 36,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1090-durable-images-revalidation-1232.xml",
-     "sha256": "a813457b9e9d3032818b95d95c7c4b96f69d89aac3346d5e36b015b41ddc8deb"
+     "path": "docs/research/pi-v1.3.0/deliveries/1090-revalidation-upstream-71ad3e83a.xml",
+     "sha256": "d703ed6143e98fe6bc567c1d7fa3cb2b6e23a0b8c0abb7d7ad65c7aebadf9a10"
     }
    },
    "inputs": [
     {
      "path": "cmake/targets/Durable.cmake",
-     "sha256": "9feff05ddef3c098ea115e9e34558271b9d68b448721404a3c2fa07129eeac44"
+     "sha256": "05a4970a8ecb0601cd6601536bf135fe9b7203de2c869e0a212104cfc0bc9714"
     },
     {
      "path": "cmake/tests/DurableTests.cmake",
@@ -2204,6 +2236,30 @@
      "junit": {
       "path": "docs/research/pi-v1.3.0/deliveries/1090-durable-images-revalidation-1244-capture.xml",
       "sha256": "42d44f7914bde911845fb31e389b8d7a5734dee2ea816fe9b6c51a2898d449b4"
+     }
+    }
+   },
+   "revalidation1232ReceiptDebt": {
+    "reason": "Upstream commit 71ad3e83a added boost-uuid to vcpkg.json and Boost::uuid to the durable target's declared dependencies, changing pinned inputs of this receipt (cmake/targets/Durable.cmake). The delivered rows, comparison scenarios and routing digest are unchanged, and no #1232 change touches this receipt. The receipt's exact selection was rerun at this base into a fresh JUnit artifact, and this change makes no new verification claim about those rows.",
+    "changedInputs": [
+     "cmake/targets/Durable.cmake"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-L",
+      "^(issue1090|issue1101|issue1104)$",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1090-durable-images-revalidation-1232.xml"
+     ],
+     "testedRevision": "d655d396eb86a16d2174a78c9d12439a830ea94d",
+     "recordedAt": "2026-11-08T04:38:07Z",
+     "selected": 36,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1090-durable-images-revalidation-1232.xml",
+      "sha256": "a813457b9e9d3032818b95d95c7c4b96f69d89aac3346d5e36b015b41ddc8deb"
      }
     }
    }
@@ -3604,16 +3660,19 @@
      "vcpkg",
      "-L",
      "chord",
+     "--no-tests=error",
      "--output-on-failure",
+     "-j",
+     "1",
      "--output-junit",
-     "../docs/research/pi-v1.3.0/deliveries/1240-remaining-chord.xml"
+     "docs/research/pi-v1.3.0/deliveries/1178-revalidation-upstream-71ad3e83a.xml"
     ],
-    "testedRevision": "0e52577e3679167a7dd66db597066882b03378ae",
-    "recordedAt": "2026-11-07T09:51:28Z",
+    "testedRevision": "c8abe71ba4e8cb988a987ca9337d252acf3c2fe5",
+    "recordedAt": "2026-11-11T07:25:18Z",
     "selected": 104,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1240-remaining-chord.xml",
-     "sha256": "6bc16df2e57437a5100d915ce2c51a766ff4d270c8459402290bf15619e0e997"
+     "path": "docs/research/pi-v1.3.0/deliveries/1178-revalidation-upstream-71ad3e83a.xml",
+     "sha256": "04faa93e89d7bec4aa1ed3df4685ff6220f89e2c9eb76566c2426999c45cd5b6"
     }
    },
    "rows": [
@@ -4182,7 +4241,7 @@
     },
     {
      "path": "vcpkg.json",
-     "sha256": "dc956d944cb2fcd3e88f4b305931d5b568c1164a8ec5ab9d1688f7418a5814dc"
+     "sha256": "f19c0e240a28de99619e7625635e74160763c3f9c098bfff1a3b77c8916cdf91"
     },
     {
      "path": "cmake/targets/Chord.cmake",
@@ -4643,6 +4702,31 @@
       "sha256": "24e34050c9f175d4fc285909dd5e70b3419ca7672c1ab03c882754953411a3bc"
      }
     }
+   },
+   "revalidation1232ReceiptDebt": {
+    "reason": "Upstream commit 71ad3e83a added boost-uuid to vcpkg.json and Boost::uuid to the durable target's declared dependencies, changing pinned inputs of this receipt (vcpkg.json). The delivered rows, comparison scenarios and routing digest are unchanged, and no #1232 change touches this receipt. The receipt's exact selection was rerun at this base into a fresh JUnit artifact, and this change makes no new verification claim about those rows.",
+    "changedInputs": [
+     "vcpkg.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-L",
+      "chord",
+      "--output-on-failure",
+      "--output-junit",
+      "../docs/research/pi-v1.3.0/deliveries/1240-remaining-chord.xml"
+     ],
+     "testedRevision": "0e52577e3679167a7dd66db597066882b03378ae",
+     "recordedAt": "2026-11-07T09:51:28Z",
+     "selected": 104,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1240-remaining-chord.xml",
+      "sha256": "6bc16df2e57437a5100d915ce2c51a766ff4d270c8459402290bf15619e0e997"
+     }
+    }
    }
   },
   {
@@ -4670,7 +4754,7 @@
     },
     {
      "path": "vcpkg.json",
-     "sha256": "dc956d944cb2fcd3e88f4b305931d5b568c1164a8ec5ab9d1688f7418a5814dc"
+     "sha256": "f19c0e240a28de99619e7625635e74160763c3f9c098bfff1a3b77c8916cdf91"
     },
     {
      "path": "cmake/targets/Mcp.cmake",
@@ -5016,15 +5100,19 @@
      "vcpkg",
      "-R",
      "^(an MCP HTTP URL must be http or https|streamable HTTP transport connects over plain http|connecting an MCP HTTP server lists its tools with the pi naming and schema|a same-origin redirect is followed and keeps the request auth header|cross-origin redirect is followed without Authorization and is rejected|HTTPS transport rejects an untrusted certificate|an authorization code from another issuer never reaches the token endpoint|authorization server metadata naming another issuer stops before any token request|the MCP HTTP transport attaches a credential only when the server needs one|agent session lists MCP resources only on demand and can call tools after a resource failure|the real stdio fixture lists, templates, and reads over `resources/\\*`|a cancelled MCP OAuth discovery stops before any registration or token request|a cancelled MCP OAuth client registration stops before any token request|a browser callback wait cancelled by the sign-in stop token stops sign-in|a pasted redirect URL completes the MCP OAuth sign-in|protected resource discovery retries the bare origin after a path-suffixed miss)$",
+     "--no-tests=error",
+     "--output-on-failure",
+     "-j",
+     "1",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1240-pilot-1181-mcp-comparisons.xml"
+     "docs/research/pi-v1.3.0/deliveries/1181-revalidation-upstream-71ad3e83a.xml"
     ],
-    "testedRevision": "cde9255c41c3c575c6e9ce20b1432687869a36f7",
-    "recordedAt": "2026-11-07T07:06:07Z",
+    "testedRevision": "c8abe71ba4e8cb988a987ca9337d252acf3c2fe5",
+    "recordedAt": "2026-11-11T07:25:37Z",
     "selected": 16,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1240-pilot-1181-mcp-comparisons.xml",
-     "sha256": "7973f283cba59b78b83bb43eac8ccfa6ad8ba6dd43d822e68ff97e2ffecab859"
+     "path": "docs/research/pi-v1.3.0/deliveries/1181-revalidation-upstream-71ad3e83a.xml",
+     "sha256": "7376bd1833a9bbfb745686c2db5595765838372fe21d9989deea19e2a3f48d4f"
     }
    },
    "rows": [
@@ -6047,6 +6135,30 @@
       "sha256": "19cd2fe05dac7cff7adafe2cc9f68d4b5922773496669f4818b3d6b83785c578"
      }
     }
+   },
+   "revalidation1232ReceiptDebt": {
+    "reason": "Upstream commit 71ad3e83a added boost-uuid to vcpkg.json and Boost::uuid to the durable target's declared dependencies, changing pinned inputs of this receipt (vcpkg.json). The delivered rows, comparison scenarios and routing digest are unchanged, and no #1232 change touches this receipt. The receipt's exact selection was rerun at this base into a fresh JUnit artifact, and this change makes no new verification claim about those rows.",
+    "changedInputs": [
+     "vcpkg.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-R",
+      "^(an MCP HTTP URL must be http or https|streamable HTTP transport connects over plain http|connecting an MCP HTTP server lists its tools with the pi naming and schema|a same-origin redirect is followed and keeps the request auth header|cross-origin redirect is followed without Authorization and is rejected|HTTPS transport rejects an untrusted certificate|an authorization code from another issuer never reaches the token endpoint|authorization server metadata naming another issuer stops before any token request|the MCP HTTP transport attaches a credential only when the server needs one|agent session lists MCP resources only on demand and can call tools after a resource failure|the real stdio fixture lists, templates, and reads over `resources/\\*`|a cancelled MCP OAuth discovery stops before any registration or token request|a cancelled MCP OAuth client registration stops before any token request|a browser callback wait cancelled by the sign-in stop token stops sign-in|a pasted redirect URL completes the MCP OAuth sign-in|protected resource discovery retries the bare origin after a path-suffixed miss)$",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1240-pilot-1181-mcp-comparisons.xml"
+     ],
+     "testedRevision": "cde9255c41c3c575c6e9ce20b1432687869a36f7",
+     "recordedAt": "2026-11-07T07:06:07Z",
+     "selected": 16,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1240-pilot-1181-mcp-comparisons.xml",
+      "sha256": "7973f283cba59b78b83bb43eac8ccfa6ad8ba6dd43d822e68ff97e2ffecab859"
+     }
+    }
    }
   },
   {
@@ -6084,16 +6196,19 @@
      "vcpkg",
      "-L",
      "chord",
+     "--no-tests=error",
      "--output-on-failure",
+     "-j",
+     "1",
      "--output-junit",
-     "../docs/research/pi-v1.3.0/deliveries/1240-remaining-chord.xml"
+     "docs/research/pi-v1.3.0/deliveries/1185-revalidation-upstream-71ad3e83a.xml"
     ],
-    "testedRevision": "0e52577e3679167a7dd66db597066882b03378ae",
-    "recordedAt": "2026-11-07T09:51:28Z",
+    "testedRevision": "c8abe71ba4e8cb988a987ca9337d252acf3c2fe5",
+    "recordedAt": "2026-11-11T07:25:42Z",
     "selected": 104,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1240-remaining-chord.xml",
-     "sha256": "6bc16df2e57437a5100d915ce2c51a766ff4d270c8459402290bf15619e0e997"
+     "path": "docs/research/pi-v1.3.0/deliveries/1185-revalidation-upstream-71ad3e83a.xml",
+     "sha256": "d69518e01d5d261d851c92eb589fabc407c73daefa9e2c4cd80ed1f5993ed28b"
     }
    },
    "rows": [
@@ -6199,7 +6314,7 @@
     },
     {
      "path": "vcpkg.json",
-     "sha256": "dc956d944cb2fcd3e88f4b305931d5b568c1164a8ec5ab9d1688f7418a5814dc"
+     "sha256": "f19c0e240a28de99619e7625635e74160763c3f9c098bfff1a3b77c8916cdf91"
     },
     {
      "path": "cmake/targets/Chord.cmake",
@@ -6529,6 +6644,31 @@
       "sha256": "24e34050c9f175d4fc285909dd5e70b3419ca7672c1ab03c882754953411a3bc"
      }
     }
+   },
+   "revalidation1232ReceiptDebt": {
+    "reason": "Upstream commit 71ad3e83a added boost-uuid to vcpkg.json and Boost::uuid to the durable target's declared dependencies, changing pinned inputs of this receipt (vcpkg.json). The delivered rows, comparison scenarios and routing digest are unchanged, and no #1232 change touches this receipt. The receipt's exact selection was rerun at this base into a fresh JUnit artifact, and this change makes no new verification claim about those rows.",
+    "changedInputs": [
+     "vcpkg.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-L",
+      "chord",
+      "--output-on-failure",
+      "--output-junit",
+      "../docs/research/pi-v1.3.0/deliveries/1240-remaining-chord.xml"
+     ],
+     "testedRevision": "0e52577e3679167a7dd66db597066882b03378ae",
+     "recordedAt": "2026-11-07T09:51:28Z",
+     "selected": 104,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1240-remaining-chord.xml",
+      "sha256": "6bc16df2e57437a5100d915ce2c51a766ff4d270c8459402290bf15619e0e997"
+     }
+    }
    }
   },
   {
@@ -6547,16 +6687,19 @@
      "vcpkg",
      "-L",
      "issue1184",
+     "--no-tests=error",
      "--output-on-failure",
+     "-j",
+     "1",
      "--output-junit",
-     "../docs/research/pi-v1.3.0/deliveries/1240-remaining-1184.xml"
+     "docs/research/pi-v1.3.0/deliveries/1184-revalidation-upstream-71ad3e83a.xml"
     ],
-    "testedRevision": "0e52577e3679167a7dd66db597066882b03378ae",
-    "recordedAt": "2026-11-07T09:51:28Z",
+    "testedRevision": "c8abe71ba4e8cb988a987ca9337d252acf3c2fe5",
+    "recordedAt": "2026-11-11T07:25:26Z",
     "selected": 10,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1240-remaining-1184.xml",
-     "sha256": "5210be29e5c022d3816d9cdfb9cb250238a6050c266aa31e336cdabe751cd111"
+     "path": "docs/research/pi-v1.3.0/deliveries/1184-revalidation-upstream-71ad3e83a.xml",
+     "sha256": "6c15d708b02d45559280c990890c3624e0322b9e8d6651eb0a45e36c607ce2ec"
     }
    },
    "rows": [
@@ -6641,7 +6784,7 @@
     },
     {
      "path": "vcpkg.json",
-     "sha256": "dc956d944cb2fcd3e88f4b305931d5b568c1164a8ec5ab9d1688f7418a5814dc"
+     "sha256": "f19c0e240a28de99619e7625635e74160763c3f9c098bfff1a3b77c8916cdf91"
     },
     {
      "path": "cmake/targets/Chord.cmake",
@@ -6649,7 +6792,7 @@
     },
     {
      "path": "cmake/targets/Durable.cmake",
-     "sha256": "9feff05ddef3c098ea115e9e34558271b9d68b448721404a3c2fa07129eeac44"
+     "sha256": "05a4970a8ecb0601cd6601536bf135fe9b7203de2c869e0a212104cfc0bc9714"
     },
     {
      "path": "cmake/tests/ChordTests.cmake",
@@ -7011,6 +7154,32 @@
       "sha256": "1e5a545a00488ca9071b4324a9122edda68d0f316a2e188b4f8c29c00edecfdc"
      }
     }
+   },
+   "revalidation1232ReceiptDebt": {
+    "reason": "Upstream commit 71ad3e83a added boost-uuid to vcpkg.json and Boost::uuid to the durable target's declared dependencies, changing pinned inputs of this receipt (cmake/targets/Durable.cmake, vcpkg.json). The delivered rows, comparison scenarios and routing digest are unchanged, and no #1232 change touches this receipt. The receipt's exact selection was rerun at this base into a fresh JUnit artifact, and this change makes no new verification claim about those rows.",
+    "changedInputs": [
+     "cmake/targets/Durable.cmake",
+     "vcpkg.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-L",
+      "issue1184",
+      "--output-on-failure",
+      "--output-junit",
+      "../docs/research/pi-v1.3.0/deliveries/1240-remaining-1184.xml"
+     ],
+     "testedRevision": "0e52577e3679167a7dd66db597066882b03378ae",
+     "recordedAt": "2026-11-07T09:51:28Z",
+     "selected": 10,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1240-remaining-1184.xml",
+      "sha256": "5210be29e5c022d3816d9cdfb9cb250238a6050c266aa31e336cdabe751cd111"
+     }
+    }
    }
   },
   {
@@ -7047,16 +7216,19 @@
      "vcpkg",
      "-L",
      "chord",
+     "--no-tests=error",
      "--output-on-failure",
+     "-j",
+     "1",
      "--output-junit",
-     "../docs/research/pi-v1.3.0/deliveries/1240-remaining-chord.xml"
+     "docs/research/pi-v1.3.0/deliveries/1186-revalidation-upstream-71ad3e83a.xml"
     ],
-    "testedRevision": "0e52577e3679167a7dd66db597066882b03378ae",
-    "recordedAt": "2026-11-07T09:51:28Z",
+    "testedRevision": "c8abe71ba4e8cb988a987ca9337d252acf3c2fe5",
+    "recordedAt": "2026-11-11T07:25:43Z",
     "selected": 104,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1240-remaining-chord.xml",
-     "sha256": "6bc16df2e57437a5100d915ce2c51a766ff4d270c8459402290bf15619e0e997"
+     "path": "docs/research/pi-v1.3.0/deliveries/1186-revalidation-upstream-71ad3e83a.xml",
+     "sha256": "ad649941179e533ead6265d4002fd347ea01dfac9f6bcb29ac20fee3eca3d050"
     }
    },
    "rows": [
@@ -7176,7 +7348,7 @@
     },
     {
      "path": "vcpkg.json",
-     "sha256": "dc956d944cb2fcd3e88f4b305931d5b568c1164a8ec5ab9d1688f7418a5814dc"
+     "sha256": "f19c0e240a28de99619e7625635e74160763c3f9c098bfff1a3b77c8916cdf91"
     },
     {
      "path": "cmake/targets/Chord.cmake",
@@ -8018,6 +8190,31 @@
       "sha256": "24e34050c9f175d4fc285909dd5e70b3419ca7672c1ab03c882754953411a3bc"
      }
     }
+   },
+   "revalidation1232ReceiptDebt": {
+    "reason": "Upstream commit 71ad3e83a added boost-uuid to vcpkg.json and Boost::uuid to the durable target's declared dependencies, changing pinned inputs of this receipt (vcpkg.json). The delivered rows, comparison scenarios and routing digest are unchanged, and no #1232 change touches this receipt. The receipt's exact selection was rerun at this base into a fresh JUnit artifact, and this change makes no new verification claim about those rows.",
+    "changedInputs": [
+     "vcpkg.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-L",
+      "chord",
+      "--output-on-failure",
+      "--output-junit",
+      "../docs/research/pi-v1.3.0/deliveries/1240-remaining-chord.xml"
+     ],
+     "testedRevision": "0e52577e3679167a7dd66db597066882b03378ae",
+     "recordedAt": "2026-11-07T09:51:28Z",
+     "selected": 104,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1240-remaining-chord.xml",
+      "sha256": "6bc16df2e57437a5100d915ce2c51a766ff4d270c8459402290bf15619e0e997"
+     }
+    }
    }
   },
   {
@@ -8055,16 +8252,19 @@
      "vcpkg",
      "-L",
      "chord",
+     "--no-tests=error",
      "--output-on-failure",
+     "-j",
+     "1",
      "--output-junit",
-     "../docs/research/pi-v1.3.0/deliveries/1240-remaining-chord.xml"
+     "docs/research/pi-v1.3.0/deliveries/1188-revalidation-upstream-71ad3e83a.xml"
     ],
-    "testedRevision": "0e52577e3679167a7dd66db597066882b03378ae",
-    "recordedAt": "2026-11-07T09:51:28Z",
+    "testedRevision": "c8abe71ba4e8cb988a987ca9337d252acf3c2fe5",
+    "recordedAt": "2026-11-11T07:25:43Z",
     "selected": 104,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1240-remaining-chord.xml",
-     "sha256": "6bc16df2e57437a5100d915ce2c51a766ff4d270c8459402290bf15619e0e997"
+     "path": "docs/research/pi-v1.3.0/deliveries/1188-revalidation-upstream-71ad3e83a.xml",
+     "sha256": "92bfe2775d69cdb1eabb8a4d36d6c82fb2b22d424a442bb6394843171f4f5aaa"
     }
    },
    "rows": [
@@ -8147,7 +8347,7 @@
     },
     {
      "path": "vcpkg.json",
-     "sha256": "dc956d944cb2fcd3e88f4b305931d5b568c1164a8ec5ab9d1688f7418a5814dc"
+     "sha256": "f19c0e240a28de99619e7625635e74160763c3f9c098bfff1a3b77c8916cdf91"
     },
     {
      "path": "cmake/targets/Chord.cmake",
@@ -8970,6 +9170,31 @@
       "sha256": "24e34050c9f175d4fc285909dd5e70b3419ca7672c1ab03c882754953411a3bc"
      }
     }
+   },
+   "revalidation1232ReceiptDebt": {
+    "reason": "Upstream commit 71ad3e83a added boost-uuid to vcpkg.json and Boost::uuid to the durable target's declared dependencies, changing pinned inputs of this receipt (vcpkg.json). The delivered rows, comparison scenarios and routing digest are unchanged, and no #1232 change touches this receipt. The receipt's exact selection was rerun at this base into a fresh JUnit artifact, and this change makes no new verification claim about those rows.",
+    "changedInputs": [
+     "vcpkg.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-L",
+      "chord",
+      "--output-on-failure",
+      "--output-junit",
+      "../docs/research/pi-v1.3.0/deliveries/1240-remaining-chord.xml"
+     ],
+     "testedRevision": "0e52577e3679167a7dd66db597066882b03378ae",
+     "recordedAt": "2026-11-07T09:51:28Z",
+     "selected": 104,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1240-remaining-chord.xml",
+      "sha256": "6bc16df2e57437a5100d915ce2c51a766ff4d270c8459402290bf15619e0e997"
+     }
+    }
    }
   },
   {
@@ -8987,16 +9212,19 @@
      "vcpkg",
      "-L",
      "issue1187",
+     "--no-tests=error",
      "--output-on-failure",
+     "-j",
+     "1",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1240-pilot-1187-chord-progress-pacing.xml"
+     "docs/research/pi-v1.3.0/deliveries/1187-revalidation-upstream-71ad3e83a.xml"
     ],
-    "testedRevision": "cde9255c41c3c575c6e9ce20b1432687869a36f7",
-    "recordedAt": "2026-11-07T07:06:07Z",
+    "testedRevision": "c8abe71ba4e8cb988a987ca9337d252acf3c2fe5",
+    "recordedAt": "2026-11-11T07:25:07Z",
     "selected": 4,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1240-pilot-1187-chord-progress-pacing.xml",
-     "sha256": "96379d561959ccc4f98e373121859490ae934e90cb41e614fc9750b5c5d926fc"
+     "path": "docs/research/pi-v1.3.0/deliveries/1187-revalidation-upstream-71ad3e83a.xml",
+     "sha256": "99b42719d9294c7807f1ebfbaa6b6cf1bc7fabef579b89132d6aefecada3103a"
     }
    },
    "inputs": [
@@ -9010,7 +9238,7 @@
     },
     {
      "path": "vcpkg.json",
-     "sha256": "dc956d944cb2fcd3e88f4b305931d5b568c1164a8ec5ab9d1688f7418a5814dc"
+     "sha256": "f19c0e240a28de99619e7625635e74160763c3f9c098bfff1a3b77c8916cdf91"
     },
     {
      "path": "cmake/targets/Chord.cmake",
@@ -9214,6 +9442,31 @@
       "sha256": "4b66373a8e4551c5e1a962523c961758e34f4256a6e36715fb2b2276cb7b51fc"
      }
     }
+   },
+   "revalidation1232ReceiptDebt": {
+    "reason": "Upstream commit 71ad3e83a added boost-uuid to vcpkg.json and Boost::uuid to the durable target's declared dependencies, changing pinned inputs of this receipt (vcpkg.json). The delivered rows, comparison scenarios and routing digest are unchanged, and no #1232 change touches this receipt. The receipt's exact selection was rerun at this base into a fresh JUnit artifact, and this change makes no new verification claim about those rows.",
+    "changedInputs": [
+     "vcpkg.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-L",
+      "issue1187",
+      "--output-on-failure",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1240-pilot-1187-chord-progress-pacing.xml"
+     ],
+     "testedRevision": "cde9255c41c3c575c6e9ce20b1432687869a36f7",
+     "recordedAt": "2026-11-07T07:06:07Z",
+     "selected": 4,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1240-pilot-1187-chord-progress-pacing.xml",
+      "sha256": "96379d561959ccc4f98e373121859490ae934e90cb41e614fc9750b5c5d926fc"
+     }
+    }
    }
   },
   {
@@ -9230,15 +9483,19 @@
      "vcpkg",
      "-L",
      "issue1182",
+     "--no-tests=error",
+     "--output-on-failure",
+     "-j",
+     "1",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1240-pilot-1182-tui-comparisons.xml"
+     "docs/research/pi-v1.3.0/deliveries/1182-revalidation-upstream-71ad3e83a.xml"
     ],
-    "testedRevision": "cde9255c41c3c575c6e9ce20b1432687869a36f7",
-    "recordedAt": "2026-11-07T07:06:07Z",
+    "testedRevision": "c8abe71ba4e8cb988a987ca9337d252acf3c2fe5",
+    "recordedAt": "2026-11-11T07:25:34Z",
     "selected": 13,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1240-pilot-1182-tui-comparisons.xml",
-     "sha256": "5c8a8372f5fda844603c4402707f2d03baf23734fada0a810ebbac8d530d2c3c"
+     "path": "docs/research/pi-v1.3.0/deliveries/1182-revalidation-upstream-71ad3e83a.xml",
+     "sha256": "ffcf17753c43ddf6a6692ee8472506120c1b4cbca6ef5028f56a2744ceff4330"
     }
    },
    "rows": [
@@ -9373,7 +9630,7 @@
     },
     {
      "path": "vcpkg.json",
-     "sha256": "dc956d944cb2fcd3e88f4b305931d5b568c1164a8ec5ab9d1688f7418a5814dc"
+     "sha256": "f19c0e240a28de99619e7625635e74160763c3f9c098bfff1a3b77c8916cdf91"
     },
     {
      "path": "cmake/tests/TuiTests.cmake",
@@ -10279,6 +10536,30 @@
      "junit": {
       "path": "docs/research/pi-v1.3.0/deliveries/1182-tui-route-revalidation-1245.xml",
       "sha256": "dc5aa87866954f38c244d747fb0c9a89abf8ef6062e4db3d7a0c54f82abfcfe9"
+     }
+    }
+   },
+   "revalidation1232ReceiptDebt": {
+    "reason": "Upstream commit 71ad3e83a added boost-uuid to vcpkg.json and Boost::uuid to the durable target's declared dependencies, changing pinned inputs of this receipt (vcpkg.json). The delivered rows, comparison scenarios and routing digest are unchanged, and no #1232 change touches this receipt. The receipt's exact selection was rerun at this base into a fresh JUnit artifact, and this change makes no new verification claim about those rows.",
+    "changedInputs": [
+     "vcpkg.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-L",
+      "issue1182",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1240-pilot-1182-tui-comparisons.xml"
+     ],
+     "testedRevision": "cde9255c41c3c575c6e9ce20b1432687869a36f7",
+     "recordedAt": "2026-11-07T07:06:07Z",
+     "selected": 13,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1240-pilot-1182-tui-comparisons.xml",
+      "sha256": "5c8a8372f5fda844603c4402707f2d03baf23734fada0a810ebbac8d530d2c3c"
      }
     }
    }
@@ -12171,7 +12452,7 @@
     },
     {
      "path": "vcpkg.json",
-     "sha256": "dc956d944cb2fcd3e88f4b305931d5b568c1164a8ec5ab9d1688f7418a5814dc"
+     "sha256": "f19c0e240a28de99619e7625635e74160763c3f9c098bfff1a3b77c8916cdf91"
     },
     {
      "path": "cmake/tests/AgentTests.cmake",
@@ -12253,17 +12534,19 @@
      "vcpkg",
      "-R",
      "^(reset restores the System Message baseline and clears queues while retaining live policy|run_tool_call executes successfully and records execute-only duration|run_tool_call returns error outcome for blocked tool call without executing|stateful Agent queue peek prefers steering and clear removes both queues|stateful Agent rejects a second prompt while its active run is suspended)$",
-     "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1240-pilot-1176-agent-comparisons.xml",
+     "--no-tests=error",
+     "--output-on-failure",
      "-j",
-     "1"
+     "1",
+     "--output-junit",
+     "docs/research/pi-v1.3.0/deliveries/1176-revalidation-upstream-71ad3e83a.xml"
     ],
-    "testedRevision": "cde9255c41c3c575c6e9ce20b1432687869a36f7",
-    "recordedAt": "2026-11-07T07:06:07Z",
+    "testedRevision": "c8abe71ba4e8cb988a987ca9337d252acf3c2fe5",
+    "recordedAt": "2026-11-11T07:25:23Z",
     "selected": 5,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1240-pilot-1176-agent-comparisons.xml",
-     "sha256": "c259864a7defd2a8b14849e3b77499ac4e5520fd503d2f6df3d5928b900afd6b"
+     "path": "docs/research/pi-v1.3.0/deliveries/1176-revalidation-upstream-71ad3e83a.xml",
+     "sha256": "39eaa2fbc3d3547705a0caff27aa4bffcd4b702422a85431f008481f845c7ab8"
     }
    },
    "rows": [
@@ -12901,6 +13184,32 @@
       "sha256": "78d6aefe643d47a9bdd33109b15031a8fb235108a5bed796cfc347950e53e9c1"
      }
     }
+   },
+   "revalidation1232ReceiptDebt": {
+    "reason": "Upstream commit 71ad3e83a added boost-uuid to vcpkg.json and Boost::uuid to the durable target's declared dependencies, changing pinned inputs of this receipt (vcpkg.json). The delivered rows, comparison scenarios and routing digest are unchanged, and no #1232 change touches this receipt. The receipt's exact selection was rerun at this base into a fresh JUnit artifact, and this change makes no new verification claim about those rows.",
+    "changedInputs": [
+     "vcpkg.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-R",
+      "^(reset restores the System Message baseline and clears queues while retaining live policy|run_tool_call executes successfully and records execute-only duration|run_tool_call returns error outcome for blocked tool call without executing|stateful Agent queue peek prefers steering and clear removes both queues|stateful Agent rejects a second prompt while its active run is suspended)$",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1240-pilot-1176-agent-comparisons.xml",
+      "-j",
+      "1"
+     ],
+     "testedRevision": "cde9255c41c3c575c6e9ce20b1432687869a36f7",
+     "recordedAt": "2026-11-07T07:06:07Z",
+     "selected": 5,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1240-pilot-1176-agent-comparisons.xml",
+      "sha256": "c259864a7defd2a8b14849e3b77499ac4e5520fd503d2f6df3d5928b900afd6b"
+     }
+    }
    }
   },
   {
@@ -12921,7 +13230,7 @@
     },
     {
      "path": "vcpkg.json",
-     "sha256": "dc956d944cb2fcd3e88f4b305931d5b568c1164a8ec5ab9d1688f7418a5814dc"
+     "sha256": "f19c0e240a28de99619e7625635e74160763c3f9c098bfff1a3b77c8916cdf91"
     },
     {
      "path": "cmake/tests/CodingAgentTests.cmake",
@@ -13019,17 +13328,19 @@
      "vcpkg",
      "-R",
      "^(a\\ real\\ session's\\ next\\ request\\ lists\\ MCP\\ tools\\ registered\\ late\\ and\\ executes\\ them|a\\ settings\\ document\\ the\\ schema\\ accepts\\ reshapes\\ the\\ request\\ and\\ reload\\ re\\-reads\\ it|an\\ inline\\ budget\\ omits\\ a\\ namespace's\\ tools\\ with\\ pi's\\ marker|disabling\\ a\\ server\\ and\\ changing\\ its\\ exposure\\ reshape\\ the\\ next\\ request's\\ catalog|namespaces\\ group\\ sections\\ and\\ the\\ inline\\ budget\\ omits\\ tools\\ with\\ an\\ explicit\\ marker|the\\ empty\\ codemode\\ catalog\\ matches\\ the\\ frozen\\ pi\\-v1\\.3\\.0\\ description|the\\ on\\ loadout\\ lists\\ only\\ non\\-direct\\ callable\\ tools\\ and\\ adds\\ script\\-call\\ descriptions|the\\ only\\ loadout\\ lists\\ every\\ callable\\ tool\\ and\\ hides\\ direct\\ declarations|the\\ theme\\ token\\ set\\ matches\\ the\\ frozen\\ pi\\-v1\\.3\\.0\\ capture)$",
-     "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1240-pilot-1177-application-comparisons.xml",
+     "--no-tests=error",
+     "--output-on-failure",
      "-j",
-     "1"
+     "1",
+     "--output-junit",
+     "docs/research/pi-v1.3.0/deliveries/1177-revalidation-upstream-71ad3e83a.xml"
     ],
-    "testedRevision": "cde9255c41c3c575c6e9ce20b1432687869a36f7",
-    "recordedAt": "2026-11-07T07:06:07Z",
+    "testedRevision": "c8abe71ba4e8cb988a987ca9337d252acf3c2fe5",
+    "recordedAt": "2026-11-11T07:25:26Z",
     "selected": 9,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1240-pilot-1177-application-comparisons.xml",
-     "sha256": "10dde98ca54d5fd6fee1aeebf4e7d1f3a8b08ddc9a172f4fa6f0a7e63457f03f"
+     "path": "docs/research/pi-v1.3.0/deliveries/1177-revalidation-upstream-71ad3e83a.xml",
+     "sha256": "487e840f14ae7747e424a932838a743583abf638e1d4418745f4945891a1d82e"
     }
    },
    "rows": [
@@ -13696,6 +14007,32 @@
      "junit": {
       "path": "docs/research/pi-v1.3.0/deliveries/1177-application-comparisons-revalidation-1244-capture.xml",
       "sha256": "84d7a758d173cfb2b47da10b23b1472e39f67b4cc09008a99a67dd432a5a8f07"
+     }
+    }
+   },
+   "revalidation1232ReceiptDebt": {
+    "reason": "Upstream commit 71ad3e83a added boost-uuid to vcpkg.json and Boost::uuid to the durable target's declared dependencies, changing pinned inputs of this receipt (vcpkg.json). The delivered rows, comparison scenarios and routing digest are unchanged, and no #1232 change touches this receipt. The receipt's exact selection was rerun at this base into a fresh JUnit artifact, and this change makes no new verification claim about those rows.",
+    "changedInputs": [
+     "vcpkg.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-R",
+      "^(a\\ real\\ session's\\ next\\ request\\ lists\\ MCP\\ tools\\ registered\\ late\\ and\\ executes\\ them|a\\ settings\\ document\\ the\\ schema\\ accepts\\ reshapes\\ the\\ request\\ and\\ reload\\ re\\-reads\\ it|an\\ inline\\ budget\\ omits\\ a\\ namespace's\\ tools\\ with\\ pi's\\ marker|disabling\\ a\\ server\\ and\\ changing\\ its\\ exposure\\ reshape\\ the\\ next\\ request's\\ catalog|namespaces\\ group\\ sections\\ and\\ the\\ inline\\ budget\\ omits\\ tools\\ with\\ an\\ explicit\\ marker|the\\ empty\\ codemode\\ catalog\\ matches\\ the\\ frozen\\ pi\\-v1\\.3\\.0\\ description|the\\ on\\ loadout\\ lists\\ only\\ non\\-direct\\ callable\\ tools\\ and\\ adds\\ script\\-call\\ descriptions|the\\ only\\ loadout\\ lists\\ every\\ callable\\ tool\\ and\\ hides\\ direct\\ declarations|the\\ theme\\ token\\ set\\ matches\\ the\\ frozen\\ pi\\-v1\\.3\\.0\\ capture)$",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1240-pilot-1177-application-comparisons.xml",
+      "-j",
+      "1"
+     ],
+     "testedRevision": "cde9255c41c3c575c6e9ce20b1432687869a36f7",
+     "recordedAt": "2026-11-07T07:06:07Z",
+     "selected": 9,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1240-pilot-1177-application-comparisons.xml",
+      "sha256": "10dde98ca54d5fd6fee1aeebf4e7d1f3a8b08ddc9a172f4fa6f0a7e63457f03f"
      }
     }
    }
