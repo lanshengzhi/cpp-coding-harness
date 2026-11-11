@@ -1,5 +1,6 @@
 #include <catch2/catch_session.hpp>
 
+#include <cerrno>
 #include <chrono>
 #include <cstddef>
 #include <cstdlib>
@@ -43,11 +44,30 @@ public:
 
     static SetupValue<TestEnvironmentIsolation> create() {
         TestEnvironmentIsolation isolation;
-        auto root = create_unique_root();
+        auto base = resolve_temp_base();
+        if (!base) {
+            return std::unexpected(std::move(base.error()));
+        }
+        auto root = create_unique_root(*base);
         if (!root) {
             return std::unexpected(std::move(root.error()));
         }
         isolation.root_ = std::move(*root);
+
+        // Expose the resolved base before `TMPDIR` is overwritten so a test can
+        // prove the isolation tree sits on the caller's filesystem.
+        if (auto result = set_environment("CCH_TEST_ISOLATION_BASE", *base); !result) {
+            return std::unexpected(std::move(result.error()));
+        }
+        const char* inherited_tmpdir = std::getenv("TMPDIR");
+        if (inherited_tmpdir != nullptr && *inherited_tmpdir != '\0') {
+            if (auto result = set_environment("CCH_TEST_INHERITED_TMPDIR", std::filesystem::path{inherited_tmpdir});
+                    !result) {
+                return std::unexpected(std::move(result.error()));
+            }
+        } else if (auto result = unset_environment("CCH_TEST_INHERITED_TMPDIR"); !result) {
+            return std::unexpected(std::move(result.error()));
+        }
 
         const auto home = isolation.create_directory("home");
         const auto temporary = isolation.create_directory("tmp");
@@ -80,8 +100,36 @@ public:
 private:
     TestEnvironmentIsolation() = default;
 
-    static SetupValue<std::filesystem::path> create_unique_root() {
-        const std::filesystem::path base{"/tmp"};
+    /// Resolve and validate the caller's temporary base. This must run before
+    /// `setenv(TMPDIR)`: the resolved path is both the parent of the isolation
+    /// tree and the filesystem the staged-install test will write to.
+    static SetupValue<std::filesystem::path> resolve_temp_base() {
+        std::error_code error;
+        const auto base = std::filesystem::temp_directory_path(error);
+        const char* tmpdir = std::getenv("TMPDIR");
+        const std::string selected =
+                (tmpdir != nullptr && *tmpdir != '\0') ? " (TMPDIR=" + std::string{tmpdir} + ")" : std::string{};
+        if (error) {
+            return std::unexpected(
+                    "could not resolve the test temporary directory" + selected + ": " + error.message());
+        }
+        if (base.empty()) {
+            return std::unexpected("could not resolve the test temporary directory" + selected);
+        }
+        error.clear();
+        if (!std::filesystem::is_directory(base, error)) {
+            return std::unexpected("test temporary base '" + base.string() + "'" + selected + " is not a directory" +
+                                   (error ? ": " + error.message() : std::string{}));
+        }
+        if (::access(base.c_str(), W_OK | X_OK) != 0) {
+            const int access_errno = errno;
+            return std::unexpected("test temporary base '" + base.string() + "'" + selected + " is not writable: " +
+                                   std::error_code{access_errno, std::generic_category()}.message());
+        }
+        return base;
+    }
+
+    static SetupValue<std::filesystem::path> create_unique_root(const std::filesystem::path& base) {
         const auto stamp = std::chrono::steady_clock::now().time_since_epoch().count();
         std::error_code error;
         for (std::size_t attempt = 0; attempt < 100; ++attempt) {
@@ -92,10 +140,11 @@ private:
                 return candidate;
             }
             if (error && error != std::errc::file_exists) {
-                return std::unexpected("could not create the test isolation directory: " + error.message());
+                return std::unexpected("could not create the test isolation directory under '" + base.string() +
+                                       "': " + error.message());
             }
         }
-        return std::unexpected("could not allocate a unique test isolation directory");
+        return std::unexpected("could not allocate a unique test isolation directory under '" + base.string() + "'");
     }
 
     SetupValue<std::filesystem::path> create_directory(const std::string& name) const {

@@ -393,7 +393,9 @@ TEST_CASE("Native TUI paste keeps an image from the injected platform helper",
     session.type("\x16");
     tests::drain_ready(session.io);
     session.submit();
-    REQUIRE(session.wait_for_screen("fake: /", std::chrono::seconds{10}));
+    // The pasted absolute path can be wider than the terminal, so the echo
+    // wraps below the `fake:` label; the message itself is asserted below.
+    REQUIRE(session.wait_for_screen("fake:", std::chrono::seconds{10}));
 
     // The image becomes one supported temporary path, and the helper-command
     // text path is never used.

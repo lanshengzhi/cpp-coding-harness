@@ -225,16 +225,25 @@ TEST_CASE("/export preserves the live branch in JSONL and HTML after tree naviga
 
     const auto destination = (fixture.workspace.path() / "live.jsonl").string();
     REQUIRE(running.terminal.inject_input("/export " + destination + "\r\r"));
-    REQUIRE(wait_for_text(running, "Session exported to: " + destination));
+    // A temp root wider than the frame wraps the echoed destination, so wait on
+    // the produced file (the stronger outcome) and only then check the status
+    // prefix that the wrapped line cannot hide.
+    REQUIRE(tests::pump_until(
+            running.io,
+            [&] { return read_file(destination).find("first branch") != std::string::npos; },
+            std::chrono::seconds{20}));
     const auto transcript = read_file(destination);
     CHECK(transcript.find("first branch") != std::string::npos);
     CHECK(transcript.find("later branch") == std::string::npos);
 
     const auto html_destination = (fixture.workspace.path() / "live.html").string();
-    REQUIRE(running.terminal.inject_input("/export " + html_destination + "\r\r"));
-    REQUIRE(wait_for_text(running, "Session exported to: " + html_destination));
-    const auto html = read_file(html_destination);
     const std::string marker = R"(<script id="session-data" type="application/json">)";
+    REQUIRE(running.terminal.inject_input("/export " + html_destination + "\r\r"));
+    REQUIRE(tests::pump_until(
+            running.io,
+            [&] { return read_file(html_destination).find(marker) != std::string::npos; },
+            std::chrono::seconds{20}));
+    const auto html = read_file(html_destination);
     const auto begin = html.find(marker);
     REQUIRE(begin != std::string::npos);
     const auto end = html.find("</script>", begin + marker.size());

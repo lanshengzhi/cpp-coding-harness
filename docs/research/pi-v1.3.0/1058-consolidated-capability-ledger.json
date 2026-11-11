@@ -216,7 +216,7 @@
           },
           {
             "path": "tests/Catch2Main.cpp",
-            "sha256": "6203953a9244994c7c8aeeb64613b6ccef9bc24ae3ad0e54fed1f4a9212aadbd"
+            "sha256": "36c057ae082c40086358500d486b7bbff9839fa43b94f9981e3efb6b55e4631e"
           },
           {
             "path": "tests/mcp/McpOwnerTest.cpp",
@@ -263,14 +263,14 @@
             "-j",
             "1",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1101-revalidation-upstream-71ad3e83a.xml"
+            "docs/research/pi-v1.3.0/deliveries/1101-revalidation-test-tmp-root.xml"
           ],
-          "testedRevision": "c8abe71ba4e8cb988a987ca9337d252acf3c2fe5",
-          "recordedAt": "2026-11-11T07:25:42Z",
+          "testedRevision": "d775b8fe8f3cf859d5ac948553a2a06d96597728",
+          "recordedAt": "2026-11-11T10:39:46Z",
           "selected": 36,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1101-revalidation-upstream-71ad3e83a.xml",
-            "sha256": "080b903d5c3ab80c18e2490c487b2ecd3743a656b8c2ba73a5db206ae7cbacc3"
+            "path": "docs/research/pi-v1.3.0/deliveries/1101-revalidation-test-tmp-root.xml",
+            "sha256": "2ca9ed2b3bca754e2f8da2947a0f409b9ceabb0de59515fa9433fd74cb66fae4"
           }
         },
         "rows": [
@@ -1192,6 +1192,34 @@
             "junit": {
               "path": "docs/research/pi-v1.3.0/deliveries/1240-pilot-1101-structured-content.xml",
               "sha256": "21ed42b919f687199f13f40f4aaa8bf30edd98eb71055f77485f4601658e5dea"
+            }
+          }
+        },
+        "revalidationTestTmpRoot": {
+          "reason": "The test harness resolves its isolation root from TMPDIR instead of /tmp, exposes the resolved base to the isolation regression, and keeps the staged-install first cause visible. The exact 36-case #1101 selection, row mapping, frozen scenarios and discriminators are unchanged; no capability claim is added.",
+          "changedInputs": [
+            "tests/Catch2Main.cpp"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-L",
+              "^(issue1090|issue1101|issue1104)$",
+              "--no-tests=error",
+              "--output-on-failure",
+              "-j",
+              "1",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1101-revalidation-upstream-71ad3e83a.xml"
+            ],
+            "testedRevision": "c8abe71ba4e8cb988a987ca9337d252acf3c2fe5",
+            "recordedAt": "2026-11-11T07:25:42Z",
+            "selected": 36,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1101-revalidation-upstream-71ad3e83a.xml",
+              "sha256": "080b903d5c3ab80c18e2490c487b2ecd3743a656b8c2ba73a5db206ae7cbacc3"
             }
           }
         }
@@ -2302,6 +2330,12 @@
               "sha256": "a813457b9e9d3032818b95d95c7c4b96f69d89aac3346d5e36b015b41ddc8deb"
             }
           }
+        },
+        "revalidationTestTmpRoot": {
+          "reason": "The shared Catch2 runner now resolves its isolation root from TMPDIR and exposes it for the isolation regression; this receipt's exact selection, row mapping and JUnit are unchanged and were not rerun for this harness-only change.",
+          "changedInputs": [
+            "tests/Catch2Main.cpp"
+          ]
         }
       },
       {
@@ -2473,7 +2507,7 @@
           },
           {
             "path": "tests/Catch2Main.cpp",
-            "sha256": "6203953a9244994c7c8aeeb64613b6ccef9bc24ae3ad0e54fed1f4a9212aadbd"
+            "sha256": "36c057ae082c40086358500d486b7bbff9839fa43b94f9981e3efb6b55e4631e"
           },
           {
             "path": "tests/coding_agent/CodemodeCatalogTest.cpp",
@@ -3657,6 +3691,12 @@
               "sha256": "0b46da47aef31751dfaa15e851818820d8416179cb796001d3bae5ebf074540a"
             }
           }
+        },
+        "revalidationTestTmpRoot": {
+          "reason": "The shared Catch2 runner now resolves its isolation root from TMPDIR and exposes it for the isolation regression; this receipt's exact selection, row mapping and JUnit are unchanged and were not rerun for this harness-only change.",
+          "changedInputs": [
+            "tests/Catch2Main.cpp"
+          ]
         }
       },
       {
@@ -4369,7 +4409,7 @@
           },
           {
             "path": "tests/Catch2Main.cpp",
-            "sha256": "6203953a9244994c7c8aeeb64613b6ccef9bc24ae3ad0e54fed1f4a9212aadbd"
+            "sha256": "36c057ae082c40086358500d486b7bbff9839fa43b94f9981e3efb6b55e4631e"
           },
           {
             "path": "tests/chord/ChordContextTest.cpp",
@@ -4767,6 +4807,12 @@
               "sha256": "6bc16df2e57437a5100d915ce2c51a766ff4d270c8459402290bf15619e0e997"
             }
           }
+        },
+        "revalidationTestTmpRoot": {
+          "reason": "The shared Catch2 runner now resolves its isolation root from TMPDIR and exposes it for the isolation regression; this receipt's exact selection, row mapping and JUnit are unchanged and were not rerun for this harness-only change.",
+          "changedInputs": [
+            "tests/Catch2Main.cpp"
+          ]
         }
       },
       {
@@ -5018,7 +5064,7 @@
           },
           {
             "path": "tests/Catch2Main.cpp",
-            "sha256": "6203953a9244994c7c8aeeb64613b6ccef9bc24ae3ad0e54fed1f4a9212aadbd"
+            "sha256": "36c057ae082c40086358500d486b7bbff9839fa43b94f9981e3efb6b55e4631e"
           },
           {
             "path": "tests/coding_agent/McpHttpSessionTest.cpp",
@@ -6170,6 +6216,12 @@
               "sha256": "7973f283cba59b78b83bb43eac8ccfa6ad8ba6dd43d822e68ff97e2ffecab859"
             }
           }
+        },
+        "revalidationTestTmpRoot": {
+          "reason": "The shared Catch2 runner now resolves its isolation root from TMPDIR and exposes it for the isolation regression; this receipt's exact selection, row mapping and JUnit are unchanged and were not rerun for this harness-only change.",
+          "changedInputs": [
+            "tests/Catch2Main.cpp"
+          ]
         }
       },
       {
@@ -6377,7 +6429,7 @@
           },
           {
             "path": "tests/Catch2Main.cpp",
-            "sha256": "6203953a9244994c7c8aeeb64613b6ccef9bc24ae3ad0e54fed1f4a9212aadbd"
+            "sha256": "36c057ae082c40086358500d486b7bbff9839fa43b94f9981e3efb6b55e4631e"
           },
           {
             "path": "tests/chord/DeltaTest.cpp",
@@ -6680,6 +6732,12 @@
               "sha256": "6bc16df2e57437a5100d915ce2c51a766ff4d270c8459402290bf15619e0e997"
             }
           }
+        },
+        "revalidationTestTmpRoot": {
+          "reason": "The shared Catch2 runner now resolves its isolation root from TMPDIR and exposes it for the isolation regression; this receipt's exact selection, row mapping and JUnit are unchanged and were not rerun for this harness-only change.",
+          "changedInputs": [
+            "tests/Catch2Main.cpp"
+          ]
         }
       },
       {
@@ -6855,7 +6913,7 @@
           },
           {
             "path": "tests/Catch2Main.cpp",
-            "sha256": "6203953a9244994c7c8aeeb64613b6ccef9bc24ae3ad0e54fed1f4a9212aadbd"
+            "sha256": "36c057ae082c40086358500d486b7bbff9839fa43b94f9981e3efb6b55e4631e"
           },
           {
             "path": "tests/chord/ChordContextTest.cpp",
@@ -7191,6 +7249,12 @@
               "sha256": "5210be29e5c022d3816d9cdfb9cb250238a6050c266aa31e336cdabe751cd111"
             }
           }
+        },
+        "revalidationTestTmpRoot": {
+          "reason": "The shared Catch2 runner now resolves its isolation root from TMPDIR and exposes it for the isolation regression; this receipt's exact selection, row mapping and JUnit are unchanged and were not rerun for this harness-only change.",
+          "changedInputs": [
+            "tests/Catch2Main.cpp"
+          ]
         }
       },
       {
@@ -7403,7 +7467,7 @@
           },
           {
             "path": "tests/Catch2Main.cpp",
-            "sha256": "6203953a9244994c7c8aeeb64613b6ccef9bc24ae3ad0e54fed1f4a9212aadbd"
+            "sha256": "36c057ae082c40086358500d486b7bbff9839fa43b94f9981e3efb6b55e4631e"
           },
           {
             "path": "tests/chord/StrictJsonTest.cpp",
@@ -8226,6 +8290,12 @@
               "sha256": "6bc16df2e57437a5100d915ce2c51a766ff4d270c8459402290bf15619e0e997"
             }
           }
+        },
+        "revalidationTestTmpRoot": {
+          "reason": "The shared Catch2 runner now resolves its isolation root from TMPDIR and exposes it for the isolation regression; this receipt's exact selection, row mapping and JUnit are unchanged and were not rerun for this harness-only change.",
+          "changedInputs": [
+            "tests/Catch2Main.cpp"
+          ]
         }
       },
       {
@@ -8414,7 +8484,7 @@
           },
           {
             "path": "tests/Catch2Main.cpp",
-            "sha256": "6203953a9244994c7c8aeeb64613b6ccef9bc24ae3ad0e54fed1f4a9212aadbd"
+            "sha256": "36c057ae082c40086358500d486b7bbff9839fa43b94f9981e3efb6b55e4631e"
           },
           {
             "path": "tests/chord/ReplicatedStateTest.cpp",
@@ -9206,6 +9276,12 @@
               "sha256": "6bc16df2e57437a5100d915ce2c51a766ff4d270c8459402290bf15619e0e997"
             }
           }
+        },
+        "revalidationTestTmpRoot": {
+          "reason": "The shared Catch2 runner now resolves its isolation root from TMPDIR and exposes it for the isolation regression; this receipt's exact selection, row mapping and JUnit are unchanged and were not rerun for this harness-only change.",
+          "changedInputs": [
+            "tests/Catch2Main.cpp"
+          ]
         }
       },
       {
@@ -9273,7 +9349,7 @@
           },
           {
             "path": "tests/Catch2Main.cpp",
-            "sha256": "6203953a9244994c7c8aeeb64613b6ccef9bc24ae3ad0e54fed1f4a9212aadbd"
+            "sha256": "36c057ae082c40086358500d486b7bbff9839fa43b94f9981e3efb6b55e4631e"
           },
           {
             "path": "tests/chord/OutputTest.cpp",
@@ -9478,6 +9554,12 @@
               "sha256": "96379d561959ccc4f98e373121859490ae934e90cb41e614fc9750b5c5d926fc"
             }
           }
+        },
+        "revalidationTestTmpRoot": {
+          "reason": "The shared Catch2 runner now resolves its isolation root from TMPDIR and exposes it for the isolation regression; this receipt's exact selection, row mapping and JUnit are unchanged and were not rerun for this harness-only change.",
+          "changedInputs": [
+            "tests/Catch2Main.cpp"
+          ]
         }
       },
       {
@@ -9693,7 +9775,7 @@
           },
           {
             "path": "tests/Catch2Main.cpp",
-            "sha256": "6203953a9244994c7c8aeeb64613b6ccef9bc24ae3ad0e54fed1f4a9212aadbd"
+            "sha256": "36c057ae082c40086358500d486b7bbff9839fa43b94f9981e3efb6b55e4631e"
           },
           {
             "path": "src/support/Json.hpp",
@@ -10573,6 +10655,12 @@
               "sha256": "5c8a8372f5fda844603c4402707f2d03baf23734fada0a810ebbac8d530d2c3c"
             }
           }
+        },
+        "revalidationTestTmpRoot": {
+          "reason": "The shared Catch2 runner now resolves its isolation root from TMPDIR and exposes it for the isolation regression; this receipt's exact selection, row mapping and JUnit are unchanged and were not rerun for this harness-only change.",
+          "changedInputs": [
+            "tests/Catch2Main.cpp"
+          ]
         }
       },
       {
@@ -10721,7 +10809,7 @@
           },
           {
             "path": "tests/Catch2Main.cpp",
-            "sha256": "6203953a9244994c7c8aeeb64613b6ccef9bc24ae3ad0e54fed1f4a9212aadbd"
+            "sha256": "36c057ae082c40086358500d486b7bbff9839fa43b94f9981e3efb6b55e4631e"
           },
           {
             "path": "tests/codemode/CodemodeOwnerTest.cpp",
@@ -12443,6 +12531,12 @@
               "sha256": "6c8aa7d9b0d3a72f517dd807511aa4f2f8b9ab78d159ac6ca2f56f8759ace492"
             }
           }
+        },
+        "revalidationTestTmpRoot": {
+          "reason": "The shared Catch2 runner now resolves its isolation root from TMPDIR and exposes it for the isolation regression; this receipt's exact selection, row mapping and JUnit are unchanged and were not rerun for this harness-only change.",
+          "changedInputs": [
+            "tests/Catch2Main.cpp"
+          ]
         }
       },
       {
@@ -12475,7 +12569,7 @@
           },
           {
             "path": "tests/Catch2Main.cpp",
-            "sha256": "6203953a9244994c7c8aeeb64613b6ccef9bc24ae3ad0e54fed1f4a9212aadbd"
+            "sha256": "36c057ae082c40086358500d486b7bbff9839fa43b94f9981e3efb6b55e4631e"
           },
           {
             "path": "tests/agent/AuditArtifact.hpp",
@@ -13221,6 +13315,12 @@
               "sha256": "c259864a7defd2a8b14849e3b77499ac4e5520fd503d2f6df3d5928b900afd6b"
             }
           }
+        },
+        "revalidationTestTmpRoot": {
+          "reason": "The shared Catch2 runner now resolves its isolation root from TMPDIR and exposes it for the isolation regression; this receipt's exact selection, row mapping and JUnit are unchanged and were not rerun for this harness-only change.",
+          "changedInputs": [
+            "tests/Catch2Main.cpp"
+          ]
         }
       },
       {
@@ -13253,7 +13353,7 @@
           },
           {
             "path": "tests/Catch2Main.cpp",
-            "sha256": "6203953a9244994c7c8aeeb64613b6ccef9bc24ae3ad0e54fed1f4a9212aadbd"
+            "sha256": "36c057ae082c40086358500d486b7bbff9839fa43b94f9981e3efb6b55e4631e"
           },
           {
             "path": "tests/coding_agent/CodemodeCatalogTest.cpp",
@@ -14046,6 +14146,12 @@
               "sha256": "10dde98ca54d5fd6fee1aeebf4e7d1f3a8b08ddc9a172f4fa6f0a7e63457f03f"
             }
           }
+        },
+        "revalidationTestTmpRoot": {
+          "reason": "The shared Catch2 runner now resolves its isolation root from TMPDIR and exposes it for the isolation regression; this receipt's exact selection, row mapping and JUnit are unchanged and were not rerun for this harness-only change.",
+          "changedInputs": [
+            "tests/Catch2Main.cpp"
+          ]
         }
       },
       {
@@ -14192,6 +14298,12 @@
               "sha256": "511808591343c155d03abec2afa909d1cf3b41d79f20aabcd4fd15f43954e9d6"
             }
           }
+        },
+        "revalidationTestTmpRoot": {
+          "reason": "The shared Catch2 runner now resolves its isolation root from TMPDIR and exposes it for the isolation regression; this receipt's exact selection, row mapping and JUnit are unchanged and were not rerun for this harness-only change.",
+          "changedInputs": [
+            "tests/Catch2Main.cpp"
+          ]
         }
       },
       {
@@ -14311,6 +14423,12 @@
               "sha256": "abae9fc069467315c308991fcbb88869682db769d3f621693adbc5c79469a931"
             }
           }
+        },
+        "revalidationTestTmpRoot": {
+          "reason": "The shared Catch2 runner now resolves its isolation root from TMPDIR and exposes it for the isolation regression; this receipt's exact selection, row mapping and JUnit are unchanged and were not rerun for this harness-only change.",
+          "changedInputs": [
+            "tests/Catch2Main.cpp"
+          ]
         }
       },
       {
@@ -14409,7 +14527,13 @@
               "reason": "The two creates run in descending ID order (9 then 3), so a backend that appends sidecars in sorted filename order produces [doc-3, doc-9, main] and fails the recorded frozen append/flush trace and the byte-exact file comparison even though every file exists; the case also fails a flush emitted after the marker or for a commit that reclaims nothing."
             }
           }
-        ]
+        ],
+        "revalidationTestTmpRoot": {
+          "reason": "The shared Catch2 runner now resolves its isolation root from TMPDIR and exposes it for the isolation regression; this receipt's exact selection, row mapping and JUnit are unchanged and were not rerun for this harness-only change.",
+          "changedInputs": [
+            "tests/Catch2Main.cpp"
+          ]
+        }
       },
       {
         "id": "1201-terminal-primitives",
@@ -15608,6 +15732,12 @@
               "sha256": "43cf2ad4367be6e78c5a75610ddf308bf077948af33deae4125c77c97c83bc27"
             }
           }
+        },
+        "revalidationTestTmpRoot": {
+          "reason": "The shared Catch2 runner now resolves its isolation root from TMPDIR and exposes it for the isolation regression; this receipt's exact selection, row mapping and JUnit are unchanged and were not rerun for this harness-only change.",
+          "changedInputs": [
+            "tests/Catch2Main.cpp"
+          ]
         }
       },
       {
@@ -16211,6 +16341,12 @@
               "sha256": "ed407d0715f213cc463fb112389db4e0d2963f7a59bf7dd6576ee657a7d6a239"
             }
           }
+        },
+        "revalidationTestTmpRoot": {
+          "reason": "The shared Catch2 runner now resolves its isolation root from TMPDIR and exposes it for the isolation regression; this receipt's exact selection, row mapping and JUnit are unchanged and were not rerun for this harness-only change.",
+          "changedInputs": [
+            "tests/Catch2Main.cpp"
+          ]
         }
       },
       {
@@ -17034,6 +17170,12 @@
               "sha256": "8fa233e64cbda421ea3df52397458ac3922a20b6c2582af20def253b82bf3ed7"
             }
           }
+        },
+        "revalidationTestTmpRoot": {
+          "reason": "The shared Catch2 runner now resolves its isolation root from TMPDIR and exposes it for the isolation regression; this receipt's exact selection, row mapping and JUnit are unchanged and were not rerun for this harness-only change.",
+          "changedInputs": [
+            "tests/Catch2Main.cpp"
+          ]
         }
       },
       {
@@ -18219,6 +18361,12 @@
               "sha256": "fbef7a658488eea7fae40a741d3fe5c519ee17a685bfa0bf1927e2dea4972833"
             }
           }
+        },
+        "revalidationTestTmpRoot": {
+          "reason": "The shared Catch2 runner now resolves its isolation root from TMPDIR and exposes it for the isolation regression; this receipt's exact selection, row mapping and JUnit are unchanged and were not rerun for this harness-only change.",
+          "changedInputs": [
+            "tests/Catch2Main.cpp"
+          ]
         }
       },
       {
@@ -19786,6 +19934,12 @@
               "sha256": "62a851bf8d0c8aae6cbd430796a0f808560fb5570962b7b7b2caf7142c66f929"
             }
           }
+        },
+        "revalidationTestTmpRoot": {
+          "reason": "The shared Catch2 runner now resolves its isolation root from TMPDIR and exposes it for the isolation regression; this receipt's exact selection, row mapping and JUnit are unchanged and were not rerun for this harness-only change.",
+          "changedInputs": [
+            "tests/Catch2Main.cpp"
+          ]
         }
       },
       {
@@ -20545,6 +20699,12 @@
               "sha256": "0cd952fe9db11fe4b3f6065f9b4e49579ff9fc42056ab10e4a8a7f7a71a681ed"
             }
           }
+        },
+        "revalidationTestTmpRoot": {
+          "reason": "The shared Catch2 runner now resolves its isolation root from TMPDIR and exposes it for the isolation regression; this receipt's exact selection, row mapping and JUnit are unchanged and were not rerun for this harness-only change.",
+          "changedInputs": [
+            "tests/Catch2Main.cpp"
+          ]
         }
       },
       {
@@ -22872,6 +23032,12 @@
               "sha256": "0016661350415b91028b0c55b448d7a275918478857aef3f688cd31a12e78820"
             }
           }
+        },
+        "revalidationTestTmpRoot": {
+          "reason": "The shared Catch2 runner now resolves its isolation root from TMPDIR and exposes it for the isolation regression; this receipt's exact selection, row mapping and JUnit are unchanged and were not rerun for this harness-only change.",
+          "changedInputs": [
+            "tests/Catch2Main.cpp"
+          ]
         }
       },
       {
@@ -24704,6 +24870,12 @@
               "sha256": "c644a98868afab5d03d1cfc5e607d68381112dc7d0eb8b4cd6a6b2b27c4c6700"
             }
           }
+        },
+        "revalidationTestTmpRoot": {
+          "reason": "The shared Catch2 runner now resolves its isolation root from TMPDIR and exposes it for the isolation regression; this receipt's exact selection, row mapping and JUnit are unchanged and were not rerun for this harness-only change.",
+          "changedInputs": [
+            "tests/Catch2Main.cpp"
+          ]
         }
       },
       {
@@ -25613,6 +25785,12 @@
               "sha256": "dbfb56ec42716abb2fe39a2d7926f53130c2061a30147a33f7afa09b6542b275"
             }
           }
+        },
+        "revalidationTestTmpRoot": {
+          "reason": "The shared Catch2 runner now resolves its isolation root from TMPDIR and exposes it for the isolation regression; this receipt's exact selection, row mapping and JUnit are unchanged and were not rerun for this harness-only change.",
+          "changedInputs": [
+            "tests/Catch2Main.cpp"
+          ]
         }
       },
       {
@@ -26843,6 +27021,12 @@
               "sha256": "12aa5aec95a3de997fd0672e0735ee6ac643a4128512e0b6647e2ff5f3bd5bdf"
             }
           }
+        },
+        "revalidationTestTmpRoot": {
+          "reason": "The shared Catch2 runner now resolves its isolation root from TMPDIR and exposes it for the isolation regression; this receipt's exact selection, row mapping and JUnit are unchanged and were not rerun for this harness-only change.",
+          "changedInputs": [
+            "tests/Catch2Main.cpp"
+          ]
         }
       },
       {
@@ -27997,6 +28181,12 @@
               "sha256": "e164c195c63507ef516c7af423c6a2a6d7b92168959cf32672a49f9b112dbdb0"
             }
           }
+        },
+        "revalidationTestTmpRoot": {
+          "reason": "The shared Catch2 runner now resolves its isolation root from TMPDIR and exposes it for the isolation regression; this receipt's exact selection, row mapping and JUnit are unchanged and were not rerun for this harness-only change.",
+          "changedInputs": [
+            "tests/Catch2Main.cpp"
+          ]
         }
       },
       {
@@ -29742,6 +29932,12 @@
               "sha256": "a883ec9b48c7fe707edbb297510421a240379d51fa6afb5e15a45290b12c22c2"
             }
           }
+        },
+        "revalidationTestTmpRoot": {
+          "reason": "The shared Catch2 runner now resolves its isolation root from TMPDIR and exposes it for the isolation regression; this receipt's exact selection, row mapping and JUnit are unchanged and were not rerun for this harness-only change.",
+          "changedInputs": [
+            "tests/Catch2Main.cpp"
+          ]
         }
       },
       {
@@ -31849,6 +32045,12 @@
               "sha256": "1b5229d8b4f4b019efd9130733ebed1c35ae2b810993f75df8941fc25d2bb454"
             }
           }
+        },
+        "revalidationTestTmpRoot": {
+          "reason": "The shared Catch2 runner now resolves its isolation root from TMPDIR and exposes it for the isolation regression; this receipt's exact selection, row mapping and JUnit are unchanged and were not rerun for this harness-only change.",
+          "changedInputs": [
+            "tests/Catch2Main.cpp"
+          ]
         }
       },
       {
@@ -32543,6 +32745,12 @@
               "sha256": "982947b0365fb754fdc0fc5aa4a5e988a71d509f76ce17cb57f6b022d8bd038d"
             }
           }
+        },
+        "revalidationTestTmpRoot": {
+          "reason": "The shared Catch2 runner now resolves its isolation root from TMPDIR and exposes it for the isolation regression; this receipt's exact selection, row mapping and JUnit are unchanged and were not rerun for this harness-only change.",
+          "changedInputs": [
+            "tests/Catch2Main.cpp"
+          ]
         }
       },
       {
@@ -32672,6 +32880,12 @@
               "sha256": "e05f3b02e4f72df6fe6d7cce7df569e5ad82a5a60d32385176085a14a9161a59"
             }
           }
+        },
+        "revalidationTestTmpRoot": {
+          "reason": "The shared Catch2 runner now resolves its isolation root from TMPDIR and exposes it for the isolation regression; this receipt's exact selection, row mapping and JUnit are unchanged and were not rerun for this harness-only change.",
+          "changedInputs": [
+            "tests/Catch2Main.cpp"
+          ]
         }
       }
     ]

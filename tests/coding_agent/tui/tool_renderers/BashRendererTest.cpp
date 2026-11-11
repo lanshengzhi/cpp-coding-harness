@@ -481,17 +481,18 @@ TEST_CASE("the truncation warning draws pi's bracketed forms with the path verba
                 bash_result("done", bash_details(R"({"truncated":false})", spill)));
         const auto screen = tests::render_tool_screen(*component, kScreenWidth);
         // A check that only asks whether the path appears somewhere passes
-        // with a `~` for the home prefix or inside an OSC 8 sequence; the
-        // bracketed row is asserted here instead. This spill path is longer
-        // than the frame, so pi's `Text` wraps it after the label and the two
-        // rows are asserted whole.
-        // No duration row: the settled helper result carries no recording, so
-        // the block is one row shorter than the pre-#812 clock-stamped shape.
-        REQUIRE(screen.visible.size() == 7);
-        CHECK(screen.visible.at(4) == "[Full output:");
-        CHECK(screen.visible.at(5) == spill + "]");
-        CHECK(screen.raw.at(4).find("\x1b]8;;") == std::string::npos);
-        CHECK(screen.raw.at(5).find("\x1b]8;;") == std::string::npos);
+        // with a `~` for the home prefix or inside an OSC 8 sequence. Join the
+        // warning rows instead: the spill path is longer than the frame and its
+        // row count depends on the caller's temp root, but the unwrapped text
+        // must carry the exact path with no home shortening or hyperlink.
+        std::string warning;
+        for (std::size_t row = 4; row < screen.visible.size(); ++row) {
+            warning += screen.visible.at(row);
+            CHECK(screen.raw.at(row).find("\x1b]8;;") == std::string::npos);
+        }
+        CHECK(warning.starts_with("[Full output:"));
+        CHECK(warning.find(spill + "]") != std::string::npos);
+        CHECK(warning.find("~/") == std::string::npos);
     }
 
     SECTION("no details draws no warning, which is what keeps an old session's baked-in marker plain text") {

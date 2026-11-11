@@ -6,9 +6,18 @@
 #include "support/AgentRootFixture.hpp"
 
 #include <algorithm>
+#include <cerrno>
+#include <charconv>
+#include <csignal>
 #include <cstdlib>
+#include <cstring>
+#include <cstdint>
+#include <expected>
 #include <filesystem>
+#include <functional>
 #include <fstream>
+#include <limits>
+#include <optional>
 #include <string>
 #include <system_error>
 #include <vector>
@@ -38,10 +47,72 @@ namespace fs = std::filesystem;
 using cch::tests::shell_quote;
 
 struct CommandResult {
-    int exit_code{0};
+    bool capture_failed{false};
+    std::string capture_error;
+    int exit_code{-1};
+    int signal{0};
     std::string stdout_text;
     std::string stderr_text;
+
+    [[nodiscard]] bool success() const { return !capture_failed && signal == 0 && exit_code == 0; }
+    [[nodiscard]] bool exited_with(int code) const { return !capture_failed && signal == 0 && exit_code == code; }
+
+    /// Name the mechanism, not only a wait status: an exit code and a signal
+    /// death are different observations and a raw `WIFEXITED ? ... : status`
+    /// folds them into one number.
+    [[nodiscard]] std::string status_text() const {
+        if (capture_failed) {
+            return "capture setup failed: " + capture_error;
+        }
+        if (signal != 0) {
+            const char* name = ::strsignal(signal);
+            return "signal " + std::to_string(signal) + " (" +
+                   (name != nullptr ? std::string{name} : std::string{"unknown"}) + "), no exit code";
+        }
+        return "exit code " + std::to_string(exit_code) + ", no terminating signal";
+    }
+
+    [[nodiscard]] std::string diagnostic() const {
+        return "command " + status_text() + "\n--- stdout ---\n" + stdout_text + "\n--- stderr ---\n" + stderr_text;
+    }
 };
+
+/// Headroom beyond the staged binary copy. The stage also carries notices and
+/// filesystem bookkeeping; `cmake --install` needs the source binary readable
+/// while it writes the destination.
+constexpr std::uintmax_t kInstallSpaceHeadroom = 64ULL * 1024ULL * 1024ULL;
+
+struct SpaceCheck {
+    fs::path path;
+    std::uintmax_t available{0};
+    std::uintmax_t required{0};
+
+    [[nodiscard]] bool sufficient() const { return available >= required; }
+
+    [[nodiscard]] std::string message() const {
+        return "install space pre-flight: path '" + path.string() + "', available " + std::to_string(available) +
+               " bytes, required " + std::to_string(required) + " bytes";
+    }
+};
+
+using CommandExecutor = std::function<CommandResult(const std::string&, const fs::path&)>;
+
+struct InstallAttempt {
+    std::optional<CommandResult> result;
+    SpaceCheck space;
+};
+
+/// Test-only runtime override for the build-configured CMake command. The
+/// default remains the compile-time `CCH_CMAKE_COMMAND`; setting the same
+/// environment name lets a diagnostic run prove a command was not executed by
+/// pointing it at a path that cannot exist.
+[[nodiscard]] std::string cmake_command() {
+    const char* override = std::getenv("CCH_CMAKE_COMMAND");
+    if (override != nullptr && *override != '\0') {
+        return override;
+    }
+    return CCH_CMAKE_COMMAND;
+}
 
 std::string read_file(const fs::path& path) {
     std::ifstream input(path, std::ios::binary);
@@ -56,12 +127,85 @@ CommandResult run_command(const std::string& command, const fs::path& capture_di
     const auto stamp = capture_dir / ("capture-" + std::to_string(capture_counter++));
     std::error_code dir_error;
     fs::create_directories(stamp, dir_error);
+    if (dir_error) {
+        CommandResult result;
+        result.capture_failed = true;
+        result.capture_error =
+                "could not create command capture directory '" + stamp.string() + "': " + dir_error.message();
+        return result;
+    }
     const auto stdout_path = stamp / "stdout.txt";
     const auto stderr_path = stamp / "stderr.txt";
-    const int status = std::system(
-        (command + " > '" + stdout_path.string() + "' 2> '" + stderr_path.string() + "'").c_str());
-    const int exit_code = WIFEXITED(status) ? WEXITSTATUS(status) : status;
-    return {exit_code, read_file(stdout_path), read_file(stderr_path)};
+    const auto redirected = command + " > " + shell_quote(stdout_path) + " 2> " + shell_quote(stderr_path);
+    const int status = std::system(redirected.c_str());
+    CommandResult result;
+    if (status == -1) {
+        const int system_errno = errno;
+        result.capture_failed = true;
+        result.capture_error = "could not start a shell for a command in '" + capture_dir.string() +
+                               "': " + std::error_code{system_errno, std::generic_category()}.message();
+        return result;
+    }
+    if (WIFEXITED(status)) {
+        result.exit_code = WEXITSTATUS(status);
+    } else if (WIFSIGNALED(status)) {
+        result.signal = WTERMSIG(status);
+    } else {
+        result.capture_failed = true;
+        result.capture_error = "unexpected wait status " + std::to_string(status);
+        return result;
+    }
+    result.stdout_text = read_file(stdout_path);
+    result.stderr_text = read_file(stderr_path);
+    return result;
+}
+
+[[nodiscard]] std::uintmax_t required_install_bytes(std::uintmax_t binary_size, std::uintmax_t floor) {
+    const auto maximum = std::numeric_limits<std::uintmax_t>::max();
+    const auto doubled =
+            binary_size > (maximum - kInstallSpaceHeadroom) / 2 ? maximum : binary_size * 2 + kInstallSpaceHeadroom;
+    return std::max(floor, doubled);
+}
+
+[[nodiscard]] std::expected<std::uintmax_t, std::string> configured_floor_bytes() {
+    const char* value = std::getenv("CCH_TEST_MIN_TMP_BYTES");
+    if (value == nullptr || *value == '\0') {
+        return 0;
+    }
+    std::uintmax_t parsed = 0;
+    const auto* end = value + std::strlen(value);
+    const auto [position, error] = std::from_chars(value, end, parsed);
+    if (error != std::errc{} || position != end) {
+        return std::unexpected(
+                "invalid CCH_TEST_MIN_TMP_BYTES '" + std::string{value} + "': expected a non-negative byte count");
+    }
+    return parsed;
+}
+
+[[nodiscard]] std::expected<SpaceCheck, std::string> check_install_space(
+        const fs::path& path, const fs::path& binary, std::uintmax_t floor) {
+    std::error_code error;
+    const auto binary_size = fs::file_size(binary, error);
+    if (error) {
+        return std::unexpected("could not size the Runtime binary '" + binary.string() + "': " + error.message());
+    }
+    const auto info = fs::space(path, error);
+    if (error) {
+        return std::unexpected("could not read free space for '" + path.string() + "': " + error.message());
+    }
+    return SpaceCheck{path, info.available, required_install_bytes(binary_size, floor)};
+}
+
+/// Run the install only after the space gate admits it. The executor seam keeps
+/// the "not invoked when insufficient" property observable in a test.
+[[nodiscard]] InstallAttempt install_if_sufficient(const SpaceCheck& space,
+        const std::string& command,
+        const fs::path& capture_dir,
+        const CommandExecutor& execute) {
+    if (!space.sufficient()) {
+        return {.result = std::nullopt, .space = space};
+    }
+    return {.result = execute(command, capture_dir), .space = space};
 }
 
 /// Every file expected in the staged Runtime-only install: the Runtime itself
@@ -110,6 +254,62 @@ CommandResult run_command(const std::string& command, const fs::path& capture_di
 
 } // namespace
 
+// The staged-install case must keep its first cause visible. On this
+// -fno-exceptions test TU a scoped INFO is never popped when a REQUIRE fails,
+// and Catch2 aborts on the leftover message; the command result must therefore
+// report an exit code and a signal death as different observations.
+TEST_CASE(
+        "command capture separates exit status from signals and names capture failures", "[cli][install][diagnostic]") {
+    cch::tests::TempWorkspace root;
+    const auto captures = root.path() / "captures";
+
+    const auto exited = run_command("sh -c 'printf out; printf err >&2; exit 7'", captures);
+    CHECK_FALSE(exited.capture_failed);
+    CHECK(exited.signal == 0);
+    CHECK(exited.exit_code == 7);
+    CHECK_FALSE(exited.success());
+    CHECK(exited.diagnostic().find("exit code 7, no terminating signal") != std::string::npos);
+    CHECK(exited.diagnostic().find("--- stderr ---\nerr") != std::string::npos);
+
+    const auto signaled = run_command("kill -TERM $$", captures);
+    CHECK_FALSE(signaled.capture_failed);
+    CHECK(signaled.signal == SIGTERM);
+    CHECK(signaled.diagnostic().find("signal " + std::to_string(SIGTERM)) != std::string::npos);
+    CHECK(signaled.diagnostic().find("no exit code") != std::string::npos);
+
+    root.write("not-a-directory", "block");
+    const auto blocked = run_command("true", root.path() / "not-a-directory");
+    CHECK(blocked.capture_failed);
+    CHECK(blocked.capture_error.find("not-a-directory") != std::string::npos);
+    CHECK(blocked.capture_error.find("capture-") != std::string::npos);
+}
+
+// The space gate protects the staged install from runner resourcing failures.
+// Its message must name the filesystem and both byte figures, and a rejected
+// pre-flight must not execute the install command at all.
+TEST_CASE("staged-install space pre-flight names path, available and required before executing the install",
+        "[cli][install][diagnostic]") {
+    cch::tests::TempWorkspace root;
+    const auto floor = std::numeric_limits<std::uintmax_t>::max();
+    const auto space = check_install_space(root.path(), PIKE_EXECUTABLE, floor);
+    REQUIRE(space.has_value());
+    CHECK_FALSE(space->sufficient());
+
+    const auto message = space->message();
+    CHECK(message.find(root.path().string()) != std::string::npos);
+    CHECK(message.find(std::to_string(space->available)) != std::string::npos);
+    CHECK(message.find(std::to_string(space->required)) != std::string::npos);
+
+    bool executed = false;
+    const auto attempt = install_if_sufficient(*space, "false", root.path(), [&](const std::string&, const fs::path&) {
+        executed = true;
+        return CommandResult{};
+    });
+    CHECK_FALSE(attempt.result.has_value());
+    CHECK_FALSE(executed);
+    CHECK(attempt.space.message() == message);
+}
+
 // Issue #472: a clean-prefix staging install produces only the relocatable
 // Runtime and its required notices, passes the dependency-closure audit, and
 // keeps working after relocation without network credentials.
@@ -128,17 +328,49 @@ TEST_CASE("staged install contains only the relocatable Runtime and behaves afte
     // test suite, they never produce a shippable install (issue #473).
     SKIP("staged install is a shippable-configuration contract; sanitizer builds are not installable");
 #else
+    const auto floor = configured_floor_bytes();
+    if (!floor) {
+        UNSCOPED_INFO(floor.error());
+        FAIL("staged install cannot resolve the configured space floor");
+    }
+    std::error_code staging_error;
+    const auto staging = std::filesystem::temp_directory_path(staging_error);
+    if (staging_error) {
+        UNSCOPED_INFO("could not resolve the staging filesystem: " + staging_error.message());
+        FAIL("staged install cannot resolve the staging filesystem");
+    }
+    const auto space = check_install_space(staging, PIKE_EXECUTABLE, *floor);
+    if (!space) {
+        UNSCOPED_INFO(space.error());
+        FAIL("staged install space pre-flight could not run");
+    }
+    if (!space->sufficient()) {
+        // Insufficient staging space is a runner precondition, not a product
+        // defect. Skip with the path and both byte figures instead of turning a
+        // full-suite resource shortage into a red install test.
+        SKIP(space->message());
+    }
+
     cch::tests::TempWorkspace root;
     const auto stage = root.path() / "stage";
     const auto captures = root.path() / "captures";
 
     // ── Stage into a clean prefix (the install path runs the Gate first) ──
-    const auto install = run_command(
-        shell_quote(CCH_CMAKE_COMMAND) + " --install " + shell_quote(CCH_BUILD_DIR) +
-            " --prefix " + shell_quote(stage),
-        captures);
-    INFO(install.stdout_text + install.stderr_text);
-    REQUIRE(install.exit_code == 0);
+    const auto install_command = shell_quote(cmake_command()) + " --install " + shell_quote(CCH_BUILD_DIR) +
+                                 " --prefix " + shell_quote(stage);
+    const auto attempt = install_if_sufficient(*space, install_command, captures, run_command);
+    if (!attempt.result) {
+        UNSCOPED_INFO(attempt.space.message());
+        FAIL("staged install executed without a sufficient space pre-flight");
+    }
+    const auto& install = *attempt.result;
+    // Keep the installer's full status and streams visible: a scoped INFO
+    // cannot be popped on a failing path in this -fno-exceptions TU, and
+    // Catch2 aborts on the leftover message before later diagnostics print.
+    if (!install.success()) {
+        UNSCOPED_INFO(install.diagnostic());
+    }
+    REQUIRE(install.success());
 
     // ── Layout: exactly the Runtime and the required notices ──
     std::vector<std::string> files;
@@ -152,7 +384,7 @@ TEST_CASE("staged install contains only the relocatable Runtime and behaves afte
     std::sort(files.begin(), files.end());
     CHECK(files == expected_staged_files());
     for (const auto& file : files) {
-        INFO(file);
+        UNSCOPED_INFO(file);
         CHECK_FALSE(is_development_artifact(file));
     }
     std::error_code probe_error;
@@ -162,7 +394,7 @@ TEST_CASE("staged install contains only the relocatable Runtime and behaves afte
     // Licenses and notices are required runtime material, not empty placeholders.
     for (const auto& relative : files) {
         if (relative.starts_with("share/")) {
-            INFO(relative);
+            UNSCOPED_INFO(relative);
             std::error_code size_error;
             const auto size = fs::file_size(stage / relative, size_error);
             CHECK_FALSE(size_error);
@@ -181,7 +413,7 @@ TEST_CASE("staged install contains only the relocatable Runtime and behaves afte
             " --forbid-root " + shell_quote(source_dir) + " --forbid-root " +
             shell_quote(CCH_BUILD_DIR),
         captures);
-    INFO(audit.stdout_text + audit.stderr_text);
+    UNSCOPED_INFO(audit.stdout_text + audit.stderr_text);
     CHECK(audit.exit_code == 0);
 
     // ── Relocate the whole prefix outside the build-tree spelling ──
@@ -201,17 +433,17 @@ TEST_CASE("staged install contains only the relocatable Runtime and behaves afte
 
     // ── --version matches the build-tree Runtime ──
     const auto build_version = run_command(shell_quote(PIKE_EXECUTABLE) + " --version", captures);
-    REQUIRE(build_version.exit_code == 0);
+    REQUIRE(build_version.success());
     const auto staged_version = run_command(relocated_run + " --version", captures);
-    INFO(staged_version.stdout_text + staged_version.stderr_text);
-    REQUIRE(staged_version.exit_code == 0);
+    UNSCOPED_INFO(staged_version.stdout_text + staged_version.stderr_text);
+    REQUIRE(staged_version.success());
     CHECK(staged_version.stdout_text == build_version.stdout_text);
     CHECK_FALSE(staged_version.stdout_text.empty());
 
     // ── --help prints the pi-aligned flag surface ──
     const auto staged_help = run_command(relocated_run + " --help", captures);
-    INFO(staged_help.stdout_text + staged_help.stderr_text);
-    REQUIRE(staged_help.exit_code == 0);
+    UNSCOPED_INFO(staged_help.stdout_text + staged_help.stderr_text);
+    REQUIRE(staged_help.success());
     CHECK(staged_help.stdout_text.find("Usage:") != std::string::npos);
     CHECK(staged_help.stdout_text.find("--print") != std::string::npos);
 
@@ -238,8 +470,8 @@ TEST_CASE("staged install contains only the relocatable Runtime and behaves afte
                                     (network_isolation_available ? std::string{"unshare -rn "} : std::string{}) +
                                     clean_env + shell_quote(relocated_binary) + " --print ping < /dev/null";
     const auto offline = run_command(offline_run, captures);
-    INFO(offline.stdout_text + offline.stderr_text);
-    CHECK(offline.exit_code == 1);
+    UNSCOPED_INFO(offline.stdout_text + offline.stderr_text);
+    CHECK(offline.exited_with(1));
     CHECK(offline.stderr_text.find("has no API implementation") != std::string::npos);
 
     // ── Offline fake-provider smoke outside the build tree (in-process seam) ──
@@ -249,9 +481,10 @@ TEST_CASE("staged install contains only the relocatable Runtime and behaves afte
             .env = {{"HOME", home.string()}},
             .stdin_text = "",
     });
-    INFO(smoke.stdout_text + smoke.stderr_text);
+    UNSCOPED_INFO(smoke.stdout_text + smoke.stderr_text);
     REQUIRE(smoke.exit_code == 0);
     CHECK(smoke.stdout_text == "fake: hello\n");
+    UNSCOPED_INFO("stderr: " + smoke.stderr_text);
     CHECK(smoke.stderr_text.empty());
 #endif
 }
