@@ -342,7 +342,12 @@ DeterministicRun::Impl::Impl(
     // A stop request must wake the delivery loop while it waits for the next
     // result number: the worker parks without a deadline and cannot poll the
     // token inside `condition_variable::wait`'s predicate without a notify.
-    shared.stop_notify.emplace(start.stop_token, [&]() { shared.cv.notify_all(); });
+    shared.stop_notify.emplace(start.stop_token, [&]() {
+        {
+            std::lock_guard lock(shared.mutex);
+        }
+        shared.cv.notify_all();
+    });
     if (start.stop_token.stop_requested()) {
         // pi decides an already-requested abort during `start`, before the
         // public run handle is returned or its result can be consumed. The
