@@ -20261,7 +20261,7 @@
     },
     {
      "path": "tests/coding_agent/tui/FullscreenExitOutputTest.cpp",
-     "sha256": "007c7615cfec53868f39e594ad32dfd4b07f5cfa7a0b98da9ca65db0167799c8"
+     "sha256": "22ab31a3edd70d220c1a18c0a289387042e6566f0bdc4b7d60d458347cb7f920"
     },
     {
      "path": "tests/coding_agent/tui/RendererSwitchEvidenceTest.cpp",
@@ -20269,7 +20269,7 @@
     },
     {
      "path": "tests/coding_agent/tui/TuiModeSwitchTest.cpp",
-     "sha256": "98914ca31739ba622fa8e788bdccc558ffd7eab428e8170731904e14c2174540"
+     "sha256": "9873a9a2931c2645a4080417e3b6894e513868ae22f0e449afa052a4018039d5"
     },
     {
      "path": "tests/tui/CursorMarkerEvidenceTest.cpp",
@@ -20307,23 +20307,23 @@
    "validation": {
     "command": [
      "ctest",
+     "--output-junit",
+     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1210-regular-renderer-revalidation-test-tui-frame.xml",
      "--preset",
      "vcpkg",
      "-LE",
      "architecture",
      "-L",
      "issue1210",
-     "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1210-regular-renderer-revalidation-1244-capture.xml",
      "-j",
      "1"
     ],
-    "testedRevision": "6451b872e665cc8d014582eaad3e6dce06ff22cd",
-    "recordedAt": "2026-11-06T17:17:20Z",
+    "testedRevision": "747448831e147f803727b15a31c40a3989b2e9f1",
+    "recordedAt": "2026-11-11T16:27:43Z",
     "selected": 10,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1210-regular-renderer-revalidation-1244-capture.xml",
-     "sha256": "2465b7ee2977d9d5b8956f4b0db98b8405d37517a848f1697523cfb5dc5ff21a"
+     "path": "docs/research/pi-v1.3.0/deliveries/1210-regular-renderer-revalidation-test-tui-frame.xml",
+     "sha256": "76d4f2091abb42b6ae8b3cbbf36525be31285ff9b24415d3d08c56303966cde4"
     }
    },
    "rows": [
@@ -20992,6 +20992,35 @@
      "junit": {
       "path": "docs/research/pi-v1.3.0/deliveries/1210-regular-renderer-revalidation-1244.xml",
       "sha256": "0cd952fe9db11fe4b3f6065f9b4e49579ff9fc42056ab10e4a8a7f7a71a681ed"
+     }
+    }
+   },
+   "revalidationTestTuiFrame": {
+    "reason": "The TUI cases now pin a path wider than the frame to the form its component renders instead of to a substring that survives only while the temporary root fits: the footer pwd row is asserted through pi `truncateToWidth(pwd, width, \"...\")`, and a path in a wrapping `Text` is asserted across the renderer's row breaks (tests/support/FrameText.hpp). The exact 10-case selection, row mapping, frozen scenarios and discriminators are unchanged; no capability claim is added.",
+    "changedInputs": [
+     "tests/coding_agent/tui/FullscreenExitOutputTest.cpp",
+     "tests/coding_agent/tui/TuiModeSwitchTest.cpp"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-LE",
+      "architecture",
+      "-L",
+      "issue1210",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1210-regular-renderer-revalidation-1244-capture.xml",
+      "-j",
+      "1"
+     ],
+     "testedRevision": "6451b872e665cc8d014582eaad3e6dce06ff22cd",
+     "recordedAt": "2026-11-06T17:17:20Z",
+     "selected": 10,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1210-regular-renderer-revalidation-1244-capture.xml",
+      "sha256": "2465b7ee2977d9d5b8956f4b0db98b8405d37517a848f1697523cfb5dc5ff21a"
      }
     }
    },

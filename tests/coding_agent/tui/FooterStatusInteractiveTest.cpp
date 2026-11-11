@@ -11,6 +11,7 @@
 #include "support/ModelsFixture.hpp"
 #include "support/TempWorkspace.hpp"
 #include "support/AgentRootFixture.hpp"
+#include "support/FrameText.hpp"
 
 #include <cch/ai/Content.hpp>
 #include <cch/coding_agent/session/SessionStore.hpp>
@@ -271,9 +272,12 @@ TEST_CASE("Native TUI footer renders usage totals, cache hit rate, context, and 
         });
     drain_ready(io);
 
-    // The footer pwd line carries the workspace path (no git repo).
+    // The footer pwd line carries the workspace path (no git repo). The row is
+    // pi's `truncateToWidth(pwd, width, "...")`, so a workspace wider than the
+    // 100-column frame ends in the ellipsis; asserting the untruncated path
+    // would hold only while the temp root happens to fit.
     auto screen = visible_screen(terminal);
-    CHECK(screen.find(fixture.workspace.path().string()) != std::string::npos);
+    CHECK(screen.find(tests::truncated_row(fixture.workspace.path().string(), 100)) != std::string::npos);
 
     REQUIRE(terminal.inject_input("usage turn\r"));
     // Turn completion and the footer stats update cross Runtime worker hops,

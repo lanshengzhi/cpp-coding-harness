@@ -312,11 +312,32 @@ TEST_CASE("Footer truncates the pwd and right side to the width", "[coding_agent
     footer.set_data(std::move(data));
 
     const auto [pwd_line, stats_line] = rendered_lines(footer, 40);
-    CHECK(pwd_line.size() == 40);
-    CHECK(pwd_line.find("...") != std::string::npos);
+    // pi footer.ts renders the pwd through `truncateToWidth(pwd, width, "...")`:
+    // one row, the *leading* cells, and the ellipsis inside the width. This
+    // literal is what pins the omission rule: the TUI cases assert the same
+    // form for a workspace path wider than their frame (the assertion helper
+    // is tests/support/FrameText.hpp), so a middle ellipsis, a dropped
+    // ellipsis, a `~` shorthand, or a wrap would fail here as well as there.
+    CHECK(pwd_line == "/very/long/working/directory/path/tha...");
+    CHECK(tui::visible_width(pwd_line) == 40);
+    CHECK(pwd_line.find("/width") == std::string::npos);
     CHECK(stats_line.size() == 40);
     // The model is truncated to fit the remaining width.
     CHECK(stats_line.find("a-very-long-model-name") != std::string::npos);
+}
+
+TEST_CASE("Footer renders a pwd that fits the width unchanged", "[coding_agent][tui][footer][issue411][spec]") {
+    auto fixture = FooterFixture{};
+    coding_agent::tui::FooterData data;
+    data.cwd = "/srv/app";
+    data.context_window = 100000;
+    fixture.footer.set_data(std::move(data));
+
+    const auto [pwd_line, stats_line] = rendered_lines(fixture.footer, 40);
+    // The same rule keeps a fitting pwd untouched and adds no ellipsis.
+    CHECK(pwd_line == "/srv/app");
+    CHECK(pwd_line.find("...") == std::string::npos);
+    CHECK(stats_line.size() == 40);
 }
 
 TEST_CASE("FooterDataProvider resolves the git branch from HEAD metadata",

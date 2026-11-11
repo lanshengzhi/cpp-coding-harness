@@ -10,6 +10,7 @@
 #include "coding_agent/cli/StartupTui.hpp"
 
 #include "support/EnvVarGuard.hpp"
+#include "support/FrameText.hpp"
 #include "support/PumpUntil.hpp"
 #include "support/TempWorkspace.hpp"
 #include "support/Json.hpp"
@@ -362,9 +363,14 @@ TEST_CASE("startup TUI: the boot missing-cwd prompt shows Continue/Cancel with p
 
     const auto screen = visible_screen(running.terminal);
     CHECK(screen.find("cwd from session file does not exist") != std::string::npos);
-    CHECK(screen.find(vanished.path().string()) != std::string::npos);
+    // The prompt's title is a wrapping `Text`: its absolute paths occupy one
+    // row only while the temporary root fits the frame, so each is asserted as
+    // the whole path a user reads across the renderer's breaks.
+    CHECK(tests::rows_show_text(
+            running.terminal.screen(), running.terminal.dimensions().columns, vanished.path().string()));
     CHECK(screen.find("continue in current cwd") != std::string::npos);
-    CHECK(screen.find(fallback.path().string()) != std::string::npos);
+    CHECK(tests::rows_show_text(
+            running.terminal.screen(), running.terminal.dimensions().columns, fallback.path().string()));
     CHECK(screen.find("Continue") != std::string::npos);
     CHECK(screen.find("Cancel") != std::string::npos);
 

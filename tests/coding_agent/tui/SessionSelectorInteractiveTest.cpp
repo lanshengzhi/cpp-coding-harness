@@ -15,6 +15,7 @@
 #include "support/AsyncResultBridge.hpp"
 #include "support/ModelCatalogFixture.hpp"
 #include "support/EnvVarGuard.hpp"
+#include "support/FrameText.hpp"
 #include "support/PumpUntil.hpp"
 #include "support/TempWorkspace.hpp"
 
@@ -323,8 +324,15 @@ TEST_CASE("session selector search, named filter, and scope toggle work through 
     CHECK(screen.find("fix the parser bug") != std::string::npos);
     CHECK(screen.find("refactor the loader") != std::string::npos);
 
-    // Type a search: only the matching row remains.
-    REQUIRE(running.terminal.inject_input("parser"));
+    // Type a search: only the matching row remains. The query is a quoted
+    // phrase because the default token mode fuzzy-matches the session's own
+    // searchable text, which includes its absolute cwd: a bare `parser` became
+    // a subsequence of a longer temporary root and matched the other row for a
+    // reason that has nothing to do with the message. A phrase with a space
+    // cannot reappear inside a temp path, so the row set is the property under
+    // test. The fuzzy/regex/phrase matchers themselves stay pinned by
+    // `SessionSelectorSearchTest`.
+    REQUIRE(running.terminal.inject_input("\"parser bug\""));
     drain_ready(running.io);
     screen = visible_screen(running.terminal);
     CHECK(screen.find("fix the parser bug") != std::string::npos);
@@ -620,7 +628,11 @@ TEST_CASE("resuming a session whose stored cwd is gone prompts and resumes in th
     auto screen = visible_screen(running.terminal);
     CHECK(screen.find("Session cwd not found") != std::string::npos);
     CHECK(screen.find("cwd from session file does not exist") != std::string::npos);
-    CHECK(screen.find(missing_cwd.string()) != std::string::npos);
+    // The prompt title is a wrapping `Text`, so a temp root wider than the
+    // 100-column frame puts the stored cwd on two rows; the whole path a user
+    // reads is asserted across that break.
+    CHECK(tests::rows_show_text(
+            running.terminal.screen(), running.terminal.dimensions().columns, missing_cwd.string()));
     CHECK(screen.find("continue in current cwd") != std::string::npos);
 
     // "Yes" continues in the current cwd: the resume completes through

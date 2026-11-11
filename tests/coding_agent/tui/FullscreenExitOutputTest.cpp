@@ -13,6 +13,7 @@
 #include "coding_agent/runtime/SessionFactory.hpp"
 #include <cch/coding_agent/AgentConfigDir.hpp>
 #include "support/EnvVarGuard.hpp"
+#include "support/FrameText.hpp"
 #include "support/ImageEnvironmentGuard.hpp"
 #include "support/ImageFixture.hpp"
 #include "support/ModelsFixture.hpp"
@@ -1940,8 +1941,15 @@ TEST_CASE("Native TUI fullscreen exit rejects a late valid clipboard image paylo
         REQUIRE(pump_until(io, [&] { return reads->read_started; }));
         CHECK(reads->image_reads == 1);
         clipboard_pointer->release();
-        REQUIRE(pump_until(
-                io, [&] { return visible_screen(terminal.inner()).find("pi-clipboard-") != std::string::npos; }));
+        // The clipboard image path the editor inserts is the temporary
+        // directory plus `pi-clipboard-<token>.png`: wider than the 80-column
+        // frame, so it occupies several editor rows. The whole label is
+        // asserted across those breaks -- the plain row view finds it only
+        // while the temporary root happens to fit.
+        REQUIRE(pump_until(io, [&] {
+            return tests::rows_show_text(
+                    terminal.inner().screen(), terminal.inner().dimensions().columns, "pi-clipboard-");
+        }));
         CHECK(reads->text_reads == 0);
 
         // Clear the inserted image path so app.exit sees an empty editor.
@@ -2017,7 +2025,8 @@ TEST_CASE("Native TUI fullscreen exit rejects a late valid clipboard image paylo
         // and the healthy control's editor projection never appeared here.
         const auto after_files = clipboard_image_files();
         CHECK(after_files.size() == before_files.size());
-        CHECK(visible_screen(terminal.inner()).find("pi-clipboard-") == std::string::npos);
+        CHECK_FALSE(tests::rows_show_text(
+                terminal.inner().screen(), terminal.inner().dimensions().columns, "pi-clipboard-"));
         CHECK(reads->image_reads == 1);
         CHECK(reads->text_reads == 0);
         CHECK_FALSE(terminal.inner().modes().started);

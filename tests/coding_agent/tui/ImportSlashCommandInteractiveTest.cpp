@@ -22,6 +22,7 @@
 #include "support/AsyncResultBridge.hpp"
 #include "support/AgentRootFixture.hpp"
 #include "support/EnvVarGuard.hpp"
+#include "support/FrameText.hpp"
 #include "support/ModelsFixture.hpp"
 #include "support/PumpUntil.hpp"
 #include "support/RuntimeFixture.hpp"
@@ -55,6 +56,12 @@ namespace {
 /// The visible screen with every run of whitespace collapsed to one space:
 /// a status line longer than the terminal width wraps, and the wrapped
 /// halves must still match the text the test looks for.
+///
+/// A *path* wider than the frame is still asserted through
+/// `tests::rows_show_text`: the collapsing view inserts a space inside it at
+/// the wrap, so it can only find a path that happens to fit one row. Prose
+/// keeps this view, because a word wrap legitimately replaces the space it
+/// broke at.
 [[nodiscard]] std::string visible_screen(const tui::VirtualTerminal& terminal) {
     std::string text;
     for (const auto& line : terminal.screen()) {
@@ -212,6 +219,17 @@ void wait_replacement(Running& running,
     tests::drain_ready(running.io);
 }
 
+/// Pump until the collapsed screen shows `label` and the whole `path` a user
+/// reads. The status line is a wrapping `Text`, so the label sits on one row
+/// and the path continues on the next ones; the path is matched across those
+/// breaks instead of as one contiguous string.
+void wait_for_status_path(Running& running, std::string_view label, const std::string& path) {
+    REQUIRE(tests::pump_until(running.io, [&] {
+        return visible_screen(running.terminal).find(label) != std::string::npos &&
+               tests::rows_show_text(running.terminal.screen(), running.terminal.dimensions().columns, path);
+    }));
+}
+
 /// Pump until the screen shows `text`.
 void wait_for_screen(Running& running, std::string_view text) {
     REQUIRE(tests::pump_until(
@@ -271,7 +289,7 @@ TEST_CASE("/import replaces the current session with the imported one",
     REQUIRE(running.terminal.inject_input("/import " + import_source.string() + "\r"));
     confirm_import(running, /*accept=*/true);
     wait_replacement(running, actions, 1);
-    wait_for_screen(running, "Session imported from: " + import_source.string());
+    wait_for_status_path(running, "Session imported from:", import_source.string());
 
     // The imported session is the current one: its entry is what the chat
     // shows, and the previous session's entry is gone.
@@ -324,7 +342,7 @@ TEST_CASE("an import that collides with a stored session file lands beside it",
     REQUIRE(running.terminal.inject_input("/import " + import_source.string() + "\r"));
     confirm_import(running, /*accept=*/true);
     wait_replacement(running, actions, 1);
-    wait_for_screen(running, "Session imported from: " + import_source.string());
+    wait_for_status_path(running, "Session imported from:", import_source.string());
 
     // pi's collision suffix: the copy lands as `incoming-1.jsonl`, and the
     // stored file is not overwritten.
@@ -353,7 +371,7 @@ TEST_CASE("/import on a missing file reports pi's error and keeps the current se
 
     REQUIRE(running.terminal.inject_input("/import " + missing.string() + "\r"));
     confirm_import(running, /*accept=*/true);
-    wait_for_screen(running, "Failed to import session: File not found: " + missing.string());
+    wait_for_status_path(running, "Failed to import session: File not found:", missing.string());
 
     // No replacement was requested and the current session still shows its
     // own entry.

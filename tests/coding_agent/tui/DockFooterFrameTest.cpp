@@ -8,6 +8,7 @@
 #include "support/RuntimeFixture.hpp"
 #include "support/RuntimeLoopDriver.hpp"
 #include "support/ScriptedRuntimeFixture.hpp"
+#include "support/FrameText.hpp"
 #include "support/TempWorkspace.hpp"
 
 #include <cch/ai/Content.hpp>
@@ -93,10 +94,20 @@ enum class FooterExpectation { Both, StatsYields };
 /// a frame that drops a footer row fails even when a later frame restores it.
 /// In fullscreen mode the dock is bottom-anchored, so the physical bottom two
 /// screen rows must be exactly the two footer rows (no blank hole below).
+///
+/// The pwd row is pinned to its rendered form, not to a fixed substring: the
+/// footer truncates a cwd wider than the frame with pi's `truncateToWidth(pwd,
+/// width, "...")`, so `tests::truncated_row(footer_pwd, width)` is what a user
+/// reads at any temporary root. A `find("cpp-harness")` would pass only while
+/// the workspace leaf happens to survive the cut. The omission rule itself is
+/// pinned with literal strings by `Footer truncates the pwd and right side to
+/// the width`.
 void assert_footer_rows(const tui::VirtualTerminal& terminal,
+        std::string_view footer_pwd,
         std::string_view label,
         FooterExpectation expectation = FooterExpectation::Both) {
     const auto rows = composed_rows(terminal);
+    const auto expected_pwd_row = tests::truncated_row(footer_pwd, terminal.dimensions().columns);
     INFO("frame: " << label);
     INFO("composed rows: " << [&] {
         std::string joined;
@@ -115,7 +126,7 @@ void assert_footer_rows(const tui::VirtualTerminal& terminal,
     const auto& stats_row = rows[tail - 1];
     if (expectation == FooterExpectation::Both) {
         CHECK(stats_row.find("/128k (auto)") != std::string::npos);
-        CHECK(path_row.find("cpp-harness") != std::string::npos);
+        CHECK(path_row == expected_pwd_row);
         CHECK(path_row.find("(auto)") == std::string::npos);
         return;
     }
@@ -123,7 +134,7 @@ void assert_footer_rows(const tui::VirtualTerminal& terminal,
     // and the path row is the frame's last content row.
     for (const auto& row : rows)
         CHECK(row.find("/128k (auto)") == std::string::npos);
-    CHECK(stats_row.find("cpp-harness") != std::string::npos);
+    CHECK(stats_row == expected_pwd_row);
     CHECK(stats_row.find("(auto)") == std::string::npos);
 }
 
@@ -133,9 +144,11 @@ void assert_footer_rows(const tui::VirtualTerminal& terminal,
 /// path row on the physical bottom row with the stats row yielded (pi-parity,
 /// see FooterExpectation).
 void assert_fullscreen_bottom(const tui::VirtualTerminal& terminal,
+        std::string_view footer_pwd,
         std::string_view label,
         FooterExpectation expectation = FooterExpectation::Both) {
     const auto rows = composed_rows(terminal);
+    const auto expected_pwd_row = tests::truncated_row(footer_pwd, terminal.dimensions().columns);
     INFO("frame: " << label);
     INFO("physical tail: |" << rows[rows.size() - 3] << "|\n|" << rows[rows.size() - 2] << "|\n|"
                             << rows[rows.size() - 1] << "|");
@@ -146,11 +159,11 @@ void assert_fullscreen_bottom(const tui::VirtualTerminal& terminal,
         // the shrink distribution allocates the footer one row, the leaf crop
         // keeps the first, and the path row is parked on the physical bottom
         // row with the stats row gone and dock content above it.
-        CHECK(last.find("cpp-harness") != std::string::npos);
+        CHECK(last == expected_pwd_row);
         CHECK(last.find("(auto)") == std::string::npos);
         return;
     }
-    CHECK(penultimate.find("cpp-harness") != std::string::npos);
+    CHECK(penultimate == expected_pwd_row);
     CHECK(penultimate.find("(auto)") == std::string::npos);
     CHECK(last.find("/128k (auto)") != std::string::npos);
 }
@@ -211,8 +224,10 @@ struct ProbeRun {
     }
 
     void assert_frame(std::string_view label, FooterExpectation expectation) const {
-        assert_footer_rows(terminal, label, expectation);
-        if (mode == coding_agent::TuiMode::Fullscreen) assert_fullscreen_bottom(terminal, label, expectation);
+        const auto footer_pwd = workspace.path().string();
+        assert_footer_rows(terminal, footer_pwd, label, expectation);
+        if (mode == coding_agent::TuiMode::Fullscreen)
+            assert_fullscreen_bottom(terminal, footer_pwd, label, expectation);
     }
 
     void inject(std::string bytes, std::string_view label, FooterExpectation expectation = FooterExpectation::Both) {

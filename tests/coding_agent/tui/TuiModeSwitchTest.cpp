@@ -15,6 +15,7 @@
 #include "coding_agent/SessionTarget.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
 #include "support/EnvVarGuard.hpp"
+#include "support/FrameText.hpp"
 #include "support/GatedChatProvider.hpp"
 #include "support/ModelsFixture.hpp"
 #include "support/PiTuiEvidence.hpp"
@@ -1622,8 +1623,12 @@ TEST_CASE("Native TUI fullscreen transcript keeps its scroll window across a mod
     REQUIRE(pump_until(io, [&] { return terminal.modes().alternate_screen; }));
     REQUIRE(pump_until(io, [&] {
         const auto screen = terminal.screen();
-        return screen.size() == 20 && (screen[19].find("fake-model") != std::string::npos ||
-                                              screen[19].find("cpp-harness") != std::string::npos);
+        // The frames this waits on carry the footer's pwd row on the physical
+        // bottom row: the dock is over budget, so the stats row that would
+        // hold `fake-model` is the one pi yields. Pin the row to its rendered
+        // form instead of a path substring, which survives only while the
+        // workspace leaf sits inside the 48-column cut.
+        return screen.size() == 20 && screen[19] == tests::truncated_row(workspace.path().string(), 48);
     }));
 
     // The open selector is dock, not transcript, so its rows are dismissed

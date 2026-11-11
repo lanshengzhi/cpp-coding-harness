@@ -2,6 +2,7 @@
 
 #include "support/CliRunFixture.hpp"
 #include "support/EnvVarGuard.hpp"
+#include "support/FrameText.hpp"
 #include "support/StreamAdapterFixture.hpp"
 #include "support/ImageFixture.hpp"
 #include "support/PseudoTerminal.hpp"
@@ -350,6 +351,11 @@ cch::tests::CliRunResult run_in_workspace(
     });
 }
 
+/// The frame width every PTY probe in this file opens
+/// (`open_pseudo_terminal(100, 40)`): the footer and the startup prompt lay
+/// their path text out against it.
+constexpr std::size_t kPtyColumns = 100;
+
 /// Accumulate PTY output into `buffer` until every needle of the expected
 /// screen state is observable (#528, the #526/#527 defect class): stopping at
 /// the first needle asserts against - and writes follow-up input into - a
@@ -443,7 +449,11 @@ struct ChildReapGuard {
 
     const ChildReapGuard reap_child{pid};
     std::string output;
-    REQUIRE(drain_pty_until_all(pty->master.get(), output, {workspace.string()}));
+    // The footer truncates its pwd row to the frame width with pi's
+    // `truncateToWidth(pwd, width, "...")`, so the bytes a wide temporary root
+    // produces are the retained prefix, not the whole path.
+    const auto footer_pwd = cch::tests::truncated_row_prefix(workspace.string(), kPtyColumns);
+    REQUIRE(drain_pty_until_all(pty->master.get(), output, {footer_pwd}));
     REQUIRE(::write(pty->master.get(), "\x04", 1) == 1);
     int status = 0;
     REQUIRE(cch::tests::wait_until(
@@ -862,17 +872,21 @@ TEST_CASE("CLI interactive boot Continue recovers a vanished session cwd",
     // with the verbatim missing-cwd text before the main TUI starts. The
     // drain waits for the full prompt screen (title, both paths, and both
     // actions) before anything asserts on it or Enter targets it (#528).
+    // The prompt's title is a wrapping `Text`: a path wider than the frame
+    // continues on the next row, so both paths are expected as the consecutive
+    // segments the renderer produces at this frame width. Every segment is
+    // required, which keeps "the whole path is on the prompt" -- a truncating
+    // or dropped tail would leave the last segment missing.
+    std::vector<std::string> prompt_needles{
+            "cwd from session file does not exist", "continue in current cwd", "Continue", "Cancel"};
+    for (const auto& path : {original.path().string(), storage.path().string()}) {
+        for (auto& segment : cch::tests::wrapped_rows(path, kPtyColumns)) {
+            prompt_needles.push_back(std::move(segment));
+        }
+    }
     std::string prompt_output;
-    REQUIRE(drain_pty_until_all(pty->master.get(),
-            prompt_output,
-            {"cwd from session file does not exist",
-                    original.path().string(),
-                    "continue in current cwd",
-                    storage.path().string(),
-                    "Continue",
-                    "Cancel"}));
+    REQUIRE(drain_pty_until_all(pty->master.get(), prompt_output, prompt_needles));
     CHECK(prompt_output.find("continue in current cwd") != std::string::npos);
-    CHECK(prompt_output.find(original.path().string()) != std::string::npos);
     CHECK(prompt_output.find("Continue") != std::string::npos);
     CHECK(prompt_output.find("Cancel") != std::string::npos);
 
@@ -882,7 +896,9 @@ TEST_CASE("CLI interactive boot Continue recovers a vanished session cwd",
     // order) before Ctrl+D targets the settled screen (#528).
     REQUIRE(::write(pty->master.get(), "\r", 1) == 1);
     std::string tui_output;
-    REQUIRE(drain_pty_until_all(pty->master.get(), tui_output, {storage.path().string(), "deepseek-v4-flash"}));
+    REQUIRE(drain_pty_until_all(pty->master.get(),
+            tui_output,
+            {cch::tests::truncated_row_prefix(storage.path().string(), kPtyColumns), "deepseek-v4-flash"}));
     REQUIRE(::write(pty->master.get(), "\x04", 1) == 1);
     int status = 0;
     REQUIRE(cch::tests::wait_until(
@@ -898,6 +914,9 @@ TEST_CASE("CLI interactive boot Continue recovers a vanished session cwd",
 TEST_CASE("CLI --tui-mode launches the requested Native TUI root and the no-option default is fullscreen",
         "[cli][tui-mode][fullscreen][issue1017][issue1024][spec]") {
     cch::tests::TempWorkspace workspace;
+    // The footer pwd row as the frame renders it: the whole path when it fits
+    // the 100 columns, otherwise pi's `truncateToWidth` prefix.
+    const auto footer_pwd = cch::tests::truncated_row_prefix(workspace.path().string(), kPtyColumns);
     // A fresh HOME keeps ambient user configuration out of the run: the boot
     // settles on pi's no-models warning screen, whose footer carries the
     // workspace path in either root.
@@ -926,7 +945,7 @@ TEST_CASE("CLI --tui-mode launches the requested Native TUI root and the no-opti
         }
         const ChildReapGuard reap_child{pid};
         std::string output;
-        REQUIRE(drain_pty_until_all(pty->master.get(), output, {workspace.path().string()}));
+        REQUIRE(drain_pty_until_all(pty->master.get(), output, {footer_pwd}));
         REQUIRE(::write(pty->master.get(), "\x04", 1) == 1);
         int status = 0;
         REQUIRE(cch::tests::wait_until(
@@ -947,14 +966,14 @@ TEST_CASE("CLI --tui-mode launches the requested Native TUI root and the no-opti
         const auto output = boot_and_exit({"--tui-mode", "fullscreen"});
         const auto enter_alternate = output.find("\x1b[?1049h");
         REQUIRE(enter_alternate != std::string::npos);
-        CHECK(enter_alternate < output.find(workspace.path().string()));
+        CHECK(enter_alternate < output.find(footer_pwd));
     }
     {
         // The regular branch keeps the main screen: the alternate buffer is
         // never entered, while the identical boot screen still renders.
         const auto output = boot_and_exit({"--tui-mode", "regular"});
         CHECK(output.find("\x1b[?1049h") == std::string::npos);
-        CHECK(output.find(workspace.path().string()) != std::string::npos);
+        CHECK(output.find(footer_pwd) != std::string::npos);
     }
     {
         // #1024: with no flag and no stored setting, the product default
@@ -963,7 +982,7 @@ TEST_CASE("CLI --tui-mode launches the requested Native TUI root and the no-opti
         const auto output = boot_and_exit({});
         const auto enter_alternate = output.find("\x1b[?1049h");
         REQUIRE(enter_alternate != std::string::npos);
-        CHECK(enter_alternate < output.find(workspace.path().string()));
+        CHECK(enter_alternate < output.find(footer_pwd));
     }
 }
 
