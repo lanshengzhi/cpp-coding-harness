@@ -83,10 +83,11 @@ include_guard(GLOBAL)
     add_dependencies(cch_tests_codemode cch_codemode)
 
     catch_discover_tests(cch_tests_codemode TEST_SPEC "~[issue1232]" ADD_TAGS_AS_LABELS)
-    # The lifetime case parks a worker and can abort the process on the recorded
-    # defect: a hard timeout is its only backstop, and its gate is process-wide,
-    # so it never overlaps another case. Its three internal waits are 5 s each
-    # (15 s total), well under the 60 s timeout.
+    # The lifetime cases park a worker and can abort the process on the recorded
+    # defect: a hard timeout is their only backstop, and the gate is process-wide,
+    # so they never overlap another case. Each internal wait is 5 s and the
+    # abandonment case's measured bound on the destroyed frame is 10 s, all well
+    # under the 60 s timeout.
     catch_discover_tests(cch_tests_codemode TEST_SPEC "[issue1232]"
         PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE ADD_TAGS_AS_LABELS)
     add_dependencies(cch_tests_codemode ${CCH_PARITY_BUILD_GATE_TARGET})
