@@ -27,6 +27,18 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - name: Test lane preflight
         run: python3 tests/dev/LanePreflightTest.py
+      - name: Test the lane wrapper
+        run: python3 tests/dev/WithLaneTest.py
+      # The delivery receipts pin source, test, fixture and result bytes. #71ad3e83a changed
+      # four pinned files and left 17 stale digests, which only surfaced after the full suite
+      # ran. This read-only step classifies any drift before a build starts. core.symlinks is
+      # set explicitly because a fresh clone leaves it unset and an indexed symbolic link
+      # (CLAUDE.md) otherwise makes the checkout status unknown by design.
+      - name: Check delivery receipt drift
+        run: |
+          git config core.symlinks true
+          python3 scripts/dev/lane-preflight.py --lane ci-preflight \
+            --revision "$(git rev-parse HEAD)" --checkout "$PWD"
 
   build-and-test:
     name: ${{ matrix.name }}

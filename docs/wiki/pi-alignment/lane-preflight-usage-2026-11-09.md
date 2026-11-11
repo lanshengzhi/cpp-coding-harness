@@ -26,3 +26,59 @@ Subsequent validation on 2026-11-09 used an isolated checkout based on `64d9503b
 After the file-mode fix, the 14 CLI tests and incremental full build passed in the same isolated checkout. The unfiltered CTest run selected 4,587 tests, with 12 skipped and no failures; both consolidation tests passed. This run used `CCH_LANE_NAME=lane-preflight-filemode` and `TERM_PROGRAM=herdr`. The CI job configuration was checked locally; no remote CI run was triggered.
 
 After the symlink fix, all 16 CLI tests and the incremental full build passed in the isolated checkout. Unfiltered CTest selected 4,587 tests, with 12 skipped and no failures; both consolidation tests passed. This run used `CCH_LANE_NAME=preflight-symlinks` and `TERM_PROGRAM=herdr`.
+
+## Delivery receipt drift (2026-11-11)
+
+The same command now also reads `docs/research/pi-v1.3.0/*-deliveries.json` and compares every pinned input's digest with the committed blob and the working-tree file. No flag is needed; the check is part of the snapshot.
+
+```sh
+python3 scripts/dev/lane-preflight.py --lane lane-example \
+  --revision <full-commit-id> --checkout <upstream-checkout-root>
+```
+
+A clean receipt set reads:
+
+```
+pass: delivery receipts: 1 manifests, 32 records, 835 pinned inputs; committed drift 0, uncommitted drift 0, missing 0
+```
+
+and any drift adds one line per class, for example:
+
+```
+attention: delivery receipts: committed drift: 2 pinned inputs, tickets 1101 1130; paths: cmake/tests/EvidenceTests.cmake, scripts/evidence/audit_evidence.py
+attention: delivery receipts: uncommitted drift: 1 pinned input, tickets 1110; paths: src/tui/Renderer.cpp
+attention: delivery receipts: missing: 1 pinned input, tickets 1120; paths: fixtures/pi-v1.3.0/example.json
+```
+
+Read the classes as different work:
+
+- **committed drift** is debt. `HEAD` no longer matches the receipt, so a clean checkout cannot reproduce what the receipt claims. Rebind per [the delivery evidence contract](../../research/pi-v1.3.0/1058-delivery-reconciliation.md#delivery-evidence-contract) — rerun the selection or record a `revalidation<ticket>` entry — and never bulk-rehash. The preflight deliberately cannot and does not do this.
+- **uncommitted drift** is temporary. `HEAD` matches and only the working tree differs; committing the intended change (and rebinding if the change is real) clears it, and a full run is not evidence either way while it stands.
+- **missing** is a pinned path present in neither `HEAD` nor the working tree; restore it or rebind, and treat a path that was never meant to be pinned as a receipt defect.
+
+`unknown` is the conservative answer: a manifest that cannot be read safely (foreign schema, duplicate key, invalid pin, excessive depth), a pin whose path is not checkout-relative, or a probe that failed. The summary is unknown even when other classes were established, so an unreadable manifest can never look clean. A baseline directory without a manifest is unknown; a repository with no `docs/research/pi-v1.3.0` directory reports the check as absent instead.
+
+The check writes nothing: it does not edit a manifest, does not rebind a digest, and does not run `consolidate_audits.py`. Digest agreement never proves a receipt is still applicable — the selected input set, the scenario mapping and the capability claim remain review obligations (see [the delivery evidence contract](../../research/pi-v1.3.0/1058-delivery-reconciliation.md)). The check costs two Git reads and one file read per pinned input (about 2.6 s for 32 records and 835 inputs on 2026-11-11).
+
+A locked lane also needs `CCH_LANE_NAME` for its own subprocesses; when the lock names the requested lane, the report adds `pass: lane environment: CCH_LANE_NAME matches the held lane`, or an `attention` line when the name is unset or names another lane. Run lane work through the wrapper below so this cannot drift.
+
+## Running under the lane lock (2026-11-11)
+
+[`scripts/dev/with-lane.sh`](../../../scripts/dev/with-lane.sh) is the one step that replaces `lane-lock.sh acquire`, `export CCH_LANE_NAME=<lane>` and `lane-lock.sh release`:
+
+```sh
+scripts/dev/with-lane.sh lane-example -- ctest --preset vcpkg
+scripts/dev/with-lane.sh lane-example --timeout 600 -- scripts/dev/lane-preflight.py --lane lane-example --revision <full-commit-id>
+```
+
+It acquires the lock (waiting up to `--timeout` seconds, default 0), exports `CCH_LANE_NAME=<lane>` for the command and its descendants, runs the command in the foreground and releases the lock from a trap on exit, HUP, INT and TERM. The exit status is the command's own, `128+signal` when the command died from a signal, `129`/`130`/`143` when the wrapper was signalled. Usage and environment errors exit 2; an acquire refusal exits with `lane-lock.sh`'s status. Nothing is written outside the lock file.
+
+Behaviour worth knowing:
+
+- The wrapper owns the lock for the command's lifetime. Re-running it under the same lane is fine, but its exit releases the hold, including one the lane already had; start one wrapper per lane session rather than nesting it inside a manual hold.
+- The command stays in the wrapper's process group with the wrapper's stdin, stdout and stderr. That is deliberate: a POSIX shell starts an asynchronous command with `SIGINT` ignored, so a test run started that way cannot be interrupted. The cost is the POSIX trap rule — a signal sent to the wrapper process alone is handled when the running command finishes. A terminal interrupt reaches the whole process group and releases at once.
+- A failed release prints `with-lane: WARNING: release failed` and keeps the command's status; a `SIGKILL` cannot run the trap at all, and `lane-lock.sh`'s 4-hour staleness takeover is the only recovery. Check `scripts/dev/lane-lock.sh status` before assuming a lane is gone.
+- An environment already inside a *different* lane is refused instead of silently retargeted. `CCH_LANE_TASK_ID` and `CCH_LANE_AGENT` are still recorded in the lock exactly as `lane-lock.sh` reads them.
+- Runtime: POSIX `sh` plus what `lane-lock.sh` already needs (Git, `mkdir`, `sed`, `uname`, and GNU `date`/`stat`, so Linux with GNU coreutils). It assumes no other shell: no arrays, no `local`, no `[[`. The wrapper and `lane-lock.sh` are driven through `sh` by their tests, which is the POSIX shell on both this host and the CI runner.
+
+Test the wrapper with `python3 tests/dev/WithLaneTest.py` (8 cases: success, failing command, command killed by TERM/INT, wrapper interrupted by HUP/TERM/INT through its process group, stdin/stdout pass-through, different ambient lane, foreign lock untouched, usage errors). It drives the real scripts inside a throwaway repository, so it cannot leave a lock in this checkout.
