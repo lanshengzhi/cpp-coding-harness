@@ -168,9 +168,13 @@ All runs on this checkout with the lane held (`scripts/dev/with-lane.sh`).
 | before, short root (`/var/tmp/cb/run1`) | `-L tui`, `-j 4` | selected 1939, passed 1937, skipped 1, failed 1 (#4207), 178 s |
 | focused, deep root, 3× | 42-case regex (the 15 cases + the new oracle/footer cases) | 100% each run |
 | focused, short root (`/var/tmp/cb/run6-{1,2,3}`), 3× | same 42-case regex | 100% each run |
-| `-L tui`, deep root (`/var/tmp/cch-deep/run8/<leaf>`) | 1940 cases, `-j 4` | selected 1940, passed 1939, skipped 1, **failed 0**, 62.37 s |
-| `-L tui`, short root (`/var/tmp/cb/run9`) | 1940 cases, `-j 4` | selected 1940, passed 1939, skipped 1, **failed 0**, 60.06 s |
+| `-L tui`, deep root (`/var/tmp/cch-deep/run10/<leaf>`) | 1940 cases, `-j 4` | selected 1940, passed 1939, skipped 1, **failed 0**, 63.41 s |
+| `-L tui`, short root (`/var/tmp/cb/run11`) | 1940 cases, `-j 4` | selected 1940, passed 1939, skipped 1, **failed 0**, 60.56 s |
 | Full Debug suite (`ctest --preset vcpkg -j 4`, `TERM_PROGRAM=herdr`) | 4604 cases | selected 4604, passed 4592, skipped 11, failed 1, 275.30 s |
+
+The two `-L tui` rows are the post-`clang-format` reruns of the committed tree; the
+same two labels were also green immediately before the formatting pass
+(62.37 s deep, 60.06 s short).
 
 The single full-suite failure is **not from this change**:
 `DaemonClient's daemon observes stdin EOF and exits` (`durable`, `issue1232`)
