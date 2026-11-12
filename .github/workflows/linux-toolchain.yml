@@ -47,12 +47,14 @@ jobs:
     # full suite twice over (instrumented objects, multi-hundred-MB test
     # binaries) before running it. Measured on CI 2026-11-12: the build is
     # ~25 min warm with no source churn and ~40 min otherwise (ccache cannot
-    # skip changed TUs), and the suite runs ~47-50 min — a worst observed
-    # path of ~91 min against the old flat 90-min cap, which killed runs
-    # 42986891227 and 43162863923 at exactly ~90 min, cut run 43224388351
-    # 49.5 min into its suite, and SIGTERMed run 43176359218 mid-build.
-    # 150 min absorbs build plus full suite with headroom; every other lane
-    # keeps 90.
+    # skip changed TUs); a full suite ran ~47 min only on that warm build, so
+    # cold-build-plus-suite is a ~91 min spliced estimate, never observed end
+    # to end. The old flat 90-min cap cancelled runs 42986891227 and
+    # 43162863923 about 37 and 39 min into their suites (partial signal, not
+    # zero), cut run 43224388351 49.5 min into its suite, and SIGTERMed run
+    # 43176359218 mid-build at ~54 min — a memory-pressure hypothesis a
+    # larger cap does not address. 150 min absorbs the spliced build-plus-
+    # suite estimate with headroom; every other lane keeps 90.
     timeout-minutes: ${{ matrix.timeout_minutes }}
     strategy:
       fail-fast: false
