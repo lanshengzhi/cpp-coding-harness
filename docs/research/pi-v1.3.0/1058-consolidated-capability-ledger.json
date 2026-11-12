@@ -10124,14 +10124,14 @@
             "-j",
             "1",
             "--output-junit",
-            "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1182-tui-comparisons-revalidation-1249-gate-placement.xml"
+            "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1182-tui-comparisons-revalidation-1249-posix.xml"
           ],
-          "testedRevision": "49f2a3a7a908f87afca254880216b74e3ff0ea45",
-          "recordedAt": "2026-11-12T07:20:17Z",
+          "testedRevision": "7ac7fb9ffbeb6f0ded6daf6339f9b61b5313d957",
+          "recordedAt": "2026-11-12T09:08:19Z",
           "selected": 13,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1182-tui-comparisons-revalidation-1249-gate-placement.xml",
-            "sha256": "65d2b7b95af96085773fe30d7bc31ccd50f774fc5db8c3991b80c02ca35de0f6"
+            "path": "docs/research/pi-v1.3.0/deliveries/1182-tui-comparisons-revalidation-1249-posix.xml",
+            "sha256": "ad69d48338d781a25dc950d98a230726ad56250e8f8615d29fe5241b4cb5381c"
           }
         },
         "rows": [
@@ -10346,7 +10346,7 @@
           },
           {
             "path": "tests/tui/SelectionEvidenceTest.cpp",
-            "sha256": "59edd7c46e5728298539177db830b9838df8f329d0d9606c3511a6bd19623d8f"
+            "sha256": "67e96828a4e561811cbc6a3c7a624dc4c1c7c71eda6f869f57e213a85f05932b"
           },
           {
             "path": "tests/evidence/TuiReconciliationTest.py",
@@ -11259,6 +11259,34 @@
             "junit": {
               "path": "docs/research/pi-v1.3.0/deliveries/1182-tui-comparisons-revalidation-test-tmp-root.xml",
               "sha256": "50936ddd0bd03f33da2619e023fb4f9ed48ed6d9a36cfdcd60c9b909f20907b3"
+            }
+          }
+        },
+        "revalidation1249Posix": {
+          "reason": "Replayed the recorded selection after adding a POSIX-default regression to the pinned test source; existing frozen scenario mappings are unchanged.",
+          "changedInputs": [
+            "tests/tui/SelectionEvidenceTest.cpp"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-L",
+              "issue1182",
+              "--no-tests=error",
+              "--output-on-failure",
+              "-j",
+              "1",
+              "--output-junit",
+              "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1182-tui-comparisons-revalidation-1249-gate-placement.xml"
+            ],
+            "testedRevision": "49f2a3a7a908f87afca254880216b74e3ff0ea45",
+            "recordedAt": "2026-11-12T07:20:17Z",
+            "selected": 13,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1182-tui-comparisons-revalidation-1249-gate-placement.xml",
+              "sha256": "65d2b7b95af96085773fe30d7bc31ccd50f774fc5db8c3991b80c02ca35de0f6"
             }
           }
         }
@@ -18141,7 +18169,7 @@
           },
           {
             "path": "tests/tui/SelectionEvidenceTest.cpp",
-            "sha256": "59edd7c46e5728298539177db830b9838df8f329d0d9606c3511a6bd19623d8f"
+            "sha256": "67e96828a4e561811cbc6a3c7a624dc4c1c7c71eda6f869f57e213a85f05932b"
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
@@ -18190,16 +18218,16 @@
             "-L",
             "issue1212",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1212-transcript-selection-revalidation-1244-capture.xml",
+            "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1212-transcript-selection-revalidation-1249-posix.xml",
             "-j",
             "1"
           ],
-          "testedRevision": "6451b872e665cc8d014582eaad3e6dce06ff22cd",
-          "recordedAt": "2026-11-06T17:17:20Z",
+          "testedRevision": "7ac7fb9ffbeb6f0ded6daf6339f9b61b5313d957",
+          "recordedAt": "2026-11-12T09:08:26Z",
           "selected": 29,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1212-transcript-selection-revalidation-1244-capture.xml",
-            "sha256": "887ed00f10e6a4499e7c6b4a7afb9d07bcdae3d7d24417a596d17d2cf15f85f4"
+            "path": "docs/research/pi-v1.3.0/deliveries/1212-transcript-selection-revalidation-1249-posix.xml",
+            "sha256": "4357adfaedc474cbda699f3928110a3ab2a1e65df3f56bccb9e5bdf5d11552f0"
           }
         },
         "rows": [
@@ -19286,6 +19314,34 @@
           "changedInputs": [
             "tests/Catch2Main.cpp"
           ]
+        },
+        "revalidation1249Posix": {
+          "reason": "Replayed the recorded selection after adding a POSIX-default regression to the pinned test source; existing frozen scenario mappings are unchanged.",
+          "changedInputs": [
+            "tests/tui/SelectionEvidenceTest.cpp"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-LE",
+              "architecture",
+              "-L",
+              "issue1212",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1212-transcript-selection-revalidation-1244-capture.xml",
+              "-j",
+              "1"
+            ],
+            "testedRevision": "6451b872e665cc8d014582eaad3e6dce06ff22cd",
+            "recordedAt": "2026-11-06T17:17:20Z",
+            "selected": 29,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1212-transcript-selection-revalidation-1244-capture.xml",
+              "sha256": "887ed00f10e6a4499e7c6b4a7afb9d07bcdae3d7d24417a596d17d2cf15f85f4"
+            }
+          }
         }
       },
       {
@@ -19344,7 +19400,7 @@
           },
           {
             "path": "tests/tui/SelectionEvidenceTest.cpp",
-            "sha256": "59edd7c46e5728298539177db830b9838df8f329d0d9606c3511a6bd19623d8f"
+            "sha256": "67e96828a4e561811cbc6a3c7a624dc4c1c7c71eda6f869f57e213a85f05932b"
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
@@ -19405,16 +19461,16 @@
             "-L",
             "issue1211",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1211-alt-screen-viewport-revalidation-1244-capture.xml",
+            "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1211-alt-screen-viewport-revalidation-1249-posix.xml",
             "-j",
             "1"
           ],
-          "testedRevision": "6451b872e665cc8d014582eaad3e6dce06ff22cd",
-          "recordedAt": "2026-11-06T17:17:20Z",
+          "testedRevision": "7ac7fb9ffbeb6f0ded6daf6339f9b61b5313d957",
+          "recordedAt": "2026-11-12T09:08:34Z",
           "selected": 34,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1211-alt-screen-viewport-revalidation-1244-capture.xml",
-            "sha256": "095845ba6444a5a1c6c8e47ad2d7d3aaef507730a862467b28ae8b2f0b31d43e"
+            "path": "docs/research/pi-v1.3.0/deliveries/1211-alt-screen-viewport-revalidation-1249-posix.xml",
+            "sha256": "4bc4001911bc225d767c2c092083230beaf9313ed6d43e8b5e44e9a8c1f210f5"
           }
         },
         "rows": [
@@ -20859,6 +20915,34 @@
           "changedInputs": [
             "tests/Catch2Main.cpp"
           ]
+        },
+        "revalidation1249Posix": {
+          "reason": "Replayed the recorded selection after adding a POSIX-default regression to the pinned test source; existing frozen scenario mappings are unchanged.",
+          "changedInputs": [
+            "tests/tui/SelectionEvidenceTest.cpp"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-LE",
+              "architecture",
+              "-L",
+              "issue1211",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1211-alt-screen-viewport-revalidation-1244-capture.xml",
+              "-j",
+              "1"
+            ],
+            "testedRevision": "6451b872e665cc8d014582eaad3e6dce06ff22cd",
+            "recordedAt": "2026-11-06T17:17:20Z",
+            "selected": 34,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1211-alt-screen-viewport-revalidation-1244-capture.xml",
+              "sha256": "095845ba6444a5a1c6c8e47ad2d7d3aaef507730a862467b28ae8b2f0b31d43e"
+            }
+          }
         }
       },
       {

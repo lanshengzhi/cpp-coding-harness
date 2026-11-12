@@ -13,6 +13,7 @@
 #include "support/PiTuiEvidence.hpp"
 
 #include <catch2/catch_test_macros.hpp>
+#include <unicode/uloc.h>
 
 #include <algorithm>
 #include <chrono>
@@ -508,6 +509,18 @@ TEST_CASE("AltScreen multi-click selection replays the frozen word-line cycle",
 TEST_CASE("AltScreen multi-click selection replays the frozen word classes and joiners",
         "[tui][alt-screen][selection][issue1007][compat-pi]") {
     replay_multiclick_scenario("multiclick-word-joiners-and-classes");
+}
+
+TEST_CASE("AltScreen word selection matches frozen word classes with the POSIX ICU default",
+        "[tui][alt-screen][selection][issue1249][compat-pi]") {
+    const std::string original_locale = uloc_getDefault();
+    UErrorCode status = U_ZERO_ERROR;
+    uloc_setDefault("en_US_POSIX", &status);
+    REQUIRE(U_SUCCESS(status));
+    replay_multiclick_scenario("multiclick-word-joiners-and-classes");
+    status = U_ZERO_ERROR;
+    uloc_setDefault(original_locale.c_str(), &status);
+    CHECK(U_SUCCESS(status));
 }
 
 TEST_CASE("AltScreen multi-click selection replays the frozen word drag expansion",

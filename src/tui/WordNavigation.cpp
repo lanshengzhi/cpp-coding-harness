@@ -99,8 +99,12 @@ support::Expected<std::vector<WordSegment>> segment_words(std::string_view text)
         return std::unexpected(segmentation_error("ICU word segmentation input exceeds its supported length"));
     }
 
+    // Node's Intl default resolves the C/POSIX locale to en-US; ICU's raw
+    // en_US_POSIX default instead applies different word-break tailoring.
+    const auto* default_locale = uloc_getDefault();
+    const auto* locale = std::string_view{default_locale} == "en_US_POSIX" ? "en_US" : default_locale;
     UErrorCode status = U_ZERO_ERROR;
-    BreakIterator iterator{ubrk_open(UBRK_WORD, uloc_getDefault(), nullptr, 0, &status), &ubrk_close};
+    BreakIterator iterator{ubrk_open(UBRK_WORD, locale, nullptr, 0, &status), &ubrk_close};
     if (U_FAILURE(status) || !iterator) {
         return std::unexpected(segmentation_error("ICU could not create the editor word segmenter"));
     }
