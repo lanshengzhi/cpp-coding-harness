@@ -59,7 +59,7 @@ ctest --preset vcpkg
 Two environment preconditions cause otherwise-green full runs to fail:
 
 - **Lane lock.** While a code lane holds the checkout, the consolidation CTest cases refuse to run unless the caller proves its lane. Run the command through `scripts/dev/with-lane.sh <lane> -- <command>`, which acquires the lock, exports `CCH_LANE_NAME=<lane>` to the command and its descendants, and releases the lock on exit or HUP/INT/TERM. A hand-managed hold must prefix each command with `CCH_LANE_NAME=<lane>` itself and release with `scripts/dev/lane-lock.sh`; see [ops-lanes](../wiki/pi-alignment/ops-lanes.md).
-- **Herdr PTY case.** `real PTY records Herdr markdown and OSC 52 terminal bytes` is selected by `TERM_PROGRAM=herdr`. Full-suite runs on this host set it; without it the case fails its host precondition, not a code assertion.
+- **Herdr PTY case.** `real PTY records Herdr markdown and OSC 52 terminal bytes` requires `TERM_PROGRAM=herdr`, which full-suite runs on this host set. Without it the case reports **Skipped**, not failed: the test site uses Catch2 `SKIP`, which `catch_discover_tests` surfaces through its `SKIP_RETURN_CODE`. The case still executes every assertion wherever the precondition holds, and a missing terminal never reddens a lane (issue #1249).
 
 ### Formatting gate
 
@@ -95,7 +95,7 @@ Flaky or runner-sensitive tests have one standard home instead of ad-hoc per-PR 
   2. `tests/coding_agent/tui/ChatContainerTest.cpp` (ChatContainer 100-chunk streaming flat-time benchmark; owner #632);
   3. `tests/cli/InstallRelocationTest.cpp` (staged-install relocation gate, kept active on GCC 16 TSan as canary; owner #734).
 
-Quarantine is for resource-caused failures; bounds are never loosened silently to fit the runner.
+Quarantine is for resource-caused failures; bounds are never loosened silently to fit the runner. A missing host precondition is not a quarantine: the test site reports Catch2 `SKIP` (surfaced as a CTest skip through `SKIP_RETURN_CODE`) so the case keeps running wherever the precondition holds.
 
 ## Architecture-sensitive changes
 

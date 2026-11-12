@@ -83,7 +83,16 @@ TEST_CASE("real PTY records Herdr markdown and OSC 52 terminal bytes",
     const auto host_term_program = environment_value("TERM_PROGRAM");
     const auto host_colorterm = environment_value("COLORTERM");
     const auto host_term_program_version = environment_value("TERM_PROGRAM_VERSION");
-    REQUIRE(host_term_program == "herdr");
+    // Host precondition, not a code property (docs/agents/validation.md). This
+    // case records what a Herdr PTY emits, so a different terminal is "not
+    // applicable here": SKIP keeps the lane's red meaning "wrong", and
+    // `catch_discover_tests` reports it as Skipped through its SKIP_RETURN_CODE.
+    // A run that sets TERM_PROGRAM=herdr (the documented local full-suite
+    // precondition) still executes every assertion below.
+    if (host_term_program != "herdr") {
+        SKIP("host precondition: recording a Herdr PTY session needs TERM_PROGRAM=herdr; "
+             "the current terminal is not Herdr");
+    }
     cch::tests::EnvVarGuard display{"DISPLAY", std::string{":0"}};
     cch::tests::EnvVarGuard wayland_display{"WAYLAND_DISPLAY", std::nullopt};
     cch::tests::EnvVarGuard termux_version{"TERMUX_VERSION", std::nullopt};
