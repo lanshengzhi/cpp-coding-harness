@@ -7047,14 +7047,14 @@
             "-j",
             "1",
             "--output-junit",
-            "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1184-chord-context-cancellation-revalidation-1249-suite-failures.xml"
+            "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1184-chord-context-cancellation-revalidation-1249-review-fix.xml"
           ],
-          "testedRevision": "1ed14056f806ca57e940bbd3361bb0d099eaecf6",
-          "recordedAt": "2026-11-12T10:38:33Z",
+          "testedRevision": "888dc2e7371554b10fef8ee8890d53105cbf2a88",
+          "recordedAt": "2026-11-12T11:29:28Z",
           "selected": 10,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1184-chord-context-cancellation-revalidation-1249-suite-failures.xml",
-            "sha256": "12a5d1fbd17dcb92840eff9be14190b2813ff39aea6d00ea4fd8d4e7920761eb"
+            "path": "docs/research/pi-v1.3.0/deliveries/1184-chord-context-cancellation-revalidation-1249-review-fix.xml",
+            "sha256": "1b768e760abdb1989c794c3e7a75288b66b73eea1a222a706d971ad1ed547198"
           }
         },
         "rows": [
@@ -7223,7 +7223,7 @@
           },
           {
             "path": "tests/durable/HarnessWorkflowTest.cpp",
-            "sha256": "e67b1f35ba44ae7577f94ee93bb19688653fcf35f80b46f991b026767b48c783"
+            "sha256": "566b0c6c36d02f7dc13d298cad8374a589583626127be23935b986a74c6ff4d6"
           },
           {
             "path": "tests/durable/Outcome.hpp",
@@ -7653,6 +7653,34 @@
             "junit": {
               "path": "docs/research/pi-v1.3.0/deliveries/1184-chord-context-cancellation-revalidation-1249-clang.xml",
               "sha256": "ad163c6a544faee1fd62e7adfb35786da736fa6c7953533fbe96972c1f0ec2ab"
+            }
+          }
+        },
+        "revalidation1249ReviewFix": {
+          "reason": "#1249 review follow-up restructures the settled-submission wait in HarnessWorkflowTest.cpp (one of this receipt's pinned test inputs) so the harness is drained and closed before any assertion that can abort: a -fno-exceptions REQUIRE otherwise abandons the test frame with the session threads and the stack-capturing commit/watch callbacks still live (CODING_STANDARDS 11.10). No change to what the receipt claims. The exact recorded selection was rebuilt and rerun at the new base into a fresh JUnit artifact; all selected cases passed. Rows, comparison scenarios, discriminators and the routing digest are unchanged.",
+          "changedInputs": [
+            "tests/durable/HarnessWorkflowTest.cpp"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-L",
+              "issue1184",
+              "--no-tests=error",
+              "--output-on-failure",
+              "-j",
+              "1",
+              "--output-junit",
+              "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1184-chord-context-cancellation-revalidation-1249-suite-failures.xml"
+            ],
+            "testedRevision": "1ed14056f806ca57e940bbd3361bb0d099eaecf6",
+            "recordedAt": "2026-11-12T10:38:33Z",
+            "selected": 10,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1184-chord-context-cancellation-revalidation-1249-suite-failures.xml",
+              "sha256": "12a5d1fbd17dcb92840eff9be14190b2813ff39aea6d00ea4fd8d4e7920761eb"
             }
           }
         }
@@ -16824,7 +16852,7 @@
           },
           {
             "path": "tests/durable/HarnessWorkflowTest.cpp",
-            "sha256": "e67b1f35ba44ae7577f94ee93bb19688653fcf35f80b46f991b026767b48c783"
+            "sha256": "566b0c6c36d02f7dc13d298cad8374a589583626127be23935b986a74c6ff4d6"
           },
           {
             "path": "fixtures/pi-v1.3.0/audit-1203/ownership.json",
@@ -16877,16 +16905,16 @@
             "-L",
             "issue1203",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1249-suite-failures.xml",
+            "docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1249-review-fix.xml",
             "-j",
             "1"
           ],
-          "testedRevision": "1ed14056f806ca57e940bbd3361bb0d099eaecf6",
-          "recordedAt": "2026-11-12T10:38:33Z",
+          "testedRevision": "888dc2e7371554b10fef8ee8890d53105cbf2a88",
+          "recordedAt": "2026-11-12T11:29:28Z",
           "selected": 3,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1249-suite-failures.xml",
-            "sha256": "6135d0923c4ba0113e69858d66d0b8d45021baee3cbca0664b4a76dd839fb310"
+            "path": "docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1249-review-fix.xml",
+            "sha256": "54f00c9931513f50787847239cba0cbc8c47bf61409ba8b2c3adaff9d0fcbc80"
           }
         },
         "revalidation1234Wait": {
@@ -17437,6 +17465,34 @@
             "junit": {
               "path": "docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1234-wait.xml",
               "sha256": "35006e56b214c1fda61881083471eb1661c0ca7faa0ab5b82a0cc88899db9b8c"
+            }
+          }
+        },
+        "revalidation1249ReviewFix": {
+          "reason": "#1249 review follow-up restructures the settled-submission wait in HarnessWorkflowTest.cpp (one of this receipt's pinned test inputs) so the harness is drained and closed before any assertion that can abort: a -fno-exceptions REQUIRE otherwise abandons the test frame with the session threads and the stack-capturing commit/watch callbacks still live (CODING_STANDARDS 11.10). No change to what the receipt claims. The exact recorded selection was rebuilt and rerun at the new base into a fresh JUnit artifact; all selected cases passed. Rows, comparison scenarios, discriminators and the routing digest are unchanged.",
+          "changedInputs": [
+            "tests/durable/HarnessWorkflowTest.cpp"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-LE",
+              "architecture",
+              "-L",
+              "issue1203",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1249-suite-failures.xml",
+              "-j",
+              "1"
+            ],
+            "testedRevision": "1ed14056f806ca57e940bbd3361bb0d099eaecf6",
+            "recordedAt": "2026-11-12T10:38:33Z",
+            "selected": 3,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1249-suite-failures.xml",
+              "sha256": "6135d0923c4ba0113e69858d66d0b8d45021baee3cbca0664b4a76dd839fb310"
             }
           }
         }

@@ -3509,11 +3509,22 @@ TEST_CASE("generation publishes the attempt before the model stream and usage wi
     CHECK(usage_counter(storage, root.value(), "cacheRead") == 1);
     CHECK(usage_counter(storage, root.value(), "totalTokens") == 10);
     // Wait for this listener to observe the settled submission publication;
-    // `wait` alone can return first (see the listener comment above).
+    // `wait` alone can return first (see the listener comment above). The
+    // wait only records the outcome: the storage reads fail once the harness
+    // close below closes the MemoryStorage, so the entries snapshot happens
+    // first, and every assertion waits for the drain — a `-fno-exceptions`
+    // REQUIRE aborts without running local destructors, and the registered
+    // callbacks capture this stack frame (CODING_STANDARDS 11.10).
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds{5};
     while (!settled_seen.load() && std::chrono::steady_clock::now() < deadline) {
         std::this_thread::sleep_for(std::chrono::milliseconds{1});
     }
+    auto entries = storage.scan_entries(root.value(), 100);
+    const WatchEndReason watch_end = watch.stop();
+    const bool closed = consume(harness->close()).has_value();
+    // No test-owned thread or callback is live past this point: the close
+    // joins the Harness workers and drains the Session line, so the commit
+    // listener has observed every publication admitted before close.
     REQUIRE(settled_seen.load());
     CHECK(answer_commits_at_done == 1);
     {
@@ -3532,8 +3543,7 @@ TEST_CASE("generation publishes the attempt before the model stream and usage wi
         REQUIRE(generation != nullptr);
         CHECK(*generation->at("attempt").as_number() == 1);
     }
-    CHECK(watch.stop() == WatchEndReason::Stopped);
-    auto entries = storage.scan_entries(root.value(), 100);
+    CHECK(watch_end == WatchEndReason::Stopped);
     REQUIRE(entries.has_value());
     REQUIRE(entries->size() == 2);
     const auto* answer = entry_model(entries->front()).as_object();
@@ -3541,7 +3551,7 @@ TEST_CASE("generation publishes the attempt before the model stream and usage wi
     REQUIRE(answer->contains("usage"));
     CHECK(*answer->at("usage").as_object()->at("input").as_number() == 7);
     CHECK(*answer->at("stopReason").as_string() == "stop");
-    REQUIRE(consume(harness->close()).has_value());
+    REQUIRE(closed);
 }
 
 TEST_CASE("generation accumulates usage across a committed retry", "[durable][workflow][issue1163]") {

@@ -100,9 +100,35 @@ artifacts / 1,012 scenarios. Format and whitespace checks passed.
 
 Full Validation per contract (incremental build, separate
 `cch_parity_gate_build` invocation, then the unfiltered suite at the
-default four jobs with `TERM_PROGRAM=herdr`): 4,608 selected, 12
-skipped, and one failure — the pre-existing `Process Terminal` flake
-below. That run does not leave the full gate green.
+default four jobs with `TERM_PROGRAM=herdr`) ran twice over the fixed
+code (`1ed1405`..`2d10d05`; `888dc2e` is docs-only). Run 1, ended
+19:52:57 JST 2026-11-12: 4,608 selected, 12 skipped, one failure —
+the pre-existing `Process Terminal` flake below; that run's
+`build/Testing/Temporary/LastTestsFailed.log` lists only case 1049.
+Run 2, started 19:57 JST and ended 20:02:17 JST on `888dc2e` with the
+same command and environment: 4,608/4,608 passed with 11 Catch2 skips;
+the verbose `build/Testing/Temporary/LastTest.log` records `Test
+Passed.` for all 4,608 cases, the Herdr PTY evidence case executed (15
+assertions, so `TERM_PROGRAM=herdr` held), and case 1049 passed. Note
+CTest does not rewrite `LastTestsFailed.log` on a green run, so that
+file still names 1049 from run 1.
+
+Run 2 green does not resolve the intermittents: one clean full run is
+also consistent with the pre-existing `Process Terminal` race
+(14/200 under load) still being present — case 1049 simply won the
+race that once — and the three fixed tests are validated by their
+reproduction loops above (0/400, 0/800, 0/600), not by either full
+run. The full gate is green on this tree modulo that still-open flake.
+
+Review follow-up on the same day: the review of `888dc2e` found the
+new settled-submission wait in `HarnessWorkflowTest.cpp` could abort
+on its `REQUIRE` before `harness->close()` — under `-fno-exceptions`
+no local destructor runs and the registered commit/watch callbacks
+capture the abandoned stack frame (CODING_STANDARDS 11.10). The test
+now snapshots its storage reads, stops the watch, and closes the
+harness before any assertion; the #1184 and #1203 receipts, which pin
+that file, are rebound under `revalidation1249ReviewFix` with their
+exact selections rerun (10/10, 3/3).
 
 ## Remaining boundary: Process Terminal post-drain EIO flake (not fixed)
 
