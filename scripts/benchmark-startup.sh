@@ -178,7 +178,11 @@ peak = resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss
 # sample's pike child: ru_maxrss is that child's absolute peak. The caller
 # keeps the max over samples.
 sys.stdout.write(f"{wall:.6f} {peak} {proc.returncode} ")
-sys.stdout.write("token_ok" if b"Unknown provider" in proc.stderr else "token_absent")
+# The offline-failure identifier is the stable error template from
+# src/ai/ModelsStream.cpp, pinned by tests/cli/InstallRelocationTest.cpp and
+# tests/coding_agent/ModelResolutionTest.cpp. It replaced the retired
+# "Unknown provider" prose, which the product no longer emits (issue #1249).
+sys.stdout.write("token_ok" if b"has no API implementation" in proc.stderr else "token_absent")
 sys.stdout.write("\n")
 PYEOF
 }
@@ -214,7 +218,7 @@ sample_scenario() {
 			return 1
 		fi
 		if [[ "$token" == "required" && "$token_state" != "token_ok" ]]; then
-			echo "error: scenario '$name' misses the 'Unknown provider' stderr token" >&2
+			echo "error: scenario '$name' misses the 'has no API implementation' stderr token" >&2
 			return 1
 		fi
 	done
@@ -238,7 +242,10 @@ results=()
 results+=("$(sample_scenario "version" 0 any -- --version)")
 # shellcheck disable=SC2155
 results+=("$(sample_scenario "help" 0 any -- --help)")
-# Deterministic offline failure: no credentials, no network (InstallRelocationTest pins this).
+# Deterministic offline failure: no credentials and no reachable model gateway
+# (tests/cli/InstallRelocationTest.cpp pins the same contract). With the default
+# Magpie endpoint live on a developer host this scenario legitimately does not
+# fail, so run the benchmark where no gateway answers (the CI premise).
 # shellcheck disable=SC2155
 results+=("$(sample_scenario "print_offline" 1 required -- --print ping)")
 
