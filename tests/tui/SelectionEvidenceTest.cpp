@@ -18,10 +18,14 @@
 #include <algorithm>
 #include <chrono>
 #include <cstddef>
+#include <cstdlib>
 #include <memory>
 #include <string>
 #include <string_view>
 #include <vector>
+
+#include <sys/wait.h>
+#include <unistd.h>
 
 namespace {
 
@@ -513,14 +517,30 @@ TEST_CASE("AltScreen multi-click selection replays the frozen word classes and j
 
 TEST_CASE("AltScreen word selection matches frozen word classes with the POSIX ICU default",
         "[tui][alt-screen][selection][issue1249][compat-pi]") {
-    const std::string original_locale = uloc_getDefault();
-    UErrorCode status = U_ZERO_ERROR;
-    uloc_setDefault("en_US_POSIX", &status);
-    REQUIRE(U_SUCCESS(status));
-    replay_multiclick_scenario("multiclick-word-joiners-and-classes");
-    status = U_ZERO_ERROR;
-    uloc_setDefault(original_locale.c_str(), &status);
-    CHECK(U_SUCCESS(status));
+    // Catch assertions can unwind through no-exception frames without cleanup.
+    // Run the locale mutation in a separate process, even on a failing assertion.
+    if (std::getenv("CCH_SELECTION_POSIX_CHILD") != nullptr) {
+        UErrorCode status = U_ZERO_ERROR;
+        uloc_setDefault("en_US_POSIX", &status);
+        REQUIRE(U_SUCCESS(status));
+        replay_multiclick_scenario("multiclick-word-joiners-and-classes");
+        return;
+    }
+    const auto pid = ::fork();
+    REQUIRE(pid >= 0);
+    if (pid == 0) {
+        if (::setenv("CCH_SELECTION_POSIX_CHILD", "1", 1) != 0) ::_exit(127);
+        ::execl("/proc/self/exe",
+                "cch_tests_tui",
+                "AltScreen word selection matches frozen word classes with the POSIX ICU default",
+                nullptr);
+        ::_exit(127);
+    }
+    int child_status = 0;
+    const auto waited = ::waitpid(pid, &child_status, 0);
+    REQUIRE(waited == pid);
+    REQUIRE(WIFEXITED(child_status));
+    CHECK(WEXITSTATUS(child_status) == 0);
 }
 
 TEST_CASE("AltScreen multi-click selection replays the frozen word drag expansion",
