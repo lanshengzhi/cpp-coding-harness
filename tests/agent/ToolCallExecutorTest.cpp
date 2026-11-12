@@ -37,6 +37,7 @@
 #include <string_view>
 #include <thread>
 #include <type_traits>
+#include <unordered_set>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -1705,17 +1706,24 @@ TEST_CASE("bounded parallel cancellation leaves queued tool capabilities unstart
 
     REQUIRE(execution.result);
     CHECK(tool_ptr->invocation_count() == 2);
+    // The bounded batch starts whichever calls win the concurrency permits;
+    // the preparation line only guarantees start events in source order
+    // (audit-1047 scenario 4). Durations must be present exactly for the
+    // calls the tool actually invoked, not for a fixed pair of IDs.
+    std::unordered_set<std::string> executed;
+    for (const auto& invocation : tool_ptr->invocations)
+        executed.insert(invocation.call_id);
     REQUIRE(execution.result->results.size() == 6);
     for (std::size_t index = 0; index < execution.result->results.size(); ++index) {
         CHECK(execution.result->results[index].tool_call_id ==
               "call-" + std::to_string(index + 1));
         CHECK(execution.result->results[index].is_error);
-        CHECK(execution.result->results[index].duration_ms.has_value() == (index < 2));
+        CHECK(execution.result->results[index].duration_ms.has_value() ==
+                executed.contains(execution.result->results[index].tool_call_id));
     }
     for (const auto& event : execution.events) {
         if (const auto* end = std::get_if<agent::ToolExecutionEndEvent>(&event)) {
-            const bool executed = end->tool_call_id == "call-1" || end->tool_call_id == "call-2";
-            CHECK(end->duration_ms.has_value() == executed);
+            CHECK(end->duration_ms.has_value() == executed.contains(end->tool_call_id));
         }
     }
     check_tool_execution_events_strictly_paired(execution.events);

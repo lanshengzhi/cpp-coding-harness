@@ -3448,6 +3448,15 @@ TEST_CASE("generation publishes the attempt before the model stream and usage wi
     std::mutex frames_mutex;
     std::vector<DocumentFrame> frames;
     std::atomic_int atomic_answer_commits{0};
+    // The Harness's own commit listener resolves the submission waiter from
+    // inside the publication loop, so this later-registered listener may not
+    // have seen the settling publication yet when `wait` returns (frozen pi
+    // defers waiter continuations to a microtask after the loop). Snapshot the
+    // count when the listener observes the settled submission: the merged
+    // answer-and-usage publication is the run's final commit, so the snapshot
+    // is the settled value.
+    std::atomic_bool settled_seen{false};
+    std::atomic_int answer_commits_at_done{0};
     REQUIRE(watch.start([&frames, &frames_mutex](DocumentFrame frame, chord::Context) {
         std::lock_guard lock(frames_mutex);
         frames.push_back(std::move(frame));
@@ -3455,6 +3464,7 @@ TEST_CASE("generation publishes the attempt before the model stream and usage wi
     REQUIRE(harness->session().subscribe_commits([&](const CommitPublication& publication) {
         bool answer = false;
         bool usage = false;
+        bool settled = false;
         for (const auto& change : publication.changes) {
             if (const auto* table = std::get_if<TableCommitChange>(&change)) {
                 if (table->type == "entry" && table->conversation_id == root.value()) answer = true;
@@ -3462,8 +3472,15 @@ TEST_CASE("generation publishes the attempt before the model stream and usage wi
             if (const auto* doc = std::get_if<DocumentCommitChange>(&change)) {
                 if (doc->record.kind == "pi.usage:v1" && doc->conversation_id == root.value()) usage = true;
             }
+            if (const auto* sub = std::get_if<SubmissionCommitChange>(&change)) {
+                if (sub->value.conversation_id == root.value() && sub->value.status == "done") settled = true;
+            }
         }
         if (answer && usage) ++atomic_answer_commits;
+        if (settled) {
+            answer_commits_at_done.store(atomic_answer_commits.load());
+            settled_seen.store(true);
+        }
     }));
     auto admitted = consume(harness->submit(root.value(), text_input("hi")));
     REQUIRE(admitted.has_value());
@@ -3491,7 +3508,14 @@ TEST_CASE("generation publishes the attempt before the model stream and usage wi
     CHECK(usage_counter(storage, root.value(), "output") == 2);
     CHECK(usage_counter(storage, root.value(), "cacheRead") == 1);
     CHECK(usage_counter(storage, root.value(), "totalTokens") == 10);
-    CHECK(atomic_answer_commits == 1);
+    // Wait for this listener to observe the settled submission publication;
+    // `wait` alone can return first (see the listener comment above).
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds{5};
+    while (!settled_seen.load() && std::chrono::steady_clock::now() < deadline) {
+        std::this_thread::sleep_for(std::chrono::milliseconds{1});
+    }
+    REQUIRE(settled_seen.load());
+    CHECK(answer_commits_at_done == 1);
     {
         std::lock_guard lock(frames_mutex);
         REQUIRE(frames.size() == 3);

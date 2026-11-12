@@ -701,7 +701,12 @@ TEST_CASE("a tool held by a gate keeps its slot running and a late subscriber se
     REQUIRE(stream.start(collector_listener(collector)).has_value());
     auto admitted = consume(opened.harness->submit(opened.root, text_input("go")));
     REQUIRE(admitted.has_value());
-    const bool held = wait_for_event(collector, "tool_execution_update");
+    // The C++ writer commits each progress report immediately while frozen pi
+    // paces them, so the tool commits twice before it gates (output, then
+    // details). Attach the later stream only after both held updates committed
+    // — the snapshot then carries the whole held state and nothing publishes
+    // until the gate releases (frozen `lateDuringHold` is empty).
+    const bool held = wait_for_event_count(collector, "tool_execution_update", 2);
     const auto held_batches = collector->batches();
 
     auto later = attach_events(*opened.harness, opened.root);
