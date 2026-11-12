@@ -43,7 +43,17 @@ jobs:
   build-and-test:
     name: ${{ matrix.name }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 90
+    # Per-lane budget (issue #1249): the sanitizer lane compiles and links the
+    # full suite twice over (instrumented objects, multi-hundred-MB test
+    # binaries) before running it. Measured on CI 2026-11-12: the build is
+    # ~25 min warm with no source churn and ~40 min otherwise (ccache cannot
+    # skip changed TUs), and the suite runs ~47-50 min — a worst observed
+    # path of ~91 min against the old flat 90-min cap, which killed runs
+    # 42986891227 and 43162863923 at exactly ~90 min, cut run 43224388351
+    # 49.5 min into its suite, and SIGTERMed run 43176359218 mid-build.
+    # 150 min absorbs build plus full suite with headroom; every other lane
+    # keeps 90.
+    timeout-minutes: ${{ matrix.timeout_minutes }}
     strategy:
       fail-fast: false
       # Per-lane CTest label exclusion (issue #634): `ctest_label_exclude`
@@ -61,6 +71,7 @@ jobs:
             cxx: g++-16
             compiler: gcc
             sanitizer: ""
+            timeout_minutes: 90
             # Quarantine entry (issue #632, owner: #632): the ChatContainer
             # 100-chunk streaming flat-time benchmark enforces the 2ms bound,
             # but shared CI runners measure ~2040-2060us in unoptimized debug
@@ -73,6 +84,7 @@ jobs:
             cxx: g++-16
             compiler: gcc
             sanitizer: ""
+            timeout_minutes: 90
             # First quarantine entry (issue #632, owner: #632): the
             # projection 100-chunk cost-bound test enforces the #617/ADR 0052
             # 100us contract, but shared CI runners measure consistently ~2%
@@ -91,6 +103,7 @@ jobs:
             cxx: clang++-22
             compiler: clang
             sanitizer: ""
+            timeout_minutes: 90
             # Quarantine entry (issue #632, owner: #632): the ChatContainer
             # 100-chunk streaming flat-time benchmark enforces the 2ms bound,
             # but shared CI runners measure ~2040-2060us in unoptimized debug
@@ -103,6 +116,7 @@ jobs:
             cxx: g++-16
             compiler: gcc
             sanitizer: asan-ubsan
+            timeout_minutes: 150
             # Scoped out under __SANITIZE_ADDRESS__, but quarantined tests stay
             # excluded consistently.
             ctest_label_exclude: "quarantine"
@@ -112,6 +126,7 @@ jobs:
             cxx: g++-16
             compiler: gcc
             sanitizer: tsan
+            timeout_minutes: 90
             ctest_label_exclude: ""
     env:
       CCH_LIVE_KIMI: "0"
