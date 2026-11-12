@@ -7036,14 +7036,14 @@
      "-j",
      "1",
      "--output-junit",
-     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1184-chord-context-cancellation-revalidation-1249-gate-placement.xml"
+     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1184-chord-context-cancellation-revalidation-1249-clang.xml"
     ],
-    "testedRevision": "49f2a3a7a908f87afca254880216b74e3ff0ea45",
-    "recordedAt": "2026-11-12T07:20:17Z",
+    "testedRevision": "5a83751653138e7a709770aa4b3ee1a20aa96f43",
+    "recordedAt": "2026-11-12T08:42:15Z",
     "selected": 10,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1184-chord-context-cancellation-revalidation-1249-gate-placement.xml",
-     "sha256": "85d12c8c3e3924cf91f4e3f9d828b75080adb10505a371b29e17b4cd7bbaab00"
+     "path": "docs/research/pi-v1.3.0/deliveries/1184-chord-context-cancellation-revalidation-1249-clang.xml",
+     "sha256": "ad163c6a544faee1fd62e7adfb35786da736fa6c7953533fbe96972c1f0ec2ab"
     }
    },
    "rows": [
@@ -7168,7 +7168,7 @@
     },
     {
      "path": "src/durable/include/cch/durable/Records.hpp",
-     "sha256": "3cefc99a064d61e776f2f0c1e13bce60d9e4a9f3cb190495c528ce463e774126"
+     "sha256": "47002f402fce67cfb58c9c85fb61f142fa3fbbcffa7141cc08e08b449115836a"
     },
     {
      "path": "src/durable/include/cch/durable/Session.hpp",
@@ -7586,6 +7586,34 @@
      "junit": {
       "path": "docs/research/pi-v1.3.0/deliveries/1184-chord-context-cancellation-revalidation-test-tmp-root.xml",
       "sha256": "b81ca867ab50d54f7bad5b3c75566f543a88513b51d48f52baf421250f8c37c1"
+     }
+    }
+   },
+   "revalidation1249Clang": {
+    "reason": "Clang portability removes unusable defaulted equality operators from inspection values in Records.hpp. The exact 10-case selection was rebuilt and rerun on the recorded base plus the changed input; all 10 passed. Claimed rows, scenarios and routing are unchanged.",
+    "changedInputs": [
+     "src/durable/include/cch/durable/Records.hpp"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-L",
+      "issue1184",
+      "--no-tests=error",
+      "--output-on-failure",
+      "-j",
+      "1",
+      "--output-junit",
+      "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1184-chord-context-cancellation-revalidation-1249-gate-placement.xml"
+     ],
+     "testedRevision": "49f2a3a7a908f87afca254880216b74e3ff0ea45",
+     "recordedAt": "2026-11-12T07:20:17Z",
+     "selected": 10,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1184-chord-context-cancellation-revalidation-1249-gate-placement.xml",
+      "sha256": "85d12c8c3e3924cf91f4e3f9d828b75080adb10505a371b29e17b4cd7bbaab00"
      }
     }
    }

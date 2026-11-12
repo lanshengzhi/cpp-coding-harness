@@ -21,7 +21,7 @@ class Transaction;
 class TaskDefinition;
 /// The callable part of a registered tool; defined in `Workflow.hpp` (frozen
 /// pi `ToolRegistration`).
-class ToolRegistration;
+struct ToolRegistration;
 
 /// Next state a task phase or abort handler commits (frozen pi `NextTaskState`).
 ///

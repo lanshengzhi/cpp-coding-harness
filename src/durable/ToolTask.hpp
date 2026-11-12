@@ -45,8 +45,6 @@ struct NestedCallResult {
     /// The harness diagnostics of an error result; a cancelled or interrupted
     /// call reports its reason here instead of model-visible text.
     std::vector<NestedCallDiagnostic> diagnostics{};
-
-    [[nodiscard]] bool operator==(const NestedCallResult&) const = default;
 };
 
 /// The nested calls of one calling task: a task-scoped keyed family holding, per
