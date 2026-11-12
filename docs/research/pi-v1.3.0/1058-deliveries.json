@@ -2285,9 +2285,19 @@
    },
    "revalidation1232": {
     "reason": "Issue #1232 aligns read-tool size diagnostics with frozen pi rounding; image preparation, scenario mappings and routing are unchanged. The exact receipt selection was rerun on the checkout base plus the changed input pinned above.",
-    "changedInputs": ["src/durable/CodingTools.cpp"],
+    "changedInputs": [
+     "src/durable/CodingTools.cpp"
+    ],
     "previousValidation": {
-     "command": ["ctest", "--preset", "vcpkg", "-L", "^(issue1090|issue1101|issue1104)$", "--output-junit", "docs/research/pi-v1.3.0/deliveries/1090-durable-images-revalidation-1244-capture.xml"],
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-L",
+      "^(issue1090|issue1101|issue1104)$",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1090-durable-images-revalidation-1244-capture.xml"
+     ],
      "testedRevision": "6451b872e665cc8d014582eaad3e6dce06ff22cd",
      "recordedAt": "2026-11-06T17:17:20Z",
      "selected": 36,
@@ -10113,14 +10123,14 @@
      "-j",
      "1",
      "--output-junit",
-     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1182-tui-comparisons-revalidation-1249-review.xml"
+     "docs/research/pi-v1.3.0/deliveries/1182-tui-comparisons-revalidation-1249-isolation.xml"
     ],
-    "testedRevision": "4422ae2ea170ae603ea75c5b5ba7d2383768ee68",
-    "recordedAt": "2026-11-12T09:37:55Z",
+    "testedRevision": "2b5b1fd68ec403933d85217291724b977b875671",
+    "recordedAt": "2026-11-12T09:53:36Z",
     "selected": 13,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1182-tui-comparisons-revalidation-1249-review.xml",
-     "sha256": "d6792a500bd160d167e47936d385abb991c5ae6f8cb2ef7e60b5f9044f4a2d29"
+     "path": "docs/research/pi-v1.3.0/deliveries/1182-tui-comparisons-revalidation-1249-isolation.xml",
+     "sha256": "6eb7e2ce58439dd20eca3e8076d5fe6d2072b4ea82dad4b222f23065b990164a"
     }
    },
    "rows": [
@@ -10335,7 +10345,7 @@
     },
     {
      "path": "tests/tui/SelectionEvidenceTest.cpp",
-     "sha256": "ffd9005af5c665111abbef0bb82a8a9387310afc71d17efed4da9699a113f935"
+     "sha256": "dc1d70d26dafb6653b358633240ac55e38858eab5ba6ff9e6506a864ef755a70"
     },
     {
      "path": "tests/evidence/TuiReconciliationTest.py",
@@ -11309,6 +11319,34 @@
      "junit": {
       "path": "docs/research/pi-v1.3.0/deliveries/1182-tui-comparisons-revalidation-1249-posix.xml",
       "sha256": "ad69d48338d781a25dc950d98a230726ad56250e8f8615d29fe5241b4cb5381c"
+     }
+    }
+   },
+   "revalidation1249Isolation": {
+    "reason": "Reran the identical selection after removing the environment-controlled parent locale mutation; frozen scenario mappings are unchanged.",
+    "changedInputs": [
+     "tests/tui/SelectionEvidenceTest.cpp"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-L",
+      "issue1182",
+      "--no-tests=error",
+      "--output-on-failure",
+      "-j",
+      "1",
+      "--output-junit",
+      "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1182-tui-comparisons-revalidation-1249-review.xml"
+     ],
+     "testedRevision": "4422ae2ea170ae603ea75c5b5ba7d2383768ee68",
+     "recordedAt": "2026-11-12T09:37:55Z",
+     "selected": 13,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1182-tui-comparisons-revalidation-1249-review.xml",
+      "sha256": "d6792a500bd160d167e47936d385abb991c5ae6f8cb2ef7e60b5f9044f4a2d29"
      }
     }
    }
@@ -16796,9 +16834,23 @@
    },
    "revalidation1234Wait": {
     "reason": "Run the ownership scenario in a deadline-enforced child, preserving cleanup and every comparison to the unchanged frozen expectations; the other issue1203 scenarios are unchanged.",
-    "changedInputs": ["tests/durable/HarnessOwnershipTest.cpp"],
+    "changedInputs": [
+     "tests/durable/HarnessOwnershipTest.cpp"
+    ],
     "previousValidation": {
-     "command": ["ctest", "--preset", "vcpkg", "-LE", "architecture", "-L", "issue1203", "--output-junit", "docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1234.xml", "-j", "1"],
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-LE",
+      "architecture",
+      "-L",
+      "issue1203",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1234.xml",
+      "-j",
+      "1"
+     ],
      "testedRevision": "b069ac4182bc9abbd7571b806081649132ce393b",
      "recordedAt": "2026-11-08T02:03:39Z",
      "selected": 3,
@@ -16810,9 +16862,23 @@
    },
    "revalidation1234": {
     "reason": "Close the background ownership harness before asserting, including operation failure paths; frozen scenario mappings and comparisons are unchanged.",
-    "changedInputs": ["tests/durable/HarnessOwnershipTest.cpp"],
+    "changedInputs": [
+     "tests/durable/HarnessOwnershipTest.cpp"
+    ],
     "previousValidation": {
-     "command": ["ctest", "--preset", "vcpkg", "-LE", "architecture", "-L", "issue1203", "--output-junit", "docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1244-capture.xml", "-j", "1"],
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-LE",
+      "architecture",
+      "-L",
+      "issue1203",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1244-capture.xml",
+      "-j",
+      "1"
+     ],
      "testedRevision": "6451b872e665cc8d014582eaad3e6dce06ff22cd",
      "recordedAt": "2026-11-06T17:17:20Z",
      "selected": 3,
@@ -18163,7 +18229,7 @@
     },
     {
      "path": "tests/tui/SelectionEvidenceTest.cpp",
-     "sha256": "ffd9005af5c665111abbef0bb82a8a9387310afc71d17efed4da9699a113f935"
+     "sha256": "dc1d70d26dafb6653b358633240ac55e38858eab5ba6ff9e6506a864ef755a70"
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
@@ -18216,16 +18282,16 @@
      "-L",
      "issue1212",
      "--output-junit",
-     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1212-transcript-selection-revalidation-1249-review.xml",
+     "docs/research/pi-v1.3.0/deliveries/1212-transcript-selection-revalidation-1249-isolation.xml",
      "-j",
      "1"
     ],
-    "testedRevision": "4422ae2ea170ae603ea75c5b5ba7d2383768ee68",
-    "recordedAt": "2026-11-12T09:38:01Z",
+    "testedRevision": "2b5b1fd68ec403933d85217291724b977b875671",
+    "recordedAt": "2026-11-12T09:53:36Z",
     "selected": 29,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1212-transcript-selection-revalidation-1249-review.xml",
-     "sha256": "a9335284fae3b5dfc51cf2334bea10c3977fe099cb80caa9175386d96cb5a21b"
+     "path": "docs/research/pi-v1.3.0/deliveries/1212-transcript-selection-revalidation-1249-isolation.xml",
+     "sha256": "fce41a343dbb931a7a95202f856a11f0da2c40856dd8e7691e5c94348db13a1b"
     }
    },
    "rows": [
@@ -19369,6 +19435,34 @@
       "sha256": "4357adfaedc474cbda699f3928110a3ab2a1e65df3f56bccb9e5bdf5d11552f0"
      }
     }
+   },
+   "revalidation1249Isolation": {
+    "reason": "Reran the identical selection after removing the environment-controlled parent locale mutation; frozen scenario mappings are unchanged.",
+    "changedInputs": [
+     "tests/tui/SelectionEvidenceTest.cpp"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-LE",
+      "architecture",
+      "-L",
+      "issue1212",
+      "--output-junit",
+      "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1212-transcript-selection-revalidation-1249-review.xml",
+      "-j",
+      "1"
+     ],
+     "testedRevision": "4422ae2ea170ae603ea75c5b5ba7d2383768ee68",
+     "recordedAt": "2026-11-12T09:38:01Z",
+     "selected": 29,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1212-transcript-selection-revalidation-1249-review.xml",
+      "sha256": "a9335284fae3b5dfc51cf2334bea10c3977fe099cb80caa9175386d96cb5a21b"
+     }
+    }
    }
   },
   {
@@ -19427,7 +19521,7 @@
     },
     {
      "path": "tests/tui/SelectionEvidenceTest.cpp",
-     "sha256": "ffd9005af5c665111abbef0bb82a8a9387310afc71d17efed4da9699a113f935"
+     "sha256": "dc1d70d26dafb6653b358633240ac55e38858eab5ba6ff9e6506a864ef755a70"
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
@@ -19492,16 +19586,16 @@
      "-L",
      "issue1211",
      "--output-junit",
-     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1211-alt-screen-viewport-revalidation-1249-review.xml",
+     "docs/research/pi-v1.3.0/deliveries/1211-alt-screen-viewport-revalidation-1249-isolation.xml",
      "-j",
      "1"
     ],
-    "testedRevision": "4422ae2ea170ae603ea75c5b5ba7d2383768ee68",
-    "recordedAt": "2026-11-12T09:38:09Z",
+    "testedRevision": "2b5b1fd68ec403933d85217291724b977b875671",
+    "recordedAt": "2026-11-12T09:53:36Z",
     "selected": 34,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1211-alt-screen-viewport-revalidation-1249-review.xml",
-     "sha256": "f3aa5e472723c175c91847460c47b34b0b3534f4afa84cfd1439c4c9e535cc4e"
+     "path": "docs/research/pi-v1.3.0/deliveries/1211-alt-screen-viewport-revalidation-1249-isolation.xml",
+     "sha256": "252e40e8efc4acd2fd6a050147315d8725353231cba92e77a40f63e94425e8f9"
     }
    },
    "rows": [
@@ -21001,6 +21095,34 @@
      "junit": {
       "path": "docs/research/pi-v1.3.0/deliveries/1211-alt-screen-viewport-revalidation-1249-posix.xml",
       "sha256": "4bc4001911bc225d767c2c092083230beaf9313ed6d43e8b5e44e9a8c1f210f5"
+     }
+    }
+   },
+   "revalidation1249Isolation": {
+    "reason": "Reran the identical selection after removing the environment-controlled parent locale mutation; frozen scenario mappings are unchanged.",
+    "changedInputs": [
+     "tests/tui/SelectionEvidenceTest.cpp"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-LE",
+      "architecture",
+      "-L",
+      "issue1211",
+      "--output-junit",
+      "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1211-alt-screen-viewport-revalidation-1249-review.xml",
+      "-j",
+      "1"
+     ],
+     "testedRevision": "4422ae2ea170ae603ea75c5b5ba7d2383768ee68",
+     "recordedAt": "2026-11-12T09:38:09Z",
+     "selected": 34,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1211-alt-screen-viewport-revalidation-1249-review.xml",
+      "sha256": "f3aa5e472723c175c91847460c47b34b0b3534f4afa84cfd1439c4c9e535cc4e"
      }
     }
    }

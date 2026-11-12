@@ -18,7 +18,6 @@
 #include <algorithm>
 #include <chrono>
 #include <cstddef>
-#include <cstdlib>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -515,25 +514,22 @@ TEST_CASE("AltScreen multi-click selection replays the frozen word classes and j
     replay_multiclick_scenario("multiclick-word-joiners-and-classes");
 }
 
+TEST_CASE("POSIX ICU selection subprocess replay", "[.][tui][issue1249]") {
+    UErrorCode status = U_ZERO_ERROR;
+    uloc_setDefault("en_US_POSIX", &status);
+    REQUIRE(U_SUCCESS(status));
+    replay_multiclick_scenario("multiclick-word-joiners-and-classes");
+}
+
 TEST_CASE("AltScreen word selection matches frozen word classes with the POSIX ICU default",
         "[tui][alt-screen][selection][issue1249][compat-pi]") {
-    // Catch assertions can unwind through no-exception frames without cleanup.
-    // Run the locale mutation in a separate process, even on a failing assertion.
-    if (std::getenv("CCH_SELECTION_POSIX_CHILD") != nullptr) {
-        UErrorCode status = U_ZERO_ERROR;
-        uloc_setDefault("en_US_POSIX", &status);
-        REQUIRE(U_SUCCESS(status));
-        replay_multiclick_scenario("multiclick-word-joiners-and-classes");
-        return;
-    }
+    // The hidden replay runs in a fresh process, even when an assertion fails.
+    // No environment variable can select it in this process.
+    const std::string original_locale = uloc_getDefault();
     const auto pid = ::fork();
     REQUIRE(pid >= 0);
     if (pid == 0) {
-        if (::setenv("CCH_SELECTION_POSIX_CHILD", "1", 1) != 0) ::_exit(127);
-        ::execl("/proc/self/exe",
-                "cch_tests_tui",
-                "AltScreen word selection matches frozen word classes with the POSIX ICU default",
-                nullptr);
+        ::execl("/proc/self/exe", "cch_tests_tui", "POSIX ICU selection subprocess replay", nullptr);
         ::_exit(127);
     }
     int child_status = 0;
@@ -541,6 +537,7 @@ TEST_CASE("AltScreen word selection matches frozen word classes with the POSIX I
     REQUIRE(waited == pid);
     REQUIRE(WIFEXITED(child_status));
     CHECK(WEXITSTATUS(child_status) == 0);
+    CHECK(std::string{uloc_getDefault()} == original_locale);
 }
 
 TEST_CASE("AltScreen multi-click selection replays the frozen word drag expansion",

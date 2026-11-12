@@ -38,8 +38,10 @@ breaker, including editor navigation, so the complete suite is required.
 34/34 and 29/29 passed respectively, with zero skips. Each receipt now binds
 its own new JUnit artifact and the tested source digest, retaining its prior
 validation record. Scenario mappings and frozen inputs are unchanged.
-Consolidation build and check pass after the rebind. `testedRevision` is the
-checkout base above; the receipt digests bind the modified files actually tested.
+Consolidation build and check passed after that initial rebind. At that point
+`testedRevision` was the checkout base `7ac7fb9`; the later independent review
+rebind below used `4422ae2`. The receipt digests bind the modified files actually
+tested at each stage.
 The receipt boundary checks 32 receipts, 808 claims and 966 comparisons;
 `ReceiptBoundaryTest.py` passes 24 cases; `audit_evidence.py verify` verifies
 84 bundles, 180 artifacts and 1,012 scenarios.
@@ -102,6 +104,34 @@ the callback, but the original failure's scheduling was not captured. Neither
 cause is claimed as proven. A second unfiltered default four-job run at
 `4422ae2` passed 4,597 of 4,608 cases, with 11 skipped and no failures
 (279.99 seconds); it does not resolve the reproduced intermittent failure.
+
+### Isolation review follow-up
+
+An externally supplied `CCH_SELECTION_POSIX_CHILD` previously selected the
+locale-mutating branch in the calling test process. The ordinary regression now
+always launches a fresh executable running a hidden replay case, and checks the
+calling process's ICU default after the child exits. With that variable set to
+`1`, the regression passes with the parent locale unchanged; the hidden replay
+still checks the frozen selection in the POSIX locale.
+
+The three receipt selections were rebuilt and rerun at checkout base
+`2b5b1fd68ec403933d85217291724b977b875671`, with the modified test source
+bound by digest: 1182 13/13, 1211 34/34 and 1212 29/29, no skips, and the
+same case names as their previous artifacts. The new receipts retain their
+`4422ae2` validation records; those in turn retain the initial `7ac7fb9`
+records. Scenario mappings and frozen inputs remain unchanged. Consolidation
+build and check, the 94 consolidation tests, 24 receipt boundary tests, all 32
+receipt boundary checks, and frozen evidence verification (84 bundles, 180
+artifacts, 1,012 scenarios) passed.
+
+The full Debug build and separate build-phase gate passed. The unfiltered
+four-job CTest run with `TERM_PROGRAM=herdr` selected 4,608 cases: 4,594
+passed, 11 skipped, and three failed in 297.73 seconds. The bounded parallel
+cancellation test had the duration mismatches already investigated above; the
+late-subscriber durable test saw an unexpected `tool_execution_update`, and
+the durable generation test failed its `atomic_answer_commits == 1` check.
+All three passed when rerun individually at one job; those reruns do not
+establish the causes of the durable failures or make the full run green.
 
 The locale mapping is established for the tested Node and ICU versions and
 these concrete locale values; this is not a claim of complete equivalence for
