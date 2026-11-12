@@ -10,6 +10,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <cstddef>
 #include <filesystem>
 #include <fstream>
 #include <sstream>
@@ -82,7 +83,7 @@ bool json_equal(const JsonValue& left, const JsonValue& right) {
             if (!json_equal(left_array->at(i), right_array->at(i))) return false;
         return true;
     }
-    return left.holds<nullptr_t>() == right.holds<nullptr_t>();
+    return left.holds<std::nullptr_t>() == right.holds<std::nullptr_t>();
 }
 
 /// Runs the durable read tool exactly as the registry exposes it.
