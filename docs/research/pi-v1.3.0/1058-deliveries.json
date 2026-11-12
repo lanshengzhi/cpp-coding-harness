@@ -7046,14 +7046,42 @@
      "-j",
      "1",
      "--output-junit",
-     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1184-chord-context-cancellation-revalidation-1249-review-fix.xml"
+     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1184-chord-context-cancellation-revalidation-1249-review-fix2.xml"
     ],
-    "testedRevision": "888dc2e7371554b10fef8ee8890d53105cbf2a88",
-    "recordedAt": "2026-11-12T11:29:28Z",
+    "testedRevision": "a96100c18f3ce1dae618b4217cebde5d35c340fd",
+    "recordedAt": "2026-11-12T12:17:57Z",
     "selected": 10,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1184-chord-context-cancellation-revalidation-1249-review-fix.xml",
-     "sha256": "1b768e760abdb1989c794c3e7a75288b66b73eea1a222a706d971ad1ed547198"
+     "path": "docs/research/pi-v1.3.0/deliveries/1184-chord-context-cancellation-revalidation-1249-review-fix2.xml",
+     "sha256": "2ed3e5ec0473474595a2de82d73982fa7313c27994efb16908442290300a3a1b"
+    }
+   },
+   "revalidation1249ReviewFix2": {
+    "reason": "#1249 independent-review follow-up restructures the settled-submission wait in HarnessWorkflowTest.cpp (one of this receipt's pinned test inputs) so every failure path releases the producer gate, quiesces the harness, and stops the watch before any assertion can abort: the review found watch.stop() ran before harness->close() (DocumentWatch::stop touches the watch state lock-free while the Session publishes under its mutation line) and the first-half REQUIREs (entered timeout, mutex-held observed_attempts, settled/live/usage) aborted with the producer, session threads, and stack-capturing callbacks still live under -fno-exceptions (CODING_STANDARDS 11.10). The exact recorded selection was rebuilt and rerun at the new base into a fresh JUnit artifact; all selected cases passed. Rows, comparison scenarios, discriminators and the routing digest are unchanged.",
+    "changedInputs": [
+     "tests/durable/HarnessWorkflowTest.cpp"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-L",
+      "issue1184",
+      "--no-tests=error",
+      "--output-on-failure",
+      "-j",
+      "1",
+      "--output-junit",
+      "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1184-chord-context-cancellation-revalidation-1249-review-fix.xml"
+     ],
+     "testedRevision": "888dc2e7371554b10fef8ee8890d53105cbf2a88",
+     "recordedAt": "2026-11-12T11:29:28Z",
+     "selected": 10,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1184-chord-context-cancellation-revalidation-1249-review-fix.xml",
+      "sha256": "1b768e760abdb1989c794c3e7a75288b66b73eea1a222a706d971ad1ed547198"
+     }
     }
    },
    "rows": [
@@ -7222,7 +7250,7 @@
     },
     {
      "path": "tests/durable/HarnessWorkflowTest.cpp",
-     "sha256": "566b0c6c36d02f7dc13d298cad8374a589583626127be23935b986a74c6ff4d6"
+     "sha256": "3f1ee8ee9df8cb884083259747d496f5c72dfd0773e63dcfda22ab0740e8615f"
     },
     {
      "path": "tests/durable/Outcome.hpp",
@@ -16851,7 +16879,7 @@
     },
     {
      "path": "tests/durable/HarnessWorkflowTest.cpp",
-     "sha256": "566b0c6c36d02f7dc13d298cad8374a589583626127be23935b986a74c6ff4d6"
+     "sha256": "3f1ee8ee9df8cb884083259747d496f5c72dfd0773e63dcfda22ab0740e8615f"
     },
     {
      "path": "fixtures/pi-v1.3.0/audit-1203/ownership.json",
@@ -16904,16 +16932,44 @@
      "-L",
      "issue1203",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1249-review-fix.xml",
+     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1249-review-fix2.xml",
      "-j",
      "1"
     ],
-    "testedRevision": "888dc2e7371554b10fef8ee8890d53105cbf2a88",
-    "recordedAt": "2026-11-12T11:29:28Z",
+    "testedRevision": "a96100c18f3ce1dae618b4217cebde5d35c340fd",
+    "recordedAt": "2026-11-12T12:17:57Z",
     "selected": 3,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1249-review-fix.xml",
-     "sha256": "54f00c9931513f50787847239cba0cbc8c47bf61409ba8b2c3adaff9d0fcbc80"
+     "path": "docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1249-review-fix2.xml",
+     "sha256": "951c500ec95622a237a8842532c503e8b7193371be5719bf8d0a727ec03a895d"
+    }
+   },
+   "revalidation1249ReviewFix2": {
+    "reason": "#1249 independent-review follow-up restructures the settled-submission wait in HarnessWorkflowTest.cpp (one of this receipt's pinned test inputs) so every failure path releases the producer gate, quiesces the harness, and stops the watch before any assertion can abort: the review found watch.stop() ran before harness->close() (DocumentWatch::stop touches the watch state lock-free while the Session publishes under its mutation line) and the first-half REQUIREs (entered timeout, mutex-held observed_attempts, settled/live/usage) aborted with the producer, session threads, and stack-capturing callbacks still live under -fno-exceptions (CODING_STANDARDS 11.10). The exact recorded selection was rebuilt and rerun at the new base into a fresh JUnit artifact; all selected cases passed. Rows, comparison scenarios, discriminators and the routing digest are unchanged.",
+    "changedInputs": [
+     "tests/durable/HarnessWorkflowTest.cpp"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-LE",
+      "architecture",
+      "-L",
+      "issue1203",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1249-review-fix.xml",
+      "-j",
+      "1"
+     ],
+     "testedRevision": "888dc2e7371554b10fef8ee8890d53105cbf2a88",
+     "recordedAt": "2026-11-12T11:29:28Z",
+     "selected": 3,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1249-review-fix.xml",
+      "sha256": "54f00c9931513f50787847239cba0cbc8c47bf61409ba8b2c3adaff9d0fcbc80"
+     }
     }
    },
    "revalidation1234Wait": {

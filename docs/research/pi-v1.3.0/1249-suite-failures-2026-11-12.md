@@ -124,11 +124,39 @@ Review follow-up on the same day: the review of `888dc2e` found the
 new settled-submission wait in `HarnessWorkflowTest.cpp` could abort
 on its `REQUIRE` before `harness->close()` — under `-fno-exceptions`
 no local destructor runs and the registered commit/watch callbacks
-capture the abandoned stack frame (CODING_STANDARDS 11.10). The test
-now snapshots its storage reads, stops the watch, and closes the
-harness before any assertion; the #1184 and #1203 receipts, which pin
-that file, are rebound under `revalidation1249ReviewFix` with their
-exact selections rerun (10/10, 3/3).
+capture the abandoned stack frame (CODING_STANDARDS 11.10). `a96100c`
+accordingly moved only the settled-wait assertions: the storage reads
+are snapshotted, the watch stopped, and the harness closed before
+those assertions. That claim — "stops the watch, and closes the
+harness before any assertion" — overstated the change: the test's
+first half (the `entered` timeout `REQUIRE`, the `observed_attempts`
+assertions taken under their mutex, and the settled/live/usage
+assertions) still ran before the gate release and the close, and
+`watch.stop()` still ran before `harness->close()`.
+
+The independent review of `a96100c` found both remaining shapes
+high-severity. First, `DocumentWatch::stop()` is correct only in the
+caller's serialized domain: it touches the watch state with no lock of
+its own while the Session publishes under its mutation line, so a stop
+that can race a publish touches `stopped`/`pending` concurrently; only
+the close (joining the workers and pumping the line dry) quiesces
+publishing from outside the line, so the watch lifecycle order is close
+then stop. Second, every pre-close assertion is an abort path that
+leaves the producer thread, the session threads, and the stack-
+capturing callbacks live on the abandoned frame. The restructure
+records every observation (`admitted`, `entered`, the attempt snapshot,
+the settled/live/usage reads gated on settlement), releases the gate
+before any assertion can fail, bounds the submission wait with a
+30-second liveness backstop (a backstop, not a timing assertion — the
+producer's own bound is ten seconds from stream start), snapshots the
+entries, closes the harness, stops the watch, and only then asserts.
+A marker probe distinguished the paths empirically: with one
+`observed_attempts` expectation flipped, the `a96100c` binary fails at
+the mutex-held assertion with no marker, the restructured binary fails
+only after printing the post-close marker. The #1184 and #1203
+receipts, which pin that file, are rebound under
+`revalidation1249ReviewFix2` with their exact selections rerun (10/10,
+3/3).
 
 ## Remaining boundary: Process Terminal post-drain EIO flake (not fixed)
 

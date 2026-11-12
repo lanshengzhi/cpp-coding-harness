@@ -3483,49 +3483,98 @@ TEST_CASE("generation publishes the attempt before the model stream and usage wi
         }
     }));
     auto admitted = consume(harness->submit(root.value(), text_input("hi")));
-    REQUIRE(admitted.has_value());
-    REQUIRE(entered.try_acquire_for(std::chrono::seconds{5}));
+    // From the submission on, every failure path must release the producer
+    // gate, quiesce the harness, and stop the watch before any assertion can
+    // abort the test: a `-fno-exceptions` REQUIRE runs no local destructor,
+    // and the producer and the registered commit/watch callbacks capture this
+    // stack frame (CODING_STANDARDS 11.10). The watch is stopped only after
+    // the close: `DocumentWatch::stop()` touches the watch state with no lock
+    // of its own and the Session publishes under its mutation line, so a stop
+    // that races a publish touches stopped/pending concurrently — the close
+    // joins the workers and pumps the line dry first.
+    const bool admitted_ok = admitted.has_value();
+    const bool entered_seen = entered.try_acquire_for(std::chrono::seconds{5});
+    // The run is still live mid-stream: the attempt stays published. Record
+    // every observation now; assert after the close.
+    const std::optional<std::int64_t> mid_attempt =
+            entered_seen ? live_generation_attempt(storage, root.value()) : std::optional<std::int64_t>{};
+    std::vector<std::optional<std::int64_t>> observed;
     {
         std::lock_guard lock(observed_mutex);
-        REQUIRE(observed_attempts.size() == 1);
-        REQUIRE(observed_attempts.front().has_value());
-        CHECK(*observed_attempts.front() == 1);
+        observed = observed_attempts;
     }
-    // The run is still live mid-stream: the attempt stays published.
-    auto mid_attempt = live_generation_attempt(storage, root.value());
-    REQUIRE(mid_attempt.has_value());
-    CHECK(*mid_attempt == 1);
+    // Release the gate on every path before any assertion can fail.
     release.release();
-    auto settled = consume(admitted.value().wait());
-    REQUIRE(settled.has_value());
-    CHECK(settled.value().status == "done");
-    // The final answer cleared the live document entirely.
-    auto live = live_document_value(storage, root.value());
-    REQUIRE(live.has_value());
-    CHECK(live->as_object()->find("generation") == live->as_object()->end());
-    CHECK(live->as_object()->find("run") == live->as_object()->end());
-    CHECK(usage_counter(storage, root.value(), "input") == 7);
-    CHECK(usage_counter(storage, root.value(), "output") == 2);
-    CHECK(usage_counter(storage, root.value(), "cacheRead") == 1);
-    CHECK(usage_counter(storage, root.value(), "totalTokens") == 10);
+    // The wait below blocks on the submission registry; a test-side wait
+    // carries a liveness backstop (CODING_STANDARDS 11.10), so a wedged run
+    // still reaches the close instead of hanging the suite. The producer's
+    // own bound is ten seconds from stream start, so thirty seconds is a
+    // backstop, not a timing assertion: the watchdog exits as soon as this
+    // listener's settled observation flips (the wait resolved first).
+    std::optional<Outcome<SettledSubmission>> settled;
+    if (admitted_ok) {
+        std::stop_source settle_bound;
+        std::jthread settle_watchdog([&settled_seen, &settle_bound] {
+            const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds{30};
+            while (!settled_seen.load() && std::chrono::steady_clock::now() < deadline) {
+                std::this_thread::sleep_for(std::chrono::milliseconds{1});
+            }
+            settle_bound.request_stop();
+        });
+        settled.emplace(consume(admitted.value().wait(settle_bound.get_token())));
+        settle_watchdog.join();
+    }
+    // Record the settled-state reads before the close: the storage closes
+    // with the harness. Skip them when the run did not settle so a wedged run
+    // cannot read a live line; the assertions below then report the primary
+    // failure instead of racing storage.
+    const bool settled_ok = settled.has_value() && settled->has_value() && settled->value().status == "done";
+    std::optional<chord::Json> live;
+    std::optional<double> usage_input;
+    std::optional<double> usage_output;
+    std::optional<double> usage_cache_read;
+    std::optional<double> usage_total;
+    if (settled_ok) {
+        live = live_document_value(storage, root.value());
+        usage_input = usage_counter(storage, root.value(), "input");
+        usage_output = usage_counter(storage, root.value(), "output");
+        usage_cache_read = usage_counter(storage, root.value(), "cacheRead");
+        usage_total = usage_counter(storage, root.value(), "totalTokens");
+    }
     // Wait for this listener to observe the settled submission publication;
-    // `wait` alone can return first (see the listener comment above). The
-    // wait only records the outcome: the storage reads fail once the harness
-    // close below closes the MemoryStorage, so the entries snapshot happens
-    // first, and every assertion waits for the drain — a `-fno-exceptions`
-    // REQUIRE aborts without running local destructors, and the registered
-    // callbacks capture this stack frame (CODING_STANDARDS 11.10).
+    // `wait` alone can return first (see the listener comment above).
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds{5};
     while (!settled_seen.load() && std::chrono::steady_clock::now() < deadline) {
         std::this_thread::sleep_for(std::chrono::milliseconds{1});
     }
+    const bool drained = settled_seen.load();
+    // Snapshot the entries before the close: storage reads fail once the
+    // close closes the MemoryStorage.
     auto entries = storage.scan_entries(root.value(), 100);
-    const WatchEndReason watch_end = watch.stop();
+    // Quiesce first: the close joins the Harness workers and pumps the
+    // Session line, so no publish is in flight and the commit listener has
+    // observed every publication admitted before close. Only then is the
+    // watch stopped (see above), and only after both does any assertion run.
     const bool closed = consume(harness->close()).has_value();
-    // No test-owned thread or callback is live past this point: the close
-    // joins the Harness workers and drains the Session line, so the commit
-    // listener has observed every publication admitted before close.
-    REQUIRE(settled_seen.load());
+    const WatchEndReason watch_end = watch.stop();
+    REQUIRE(admitted_ok);
+    REQUIRE(entered_seen);
+    REQUIRE(observed.size() == 1);
+    REQUIRE(observed.front().has_value());
+    CHECK(*observed.front() == 1);
+    REQUIRE(mid_attempt.has_value());
+    CHECK(*mid_attempt == 1);
+    REQUIRE(settled.has_value());
+    REQUIRE(settled->has_value());
+    CHECK(settled->value().status == "done");
+    REQUIRE(live.has_value());
+    CHECK(live->as_object()->find("generation") == live->as_object()->end());
+    CHECK(live->as_object()->find("run") == live->as_object()->end());
+    CHECK(usage_input == 7);
+    CHECK(usage_output == 2);
+    CHECK(usage_cache_read == 1);
+    CHECK(usage_total == 10);
+    REQUIRE(drained);
     CHECK(answer_commits_at_done == 1);
     {
         std::lock_guard lock(frames_mutex);
