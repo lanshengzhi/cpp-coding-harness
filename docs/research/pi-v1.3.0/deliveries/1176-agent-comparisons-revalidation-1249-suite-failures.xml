@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="(empty)"
+	tests="5"
+	failures="0"
+	disabled="0"
+	skipped="0"
+	hostname=""
+	time="0"
+	timestamp="2026-11-12T19:39:11"
+	>
+	<testcase name="reset restores the System Message baseline and clears queues while retaining live policy" classname="reset restores the System Message baseline and clears queues while retaining live policy" time="0.00710391" status="run">
+		<properties>
+			<property name="cmake_labels" value="agent;issue1108;reset;spec;stateful"/>
+		</properties>
+		<system-out>Filters: "reset restores the System Message baseline and clears queues while retaining live policy"
+Randomness seeded to: 2414563289
+===============================================================================
+All tests passed (41 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="run_tool_call executes successfully and records execute-only duration" classname="run_tool_call executes successfully and records execute-only duration" time="0.00786234" status="run">
+		<properties>
+			<property name="cmake_labels" value="agent;issue1109;run-tool-call;spec;tool-executor"/>
+		</properties>
+		<system-out>Filters: "run_tool_call executes successfully and records execute-only duration"
+Randomness seeded to: 170227938
+===============================================================================
+All tests passed (18 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="run_tool_call returns error outcome for blocked tool call without executing" classname="run_tool_call returns error outcome for blocked tool call without executing" time="0.00739937" status="run">
+		<properties>
+			<property name="cmake_labels" value="agent;issue1109;run-tool-call;spec;tool-executor"/>
+		</properties>
+		<system-out>Filters: "run_tool_call returns error outcome for blocked tool call without executing"
+Randomness seeded to: 2343945164
+===============================================================================
+All tests passed (16 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="stateful Agent queue peek prefers steering and clear removes both queues" classname="stateful Agent queue peek prefers steering and clear removes both queues" time="0.00642811" status="run">
+		<properties>
+			<property name="cmake_labels" value="agent;issue1113;spec;stateful"/>
+		</properties>
+		<system-out>Filters: "stateful Agent queue peek prefers steering and clear removes both queues"
+Randomness seeded to: 3190563593
+===============================================================================
+All tests passed (18 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="stateful Agent rejects a second prompt while its active run is suspended" classname="stateful Agent rejects a second prompt while its active run is suspended" time="0.006967" status="run">
+		<properties>
+			<property name="cmake_labels" value="agent;issue35;spec;stateful"/>
+		</properties>
+		<system-out>Filters: "stateful Agent rejects a second prompt while its active run is suspended"
+Randomness seeded to: 3549947030
+===============================================================================
+All tests passed (26 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+</testsuite>

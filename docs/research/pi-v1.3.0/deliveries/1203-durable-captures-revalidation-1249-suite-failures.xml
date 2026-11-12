@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="(empty)"
+	tests="3"
+	failures="0"
+	disabled="0"
+	skipped="0"
+	hostname=""
+	time="0"
+	timestamp="2026-11-12T19:39:23"
+	>
+	<testcase name="the audit-1203 frozen background-ownership boundary observation replays in C++" classname="the audit-1203 frozen background-ownership boundary observation replays in C++" time="0.016007" status="run">
+		<properties>
+			<property name="cmake_labels" value="durable;issue1203;ownership"/>
+		</properties>
+		<system-out>Filters: "the audit-1203 frozen background-ownership boundary observation replays in C++"
+Randomness seeded to: 1165381728
+Filters: [issue1234-child]
+Randomness seeded to: 418014161
+===============================================================================
+test cases: 1 | 1 passed
+assertions: - none -
+
+===============================================================================
+All tests passed (4 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="the audit-1203 frozen duplicate-request observation replays in C++" classname="the audit-1203 frozen duplicate-request observation replays in C++" time="0.0085479" status="run">
+		<properties>
+			<property name="cmake_labels" value="durable;issue1203;workflow"/>
+		</properties>
+		<system-out>Filters: "the audit-1203 frozen duplicate-request observation replays in C++"
+Randomness seeded to: 4138512681
+===============================================================================
+All tests passed (17 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="the audit-1203 frozen harness settings defaults replay in the C++ settings" classname="the audit-1203 frozen harness settings defaults replay in the C++ settings" time="0.00599225" status="run">
+		<properties>
+			<property name="cmake_labels" value="durable;issue1203;workflow"/>
+		</properties>
+		<system-out>Filters: "the audit-1203 frozen harness settings defaults replay in the C++ settings"
+Randomness seeded to: 108246155
+===============================================================================
+All tests passed (13 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+</testsuite>

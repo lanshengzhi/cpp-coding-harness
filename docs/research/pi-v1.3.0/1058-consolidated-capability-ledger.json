@@ -7047,14 +7047,14 @@
             "-j",
             "1",
             "--output-junit",
-            "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1184-chord-context-cancellation-revalidation-1249-clang.xml"
+            "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1184-chord-context-cancellation-revalidation-1249-suite-failures.xml"
           ],
-          "testedRevision": "5a83751653138e7a709770aa4b3ee1a20aa96f43",
-          "recordedAt": "2026-11-12T08:42:15Z",
+          "testedRevision": "1ed14056f806ca57e940bbd3361bb0d099eaecf6",
+          "recordedAt": "2026-11-12T10:38:33Z",
           "selected": 10,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1184-chord-context-cancellation-revalidation-1249-clang.xml",
-            "sha256": "ad163c6a544faee1fd62e7adfb35786da736fa6c7953533fbe96972c1f0ec2ab"
+            "path": "docs/research/pi-v1.3.0/deliveries/1184-chord-context-cancellation-revalidation-1249-suite-failures.xml",
+            "sha256": "12a5d1fbd17dcb92840eff9be14190b2813ff39aea6d00ea4fd8d4e7920761eb"
           }
         },
         "rows": [
@@ -7223,7 +7223,7 @@
           },
           {
             "path": "tests/durable/HarnessWorkflowTest.cpp",
-            "sha256": "746304d43e45145cd0bfef1006f920e1611edf73c798c99a601b7b2f3c0f5356"
+            "sha256": "e67b1f35ba44ae7577f94ee93bb19688653fcf35f80b46f991b026767b48c783"
           },
           {
             "path": "tests/durable/Outcome.hpp",
@@ -7625,6 +7625,34 @@
             "junit": {
               "path": "docs/research/pi-v1.3.0/deliveries/1184-chord-context-cancellation-revalidation-1249-gate-placement.xml",
               "sha256": "85d12c8c3e3924cf91f4e3f9d828b75080adb10505a371b29e17b4cd7bbaab00"
+            }
+          }
+        },
+        "revalidation1249": {
+          "reason": "#1249 removes an over-specified timing from HarnessWorkflowTest.cpp (one of this receipt's pinned test inputs): the assertion now derives the executed call set from the tool state / synchronizes on both paced progress commits / snapshots the merged publication count when the settled-submission publication is observed, with no change to what the receipt claims. The exact recorded selection was rebuilt and rerun at the new base into a fresh JUnit artifact; all selected cases passed. Rows, comparison scenarios, discriminators and the routing digest are unchanged.",
+          "changedInputs": [
+            "tests/durable/HarnessWorkflowTest.cpp"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-L",
+              "issue1184",
+              "--no-tests=error",
+              "--output-on-failure",
+              "-j",
+              "1",
+              "--output-junit",
+              "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1184-chord-context-cancellation-revalidation-1249-clang.xml"
+            ],
+            "testedRevision": "5a83751653138e7a709770aa4b3ee1a20aa96f43",
+            "recordedAt": "2026-11-12T08:42:15Z",
+            "selected": 10,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1184-chord-context-cancellation-revalidation-1249-clang.xml",
+              "sha256": "ad163c6a544faee1fd62e7adfb35786da736fa6c7953533fbe96972c1f0ec2ab"
             }
           }
         }
@@ -13355,7 +13383,7 @@
           },
           {
             "path": "tests/agent/ToolCallExecutorTest.cpp",
-            "sha256": "5def1f68ef5ca3fc8ef2f2f0e6c532793919590cf14e258542ea36f61457ec3b"
+            "sha256": "23f95db4cb7a82bdf166ec542b92247b0477af661f065f5cbdca13a755d0b4ad"
           },
           {
             "path": "src/agent/ToolCallExecutor.cpp",
@@ -13418,14 +13446,14 @@
             "-j",
             "1",
             "--output-junit",
-            "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1176-agent-comparisons-revalidation-1249-gate-placement.xml"
+            "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1176-agent-comparisons-revalidation-1249-suite-failures.xml"
           ],
-          "testedRevision": "49f2a3a7a908f87afca254880216b74e3ff0ea45",
-          "recordedAt": "2026-11-12T07:20:17Z",
+          "testedRevision": "1ed14056f806ca57e940bbd3361bb0d099eaecf6",
+          "recordedAt": "2026-11-12T10:38:33Z",
           "selected": 5,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1176-agent-comparisons-revalidation-1249-gate-placement.xml",
-            "sha256": "ab3c7ed6cb9765745bc69b58b19a36bce98bc661bc7e598fb18082bea50eadaa"
+            "path": "docs/research/pi-v1.3.0/deliveries/1176-agent-comparisons-revalidation-1249-suite-failures.xml",
+            "sha256": "3d470686f32ba57ddb41221f608723fa752ad14585b4dd8a9ee55f6e65e24174"
           }
         },
         "rows": [
@@ -14150,6 +14178,34 @@
             "junit": {
               "path": "docs/research/pi-v1.3.0/deliveries/1176-agent-comparisons-revalidation-test-tmp-root.xml",
               "sha256": "f00f81d5902378ece2d6f79edc8f757c93c833076eb292658989b57c3784ee6a"
+            }
+          }
+        },
+        "revalidation1249": {
+          "reason": "#1249 removes an over-specified timing from ToolCallExecutorTest.cpp (one of this receipt's pinned test inputs): the assertion now derives the executed call set from the tool state / synchronizes on both paced progress commits / snapshots the merged publication count when the settled-submission publication is observed, with no change to what the receipt claims. The exact recorded selection was rebuilt and rerun at the new base into a fresh JUnit artifact; all selected cases passed. Rows, comparison scenarios, discriminators and the routing digest are unchanged.",
+          "changedInputs": [
+            "tests/agent/ToolCallExecutorTest.cpp"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-R",
+              "^(reset restores the System Message baseline and clears queues while retaining live policy|run_tool_call executes successfully and records execute-only duration|run_tool_call returns error outcome for blocked tool call without executing|stateful Agent queue peek prefers steering and clear removes both queues|stateful Agent rejects a second prompt while its active run is suspended)$",
+              "--no-tests=error",
+              "--output-on-failure",
+              "-j",
+              "1",
+              "--output-junit",
+              "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1176-agent-comparisons-revalidation-1249-gate-placement.xml"
+            ],
+            "testedRevision": "49f2a3a7a908f87afca254880216b74e3ff0ea45",
+            "recordedAt": "2026-11-12T07:20:17Z",
+            "selected": 5,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1176-agent-comparisons-revalidation-1249-gate-placement.xml",
+              "sha256": "ab3c7ed6cb9765745bc69b58b19a36bce98bc661bc7e598fb18082bea50eadaa"
             }
           }
         }
@@ -16768,7 +16824,7 @@
           },
           {
             "path": "tests/durable/HarnessWorkflowTest.cpp",
-            "sha256": "746304d43e45145cd0bfef1006f920e1611edf73c798c99a601b7b2f3c0f5356"
+            "sha256": "e67b1f35ba44ae7577f94ee93bb19688653fcf35f80b46f991b026767b48c783"
           },
           {
             "path": "fixtures/pi-v1.3.0/audit-1203/ownership.json",
@@ -16821,16 +16877,16 @@
             "-L",
             "issue1203",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1234-wait.xml",
+            "docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1249-suite-failures.xml",
             "-j",
             "1"
           ],
-          "testedRevision": "bfe1a248d60d9f13ac9ed8f48a04d5dbcb9d4689",
-          "recordedAt": "2026-11-08T02:39:26Z",
+          "testedRevision": "1ed14056f806ca57e940bbd3361bb0d099eaecf6",
+          "recordedAt": "2026-11-12T10:38:33Z",
           "selected": 3,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1234-wait.xml",
-            "sha256": "35006e56b214c1fda61881083471eb1661c0ca7faa0ab5b82a0cc88899db9b8c"
+            "path": "docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1249-suite-failures.xml",
+            "sha256": "6135d0923c4ba0113e69858d66d0b8d45021baee3cbca0664b4a76dd839fb310"
           }
         },
         "revalidation1234Wait": {
@@ -17355,6 +17411,34 @@
           "changedInputs": [
             "tests/Catch2Main.cpp"
           ]
+        },
+        "revalidation1249": {
+          "reason": "#1249 removes an over-specified timing from HarnessWorkflowTest.cpp (one of this receipt's pinned test inputs): the assertion now derives the executed call set from the tool state / synchronizes on both paced progress commits / snapshots the merged publication count when the settled-submission publication is observed, with no change to what the receipt claims. The exact recorded selection was rebuilt and rerun at the new base into a fresh JUnit artifact; all selected cases passed. Rows, comparison scenarios, discriminators and the routing digest are unchanged.",
+          "changedInputs": [
+            "tests/durable/HarnessWorkflowTest.cpp"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-LE",
+              "architecture",
+              "-L",
+              "issue1203",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1234-wait.xml",
+              "-j",
+              "1"
+            ],
+            "testedRevision": "bfe1a248d60d9f13ac9ed8f48a04d5dbcb9d4689",
+            "recordedAt": "2026-11-08T02:39:26Z",
+            "selected": 3,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1234-wait.xml",
+              "sha256": "35006e56b214c1fda61881083471eb1661c0ca7faa0ab5b82a0cc88899db9b8c"
+            }
+          }
         }
       },
       {
