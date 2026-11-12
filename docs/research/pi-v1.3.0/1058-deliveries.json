@@ -10113,14 +10113,14 @@
      "-j",
      "1",
      "--output-junit",
-     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1182-tui-comparisons-revalidation-1249-posix.xml"
+     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1182-tui-comparisons-revalidation-1249-review.xml"
     ],
-    "testedRevision": "7ac7fb9ffbeb6f0ded6daf6339f9b61b5313d957",
-    "recordedAt": "2026-11-12T09:08:19Z",
+    "testedRevision": "4422ae2ea170ae603ea75c5b5ba7d2383768ee68",
+    "recordedAt": "2026-11-12T09:37:55Z",
     "selected": 13,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1182-tui-comparisons-revalidation-1249-posix.xml",
-     "sha256": "ad69d48338d781a25dc950d98a230726ad56250e8f8615d29fe5241b4cb5381c"
+     "path": "docs/research/pi-v1.3.0/deliveries/1182-tui-comparisons-revalidation-1249-review.xml",
+     "sha256": "d6792a500bd160d167e47936d385abb991c5ae6f8cb2ef7e60b5f9044f4a2d29"
     }
    },
    "rows": [
@@ -10335,7 +10335,7 @@
     },
     {
      "path": "tests/tui/SelectionEvidenceTest.cpp",
-     "sha256": "67e96828a4e561811cbc6a3c7a624dc4c1c7c71eda6f869f57e213a85f05932b"
+     "sha256": "ffd9005af5c665111abbef0bb82a8a9387310afc71d17efed4da9699a113f935"
     },
     {
      "path": "tests/evidence/TuiReconciliationTest.py",
@@ -10392,6 +10392,10 @@
     {
      "path": "docs/research/pi-v1.3.0/deliveries/1182-tui.xml",
      "sha256": "2486e5c35ad9cc05c87f426ed3425cb4e25ee60bdeecd4a0231b4f7e16bb37b7"
+    },
+    {
+     "path": "src/tui/WordNavigation.cpp",
+     "sha256": "ebf1d7de139750939ec3e3eef384af183ef188304e29122afcb2905a79519608"
     }
    ],
    "routingSha256": "0ef2caef4a2ec6ed84f61f0eec0c1672d488fe0f0ed01f23e280be5d7b08364c",
@@ -11276,6 +11280,35 @@
      "junit": {
       "path": "docs/research/pi-v1.3.0/deliveries/1182-tui-comparisons-revalidation-1249-gate-placement.xml",
       "sha256": "65d2b7b95af96085773fe30d7bc31ccd50f774fc5db8c3991b80c02ca35de0f6"
+     }
+    }
+   },
+   "revalidation1249Review": {
+    "reason": "Reran the same selection after isolating the POSIX regression in a child process; bind the shared word breaker affected by the POSIX correction. Frozen scenario mappings are unchanged.",
+    "changedInputs": [
+     "tests/tui/SelectionEvidenceTest.cpp",
+     "src/tui/WordNavigation.cpp"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-L",
+      "issue1182",
+      "--no-tests=error",
+      "--output-on-failure",
+      "-j",
+      "1",
+      "--output-junit",
+      "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1182-tui-comparisons-revalidation-1249-posix.xml"
+     ],
+     "testedRevision": "7ac7fb9ffbeb6f0ded6daf6339f9b61b5313d957",
+     "recordedAt": "2026-11-12T09:08:19Z",
+     "selected": 13,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1182-tui-comparisons-revalidation-1249-posix.xml",
+      "sha256": "ad69d48338d781a25dc950d98a230726ad56250e8f8615d29fe5241b4cb5381c"
      }
     }
    }
@@ -18130,7 +18163,7 @@
     },
     {
      "path": "tests/tui/SelectionEvidenceTest.cpp",
-     "sha256": "67e96828a4e561811cbc6a3c7a624dc4c1c7c71eda6f869f57e213a85f05932b"
+     "sha256": "ffd9005af5c665111abbef0bb82a8a9387310afc71d17efed4da9699a113f935"
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
@@ -18167,6 +18200,10 @@
     {
      "path": "fixtures/pi-v1.3.0/audit-1213/scroll-view.json",
      "sha256": "5840e6fcba45710e5cdc944afb5424868f93569c8a6ca3b395e1965419d9854e"
+    },
+    {
+     "path": "src/tui/WordNavigation.cpp",
+     "sha256": "ebf1d7de139750939ec3e3eef384af183ef188304e29122afcb2905a79519608"
     }
    ],
    "validation": {
@@ -18179,16 +18216,16 @@
      "-L",
      "issue1212",
      "--output-junit",
-     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1212-transcript-selection-revalidation-1249-posix.xml",
+     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1212-transcript-selection-revalidation-1249-review.xml",
      "-j",
      "1"
     ],
-    "testedRevision": "7ac7fb9ffbeb6f0ded6daf6339f9b61b5313d957",
-    "recordedAt": "2026-11-12T09:08:26Z",
+    "testedRevision": "4422ae2ea170ae603ea75c5b5ba7d2383768ee68",
+    "recordedAt": "2026-11-12T09:38:01Z",
     "selected": 29,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1212-transcript-selection-revalidation-1249-posix.xml",
-     "sha256": "4357adfaedc474cbda699f3928110a3ab2a1e65df3f56bccb9e5bdf5d11552f0"
+     "path": "docs/research/pi-v1.3.0/deliveries/1212-transcript-selection-revalidation-1249-review.xml",
+     "sha256": "a9335284fae3b5dfc51cf2334bea10c3977fe099cb80caa9175386d96cb5a21b"
     }
    },
    "rows": [
@@ -19303,6 +19340,35 @@
       "sha256": "887ed00f10e6a4499e7c6b4a7afb9d07bcdae3d7d24417a596d17d2cf15f85f4"
      }
     }
+   },
+   "revalidation1249Review": {
+    "reason": "Reran the same selection after isolating the POSIX regression in a child process; bind the shared word breaker affected by the POSIX correction. Frozen scenario mappings are unchanged.",
+    "changedInputs": [
+     "tests/tui/SelectionEvidenceTest.cpp",
+     "src/tui/WordNavigation.cpp"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-LE",
+      "architecture",
+      "-L",
+      "issue1212",
+      "--output-junit",
+      "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1212-transcript-selection-revalidation-1249-posix.xml",
+      "-j",
+      "1"
+     ],
+     "testedRevision": "7ac7fb9ffbeb6f0ded6daf6339f9b61b5313d957",
+     "recordedAt": "2026-11-12T09:08:26Z",
+     "selected": 29,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1212-transcript-selection-revalidation-1249-posix.xml",
+      "sha256": "4357adfaedc474cbda699f3928110a3ab2a1e65df3f56bccb9e5bdf5d11552f0"
+     }
+    }
    }
   },
   {
@@ -19361,7 +19427,7 @@
     },
     {
      "path": "tests/tui/SelectionEvidenceTest.cpp",
-     "sha256": "67e96828a4e561811cbc6a3c7a624dc4c1c7c71eda6f869f57e213a85f05932b"
+     "sha256": "ffd9005af5c665111abbef0bb82a8a9387310afc71d17efed4da9699a113f935"
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
@@ -19410,6 +19476,10 @@
     {
      "path": "fixtures/pi-v1.3.0/audit-1213/scroll-view.json",
      "sha256": "5840e6fcba45710e5cdc944afb5424868f93569c8a6ca3b395e1965419d9854e"
+    },
+    {
+     "path": "src/tui/WordNavigation.cpp",
+     "sha256": "ebf1d7de139750939ec3e3eef384af183ef188304e29122afcb2905a79519608"
     }
    ],
    "validation": {
@@ -19422,16 +19492,16 @@
      "-L",
      "issue1211",
      "--output-junit",
-     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1211-alt-screen-viewport-revalidation-1249-posix.xml",
+     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1211-alt-screen-viewport-revalidation-1249-review.xml",
      "-j",
      "1"
     ],
-    "testedRevision": "7ac7fb9ffbeb6f0ded6daf6339f9b61b5313d957",
-    "recordedAt": "2026-11-12T09:08:34Z",
+    "testedRevision": "4422ae2ea170ae603ea75c5b5ba7d2383768ee68",
+    "recordedAt": "2026-11-12T09:38:09Z",
     "selected": 34,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1211-alt-screen-viewport-revalidation-1249-posix.xml",
-     "sha256": "4bc4001911bc225d767c2c092083230beaf9313ed6d43e8b5e44e9a8c1f210f5"
+     "path": "docs/research/pi-v1.3.0/deliveries/1211-alt-screen-viewport-revalidation-1249-review.xml",
+     "sha256": "f3aa5e472723c175c91847460c47b34b0b3534f4afa84cfd1439c4c9e535cc4e"
     }
    },
    "rows": [
@@ -20902,6 +20972,35 @@
      "junit": {
       "path": "docs/research/pi-v1.3.0/deliveries/1211-alt-screen-viewport-revalidation-1244-capture.xml",
       "sha256": "095845ba6444a5a1c6c8e47ad2d7d3aaef507730a862467b28ae8b2f0b31d43e"
+     }
+    }
+   },
+   "revalidation1249Review": {
+    "reason": "Reran the same selection after isolating the POSIX regression in a child process; bind the shared word breaker affected by the POSIX correction. Frozen scenario mappings are unchanged.",
+    "changedInputs": [
+     "tests/tui/SelectionEvidenceTest.cpp",
+     "src/tui/WordNavigation.cpp"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-LE",
+      "architecture",
+      "-L",
+      "issue1211",
+      "--output-junit",
+      "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1211-alt-screen-viewport-revalidation-1249-posix.xml",
+      "-j",
+      "1"
+     ],
+     "testedRevision": "7ac7fb9ffbeb6f0ded6daf6339f9b61b5313d957",
+     "recordedAt": "2026-11-12T09:08:34Z",
+     "selected": 34,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1211-alt-screen-viewport-revalidation-1249-posix.xml",
+      "sha256": "4bc4001911bc225d767c2c092083230beaf9313ed6d43e8b5e44e9a8c1f210f5"
      }
     }
    }
