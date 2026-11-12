@@ -30,4 +30,3 @@ include_guard(GLOBAL)
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/agent/RealtimeJumpTest.py
                 $<TARGET_FILE:cch_tests_agent> ${CMAKE_CXX_COMPILER})
     set_tests_properties(cch_agent_realtime_jump PROPERTIES LABELS "agent;issue1106;spec" TIMEOUT 30)
-    add_dependencies(cch_tests_agent ${CCH_PARITY_BUILD_GATE_TARGET})

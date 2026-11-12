@@ -22,7 +22,11 @@ After bootstrap, configure, build, and test with CMake directly:
 
   cmake --preset vcpkg --fresh     # Fresh Validation configure
   cmake --build --preset vcpkg
+  cmake --build --preset vcpkg --target cch_parity_gate_build   # build-phase Gate
   ctest --preset vcpkg
+
+The Gate runs as its own build invocation, after the build it validates
+(docs/agents/validation.md, issue #1249).
 
 (export VCPKG_ROOT=<vcpkg root> is only required when using a custom checkout outside .deps/vcpkg)
 Use the vcpkg-release preset for the Release configuration.
@@ -34,9 +38,11 @@ removed_option() {
 	echo "run CMake/CTest directly instead, for example:" >&2
 	echo "  export VCPKG_ROOT=<vcpkg root>" >&2
 	if [[ "$1" == "--release" ]]; then
-		echo "  cmake --preset vcpkg-release --fresh && cmake --build --preset vcpkg-release && ctest --preset vcpkg-release" >&2
+		echo "  cmake --preset vcpkg-release --fresh && cmake --build --preset vcpkg-release \\" >&2
+		echo "    && cmake --build --preset vcpkg-release --target cch_parity_gate_build && ctest --preset vcpkg-release" >&2
 	else
-		echo "  cmake --preset vcpkg --fresh && cmake --build --preset vcpkg && ctest --preset vcpkg" >&2
+		echo "  cmake --preset vcpkg --fresh && cmake --build --preset vcpkg \\" >&2
+		echo "    && cmake --build --preset vcpkg --target cch_parity_gate_build && ctest --preset vcpkg" >&2
 	fi
 	exit 2
 }
@@ -263,6 +269,7 @@ Bootstrap complete. Configure, build, and test with CMake directly:
 
   cmake --preset vcpkg --fresh
   cmake --build --preset vcpkg
+  cmake --build --preset vcpkg --target cch_parity_gate_build
   ctest --preset vcpkg
 
 Use the vcpkg-release preset for the Release configuration.

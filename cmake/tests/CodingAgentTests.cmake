@@ -34,7 +34,6 @@ include_guard(GLOBAL)
 )
     target_compile_options(cch_tests_harness_tools PRIVATE ${CCH_WARNING_OPTIONS})
     catch_discover_tests(cch_tests_harness_tools ADD_TAGS_AS_LABELS)
-    add_dependencies(cch_tests_harness_tools ${CCH_PARITY_BUILD_GATE_TARGET})
 
     # coding-agent composition (Session, Runtime, Models Runtime)
     add_executable(cch_tests_coding_agent
@@ -162,7 +161,6 @@ include_guard(GLOBAL)
 )
     target_compile_options(cch_tests_coding_agent PRIVATE ${CCH_WARNING_OPTIONS})
     catch_discover_tests(cch_tests_coding_agent ADD_TAGS_AS_LABELS)
-    add_dependencies(cch_tests_coding_agent ${CCH_PARITY_BUILD_GATE_TARGET})
 
     # coding-agent interactive TUI composition. BootTrustInteractiveTest
     # drives the in-process CLI seam (CliRunFixture) through the independent
@@ -257,4 +255,3 @@ include_guard(GLOBAL)
     catch_discover_tests(cch_tests_coding_agent_interactive ADD_TAGS_AS_LABELS
         TEST_SPEC "E2E: *"
         PROPERTIES RESOURCE_LOCK "cch-interactive-boot-e2e-workspace")
-    add_dependencies(cch_tests_coding_agent_interactive ${CCH_PARITY_BUILD_GATE_TARGET})

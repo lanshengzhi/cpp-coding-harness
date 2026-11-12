@@ -423,24 +423,30 @@ function(cch_parity_run_gate manifest_path)
 endfunction()
 
 # Wires the build-phase Parity Architecture Gate into the build graph (ADR
-# 0039; issue #470). Creates the `cch_parity_gate_build` custom target, a
-# member of `all`, that depends on every declared production target so its
-# command runs after all production compilation has produced fresh depfiles;
-# the command records the active dependency (depfile) evidence and validates
-# manifest, index, direct-include, compile-command, and depfile evidence at
-# the build phase, failing the build on any rejection.
+# 0039; issues #470, #1249). Creates the `cch_parity_gate_build` custom target,
+# which depends on every declared production target so its command runs only
+# after production compilation has produced fresh depfiles. The command records
+# the active dependency (depfile) evidence and validates manifest, index,
+# direct-include, compile-command, and depfile evidence at the build phase,
+# failing on any rejection.
 #
-# The composition target is ordered after all other production targets through
-# a build-only barrier. Its POST_BUILD Gate therefore reads stable production
-# depfile evidence, while the ownership graph remains based on declared link
-# dependencies. Test executables additionally depend on
-# ${CCH_PARITY_BUILD_GATE_TARGET} so CTest entry points require fresh
-# successful Gate evidence. EXTERNAL_INCLUDE_ROOTS names external dependency
-# include roots that are never project paths. The target name is published as
-# the CACHE INTERNAL variable CCH_PARITY_BUILD_GATE_TARGET.
+# The target is deliberately not a member of `all`, and nothing depends on it.
+# The Gate records `.ninja_deps` and re-hashes it while validating, and Ninja
+# appends to that log as every edge finishes, so a Gate edge scheduled inside a
+# build that still has compiling edges ahead of it rejects its own evidence
+# with PARITY-6002 (#1162, #1249). Running the target in a build invocation of
+# its own makes "the build is idle" structural rather than emergent: Ninja
+# first brings the production closure up to date and then runs the only
+# remaining edge. Callers that must gate a build chain it after the build, not
+# into it: `cmake --build <build dir> --target cch_parity_gate_build`. The
+# install gate and the `cch_parity_gate_production_build` CTest case run the
+# same record and validate cycle and keep their own enforcement.
+# EXTERNAL_INCLUDE_ROOTS names external dependency include roots that are never
+# project paths. The target keeps its literal name `cch_parity_gate_build`; no
+# cache variable republishes it, because no other build target consumes it.
 function(cch_parity_add_build_gate manifest_path)
     set(options "")
-    set(one_value_keywords PROJECT_ROOT BUILD_DIR STRICT_NO_EXCEPTIONS COMPOSITION_TARGET)
+    set(one_value_keywords PROJECT_ROOT BUILD_DIR STRICT_NO_EXCEPTIONS)
     set(multi_value_keywords EXTERNAL_INCLUDE_ROOTS)
     cmake_parse_arguments(gate "${options}" "${one_value_keywords}" "${multi_value_keywords}" ${ARGN})
 
@@ -458,35 +464,8 @@ function(cch_parity_add_build_gate manifest_path)
             "every cch_parity_declare_target")
     endif()
 
-    if(gate_COMPOSITION_TARGET)
-        if(NOT gate_COMPOSITION_TARGET IN_LIST production_targets OR
-           NOT TARGET "${gate_COMPOSITION_TARGET}")
-            message(FATAL_ERROR
-                "cch_parity_add_build_gate: composition target '${gate_COMPOSITION_TARGET}' "
-                "must be a declared production target")
-        endif()
-        set(production_barrier_target "cch_parity_production_ready")
-        set(production_gate_inputs "${production_targets}")
-        list(REMOVE_ITEM production_gate_inputs "${gate_COMPOSITION_TARGET}")
-        add_custom_target(${production_barrier_target})
-        if(production_gate_inputs)
-            add_dependencies(${production_barrier_target} ${production_gate_inputs})
-        endif()
-        add_dependencies(${gate_COMPOSITION_TARGET} ${production_barrier_target})
-    endif()
-
     set(build_gate_target "cch_parity_gate_build")
-    set(CCH_PARITY_BUILD_GATE_TARGET "${build_gate_target}" CACHE INTERNAL
-        "Target that runs the build-phase Parity Architecture Gate")
-    set(CCH_PARITY_BUILD_GATE_MANIFEST "${manifest_path}" CACHE INTERNAL
-        "Strict Parity Architecture Manifest path used by the build-phase Gate")
-    set(CCH_PARITY_BUILD_GATE_PROJECT_ROOT "${gate_PROJECT_ROOT}" CACHE INTERNAL
-        "Project root used by the build-phase Gate")
-    set(CCH_PARITY_BUILD_GATE_EXTERNAL_ROOTS "${gate_EXTERNAL_INCLUDE_ROOTS}" CACHE INTERNAL
-        "External dependency include roots used by the build-phase Gate")
-    set(CCH_PARITY_BUILD_GATE_STRICT_NO_EXCEPTIONS "${gate_STRICT_NO_EXCEPTIONS}" CACHE INTERNAL
-        "Whether the build-phase Gate enforces the strict no-exception policy")
-    add_custom_target(${build_gate_target} ALL
+    add_custom_target(${build_gate_target}
         COMMAND
             "${CMAKE_COMMAND}"
             -DCCH_PARITY_GATE_SCRIPT=${CCH_PARITY_GATE_SCRIPT}
@@ -503,48 +482,6 @@ function(cch_parity_add_build_gate manifest_path)
             -P ${CCH_PARITY_DIR}/run-build-gate.cmake
         DEPENDS ${production_targets}
         COMMENT "Parity Architecture Gate (build phase)"
-        VERBATIM
-    )
-
-    set(CCH_PARITY_BUILD_GATE_SCRIPT ${CCH_PARITY_DIR}/run-build-gate.cmake CACHE INTERNAL
-        "CMake script that runs the build-phase Parity Architecture Gate")
-    set(CCH_PARITY_BUILD_GATE_REPORT ${gate_BUILD_DIR}/parity-build-gate.json CACHE INTERNAL
-        "Path to the machine-readable build-phase Gate report")
-endfunction()
-
-# Attaches the build-phase Parity Architecture Gate as a POST_BUILD step of a
-# production target. Used on the final composition executable so that a direct
-# `--target pike` production-target build still requires fresh
-# successful Gate evidence: by the time the composition target's POST_BUILD
-# runs, every production source (including its own entry point) has compiled
-# and produced a fresh depfile, so the same evidence set is available that the
-# `cch_parity_gate_build` target validates on an `all` build.
-function(cch_parity_attach_build_gate_post_build target_name)
-    if(NOT TARGET ${target_name})
-        message(FATAL_ERROR
-            "cch_parity_attach_build_gate_post_build: unknown target '${target_name}'")
-    endif()
-    if(NOT DEFINED CCH_PARITY_BUILD_GATE_SCRIPT OR NOT DEFINED CCH_PARITY_BUILD_GATE_REPORT OR
-       NOT DEFINED CCH_PARITY_BUILD_GATE_MANIFEST)
-        message(FATAL_ERROR
-            "cch_parity_attach_build_gate_post_build: call cch_parity_add_build_gate() first")
-    endif()
-
-    add_custom_command(TARGET ${target_name} POST_BUILD
-        COMMAND
-            "${CMAKE_COMMAND}"
-            -DCCH_PARITY_GATE_SCRIPT=${CCH_PARITY_GATE_SCRIPT}
-            -DCCH_PARITY_MANIFEST=${CCH_PARITY_BUILD_GATE_MANIFEST}
-            -DCCH_PARITY_INDEX=${CMAKE_BINARY_DIR}/parity-ownership-index.json
-            -DCCH_PARITY_DIRECT_INCLUDES=${CMAKE_BINARY_DIR}/parity-direct-includes.json
-            -DCCH_PARITY_COMPILE_COMMANDS=${CMAKE_BINARY_DIR}/compile_commands.json
-            -DCCH_PARITY_PROJECT_ROOT=${CCH_PARITY_BUILD_GATE_PROJECT_ROOT}
-            -DCCH_PARITY_DEPFILES=${CMAKE_BINARY_DIR}/parity-build-gate-depfiles.json
-            -DCCH_PARITY_REPORT=${CCH_PARITY_BUILD_GATE_REPORT}
-            -DCCH_PARITY_NINJA_DEPS=${CMAKE_BINARY_DIR}/.ninja_deps
-            $<$<BOOL:${CCH_PARITY_BUILD_GATE_EXTERNAL_ROOTS}>:-DCCH_PARITY_EXTERNAL_INCLUDE_ROOTS=${CCH_PARITY_BUILD_GATE_EXTERNAL_ROOTS}>
-            -DCCH_PARITY_STRICT_NO_EXCEPTIONS=${CCH_PARITY_BUILD_GATE_STRICT_NO_EXCEPTIONS}
-            -P ${CCH_PARITY_BUILD_GATE_SCRIPT}
         VERBATIM
     )
 endfunction()

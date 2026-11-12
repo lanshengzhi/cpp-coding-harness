@@ -145,3 +145,30 @@ fail-closed contract is unchanged: the guest is installed after the gate, and a 
 fails configure rather than installing a Runtime that cannot run codemode. The staged-install test's
 exact-file list (`tests/cli/InstallRelocationTest.cpp`) records the new file so any further leak of
 development surface still fails the check.
+
+## Addendum: the build-phase Gate runs in its own build invocation (Issue #1249)
+
+The build-phase Gate's depfile evidence is sourced from `.ninja_deps` (#551 above), and its freshness
+check is "the deps log did not change between recording and validating" (`PARITY-6002`). Ninja appends
+to that log as each edge finishes, so a Gate scheduled *inside* a build with compiling edges still
+ahead of it rejects its own evidence: it recorded a log that the same build then rewrote. The
+composition executable's `POST_BUILD` step and the `all`-member gate target both had that shape — a
+648-edge build ran the Gate at edge 290 and kept compiling 357 more edges (#1162, #1249).
+
+The rule contract is unchanged, and so is `PARITY-6002`: a deps log that changed between the two reads
+is still rejected. What changes is when the Gate runs.
+
+1. `cch_parity_gate_build` is no longer a member of `all`, and no target depends on it. No build edge
+   can schedule the Gate next to compilation.
+2. Callers that gate a build chain it after the build, in its own invocation:
+   `cmake --build --preset <preset> --target cch_parity_gate_build`. Its dependencies bring the
+   production closure up to date first, so the Gate is the only remaining edge — "Ninja is idle" is
+   structural rather than a timing win.
+3. The install gate and the `cch_parity_gate_production_build` CTest case are unchanged; both already
+   run the record-and-validate cycle outside a build.
+4. The Gate is not relaxed: a changed or missing deps log or depfile still fails closed with
+   `PARITY-6002`, which the build-phase Gate's CTest coverage continues to exercise.
+
+The ordering barrier that existed only to make the composition executable's `POST_BUILD` step read
+stable depfiles is removed with that step; ordering stays in the explicit link graph and in the gate
+target's dependencies.

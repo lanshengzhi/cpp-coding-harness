@@ -32,7 +32,9 @@ During implementation, run the smallest focused test that can fail: build the ow
 
 Configure presets resolve a vcpkg checkout pinned to `vcpkg.json`'s builtin-baseline via `VCPKG_ROOT`, falling back to `.deps/vcpkg` in the current worktree or the primary Git worktree (`cmake/vcpkg-toolchain.cmake`). If `build/` is not configured, configure once with `cmake --preset vcpkg` first.
 
-**Include evidence (`PARITY-4011`).** The build phase re-derives each declared source's include directives and compares them with the recorded scan, so a changed include set needs a reconfigure (`cmake --preset <preset>`) before the Gate passes. A comment or body edit does not. Because every test shard depends on the build-phase Gate and `pike`'s `POST_BUILD` runs it, a `PARITY-4011` failure stops the build before the test binary relinks—chain build and test with `&&`, never `;`.
+**Include evidence (`PARITY-4011`).** The build phase re-derives each declared source's include directives and compares them with the recorded scan, so a changed include set needs a reconfigure (`cmake --preset <preset>`) before the Gate passes. A comment or body edit does not. A `PARITY-4011` failure stops the Gate step, never the compile, so chain the Gate before the tests with `&&`, never `;` — a stale include scan must not be followed by a green test run.
+
+**Build-phase Gate.** `cch_parity_gate_build` runs the build-phase Parity Architecture Gate as a separate build invocation, after the build it gates: `cmake --build --preset <preset> --target cch_parity_gate_build`. It is deliberately outside `all` and nothing depends on it. The Gate records `.ninja_deps` and re-hashes that log while validating, and Ninja keeps appending to it until its last edge finishes, so a Gate scheduled inside a build rejects its own evidence with `PARITY-6002` (#1162, #1249). A separate invocation makes "Ninja is idle" structural: the production closure is brought up to date first and the Gate is the only remaining edge. `ctest`'s `cch_parity_gate_production_build` case and `cmake --install`'s install gate run the same record-and-validate cycle and keep their own enforcement.
 
 The build-phase Parity Architecture Gate sources active transitive-conformance depfile evidence directly from `.ninja_deps` (schema version 2; issue #551, ADR 0039 addendum). CMake C++ module scanning is disabled globally (`CMAKE_CXX_SCAN_FOR_MODULES OFF`), keeping every translation unit cacheable under ccache across all presets.
 
@@ -40,7 +42,8 @@ The build-phase Parity Architecture Gate sources active transitive-conformance d
 cmake --build --preset vcpkg --target cch_tests_coding_agent   # owning shard
 ctest --preset vcpkg -LE architecture -R 'session assembly'    # focused name
 ctest --preset vcpkg -LE architecture -L coding_agent          # owning module label
-cmake --build --preset vcpkg && ctest --preset vcpkg -LE architecture   # suite minus the architecture label
+cmake --build --preset vcpkg && cmake --build --preset vcpkg --target cch_parity_gate_build \
+    && ctest --preset vcpkg -LE architecture                   # suite minus the architecture label
 ```
 
 Routine builds and CI share a four-job ceiling (`CMakePresets.json` `jobs: 4`; two concurrent lanes at `-j2`, or four at `-j1`). A cold-build benchmark may pass a higher `--jobs` value to `scripts/benchmark-build.sh` when it is the only code build on the host; keep the checked-in presets and CI at four jobs. Benchmark results record the CPU and available memory. See the historical measurement record in [build-performance-baseline.md](../build-performance-baseline.md).
@@ -53,6 +56,7 @@ Run Full Validation once before code delivery on the default Debug preset, as re
 
 ```bash
 cmake --build --preset vcpkg
+cmake --build --preset vcpkg --target cch_parity_gate_build
 ctest --preset vcpkg
 ```
 
@@ -128,9 +132,10 @@ Because strict mode is the default, the Fresh Validation loop and every supporte
 configurations are the normal GCC 16 Debug and Release builds, the Clang 22
 Debug conformance build, and the ASan/UBSan and TSan Debug configurations,
 each with the same pinned vcpkg toolchain: every configure runs the Parity
-Architecture Gate fail-closed with strict evidence, every normal build runs
-the build-phase Gate, and the full offline CTest suite runs the no-exception
-target graph. Do not use live provider credentials or network access.
+Architecture Gate fail-closed with strict evidence, every normal build is
+followed by the build-phase Gate target, and the full offline CTest suite runs
+the no-exception target graph. Do not use live provider credentials or network
+access.
 
 ## Release qualification (CI)
 

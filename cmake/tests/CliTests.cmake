@@ -66,4 +66,3 @@ include_guard(GLOBAL)
     catch_discover_tests(cch_tests_cli_arch ADD_TAGS_AS_LABELS
         TEST_SPEC "staged install*"
         PROPERTIES RESOURCE_LOCK "cch-parity-build-gate-evidence")
-    add_dependencies(cch_tests_cli_arch ${CCH_PARITY_BUILD_GATE_TARGET})

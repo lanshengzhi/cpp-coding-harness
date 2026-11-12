@@ -61,7 +61,5 @@ include_guard(GLOBAL)
         -fno-exceptions
     )
     catch_discover_tests(cch_tests_support_async_bridge ADD_TAGS_AS_LABELS)
-    add_dependencies(cch_tests_support_async_bridge ${CCH_PARITY_BUILD_GATE_TARGET})
     # Every test entry point requires fresh successful build-phase Gate evidence
     # (ADR 0039; #470): the shard builds the Gate after all production targets.
-    add_dependencies(cch_tests_support ${CCH_PARITY_BUILD_GATE_TARGET})

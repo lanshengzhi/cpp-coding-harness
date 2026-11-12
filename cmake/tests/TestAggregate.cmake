@@ -3,7 +3,10 @@ include_guard(GLOBAL)
 # Orchestration include: top-level CMakeLists.txt only (relies on CMAKE_CURRENT_SOURCE_DIR = repo root).
 
     # Aggregate target that builds every shard; a build convenience, not a
-    # scheduling authority (issue #447; CODING_STANDARDS.md section 11.6).
+    # scheduling authority (issue #447; CODING_STANDARDS.md section 11.6). It
+    # deliberately does not pull in the build-phase Gate: that Gate records and
+    # re-hashes `.ninja_deps`, which Ninja writes until the last edge finishes,
+    # so it runs in a build invocation of its own (#1162, #1249).
     add_custom_target(pike_tests
         DEPENDS
             cch_tests_support
@@ -19,7 +22,6 @@ include_guard(GLOBAL)
             cch_tests_coding_agent
             cch_tests_coding_agent_interactive
             cch_tests_cli_arch
-            ${CCH_PARITY_BUILD_GATE_TARGET}
     )
 
     # Catch discovery appends its generated test includes as each shard is

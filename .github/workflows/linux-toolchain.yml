@@ -271,6 +271,17 @@ jobs:
       - name: Build
         run: cmake --build --preset "${{ matrix.preset }}"
 
+      # Build-phase Parity Architecture Gate (ADR 0039; issue #1249). It runs as
+      # its own build invocation because the Gate records and re-hashes
+      # `.ninja_deps` while validating, and Ninja keeps appending to that log
+      # until the last edge of a build finishes: inside the Build step above the
+      # Gate rejected its own evidence with PARITY-6002 (#1162). Here nothing is
+      # left to compile, so the recorded evidence is the one this build
+      # produced. It runs before any test so a rejected graph stops the lane
+      # early, exactly as the old POST_BUILD placement intended.
+      - name: Run the build-phase Gate
+        run: cmake --build --preset "${{ matrix.preset }}" --target cch_parity_gate_build
+
       - name: Show compiler cache statistics
         # Acceptance evidence (issue #744): a warm run reports a high hit
         # rate here and a materially shorter Build step above.
@@ -462,6 +473,12 @@ jobs:
       - name: Build
         run: cmake --build --preset vcpkg-release-artifact
 
+      # Build-phase Gate in its own invocation (issue #1249); see the
+      # build-and-test job for the `.ninja_deps` reason. It runs before the
+      # evidence collection below, which copies the report this step writes.
+      - name: Run the build-phase Gate
+        run: cmake --build --preset vcpkg-release-artifact --target cch_parity_gate_build
+
       - name: Show compiler cache statistics
         # Acceptance evidence (issue #744): a warm run reports a high hit
         # rate here and a materially shorter Build step above.
@@ -643,6 +660,11 @@ jobs:
 
       - name: Build
         run: cmake --build --preset vcpkg
+
+      # Build-phase Gate in its own invocation (issue #1249); see the
+      # build-and-test job for the `.ninja_deps` reason.
+      - name: Run the build-phase Gate
+        run: cmake --build --preset vcpkg --target cch_parity_gate_build
 
       - name: Show compiler cache statistics
         # Acceptance evidence (issue #744): a warm run reports a high hit

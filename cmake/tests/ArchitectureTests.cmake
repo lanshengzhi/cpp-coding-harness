@@ -82,9 +82,10 @@ include_guard(GLOBAL)
     # (manifest, index, direct-include evidence, compile commands, and fresh
     # depfile evidence) and assert it passes. This proves the production
     # repository satisfies every manifest rule after package contraction and
-    # that the deterministic machine-readable report is written. It runs after
-    # the build has produced fresh depfiles; the build-phase Gate custom
-    # target is already a prerequisite of every test shard.
+    # that the deterministic machine-readable report is written. It is the
+    # CTest entry point's enforcement of the build-phase Gate (#1249); the
+    # `cch_parity_gate_build` target runs the same cycle for callers that gate
+    # a build; Ninja is idle during both.
     add_test(
         NAME cch_parity_gate_production_build
         COMMAND

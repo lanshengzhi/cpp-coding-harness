@@ -76,6 +76,12 @@ jobs:
       - name: Build
         run: cmake --build --preset vcpkg
 
+      # Drift detection must report the Gate contract it claims to cover, so it
+      # runs the build-phase Gate in its own invocation too (issue #1249; see
+      # linux-toolchain.yml for the `.ninja_deps` race it avoids).
+      - name: Run the build-phase Gate
+        run: cmake --build --preset vcpkg --target cch_parity_gate_build
+
       - name: Run offline tests
         env:
           KIMI_API_KEY: ""

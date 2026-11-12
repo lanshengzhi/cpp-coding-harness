@@ -62,7 +62,6 @@ include_guard(GLOBAL)
 )
     target_compile_options(cch_tests_ai PRIVATE ${CCH_WARNING_OPTIONS})
     catch_discover_tests(cch_tests_ai ADD_TAGS_AS_LABELS)
-    add_dependencies(cch_tests_ai ${CCH_PARITY_BUILD_GATE_TARGET})
 
     # The private Boost.Asio ModelStream bridge carries exception-shaped
     # detail in the strict policy (ADR 0042): this no-exception test target
@@ -88,4 +87,3 @@ include_guard(GLOBAL)
         -fno-exceptions
     )
     catch_discover_tests(cch_tests_ai_async_bridge ADD_TAGS_AS_LABELS)
-    add_dependencies(cch_tests_ai_async_bridge ${CCH_PARITY_BUILD_GATE_TARGET})

@@ -1,11 +1,18 @@
 # Build-phase Parity Architecture Gate runner (ADR 0039; issue #470).
 #
-# Invoked by the `cch_parity_gate_build` custom target, by the composition
-# executable's POST_BUILD step, and by the production build-gate CTest case.
-# It records the active dependency (depfile) evidence from the generated
-# compile commands and validates the full evidence set against the strict
-# manifest at the build phase; a rejected graph fails the invoking build or
-# test with a deterministic machine-readable report.
+# Invoked by the `cch_parity_gate_build` custom target, by `cmake --install`'s
+# install gate, and by the production build-gate CTest case. It records the
+# active dependency (depfile) evidence from the generated compile commands and
+# validates the full evidence set against the strict manifest at the build
+# phase; a rejected graph fails the invoking build, install, or test with a
+# deterministic machine-readable report.
+#
+# The recording and the validating read of `.ninja_deps` must happen while no
+# build writes it: Ninja appends to the log as each edge finishes, so a caller
+# that runs this script inside a build with compiling edges still ahead of it
+# observes its own evidence change and fails with PARITY-6002 (#1162, #1249).
+# `cch_parity_gate_build` is therefore outside `all` and runs in its own build
+# invocation; the install gate and the CTest case run with Ninja idle.
 #
 # Required -D variables:
 #   CCH_PARITY_GATE_SCRIPT       path to cmake/parity/parity_gate.py

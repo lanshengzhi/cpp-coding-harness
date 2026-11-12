@@ -28,19 +28,18 @@ cch_parity_run_gate(
 )
 
 # Mandatory build-phase Parity Architecture Gate (ADR 0039; issue #470). The
-# `cch_parity_gate_build` target is a member of `all` and depends on every
-# declared production target. A build-only barrier orders the composition
-# executable after all other production targets, so its POST_BUILD Gate runs
-# with stable `.ninja_deps` evidence. The declared ownership graph remains
-# based on the explicit link dependencies. Test executables depend on
-# ${CCH_PARITY_BUILD_GATE_TARGET} so every CTest entry point requires fresh
-# successful Gate evidence.
+# `cch_parity_gate_build` target depends on every declared production target
+# and is deliberately outside `all`: the Gate records and re-hashes
+# `.ninja_deps`, which Ninja writes as edges finish, so it must run in a build
+# invocation where nothing is left to compile (#1162, #1249). Build callers
+# chain it after the build — `cmake --build --preset <preset> --target
+# cch_parity_gate_build` — and the install gate plus the
+# `cch_parity_gate_production_build` CTest case keep their own enforcement.
+# The declared ownership graph remains based on the explicit link dependencies.
 cch_parity_add_build_gate(
     "${CMAKE_CURRENT_SOURCE_DIR}/cmake/parity/manifest.json"
     PROJECT_ROOT "${CMAKE_CURRENT_SOURCE_DIR}"
     BUILD_DIR "${CMAKE_BINARY_DIR}"
-    COMPOSITION_TARGET pike
     EXTERNAL_INCLUDE_ROOTS ${CCH_PARITY_EXTERNAL_INCLUDE_ROOTS}
     STRICT_NO_EXCEPTIONS ${CCH_STRICT_NO_EXCEPTIONS}
 )
-cch_parity_attach_build_gate_post_build(pike)

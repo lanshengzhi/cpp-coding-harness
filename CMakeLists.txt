@@ -25,7 +25,7 @@ include(cmake/targets/Mcp.cmake)
 include(cmake/targets/CodingAgent.cmake)
 include(cmake/targets/Runtime.cmake)    # pike Runtime executable
 
-include(cmake/ParityGate.cmake)         # configure/build Gate and post-build attachment
+include(cmake/ParityGate.cmake)         # configure Gate plus the post-build cch_parity_gate_build target
 include(cmake/RuntimeInstall.cmake)     # existing Runtime-only install rules
 cch_runtime_collect_licenses(CCH_RUNTIME_LICENSE_FILES)
 cch_runtime_install_rules(
