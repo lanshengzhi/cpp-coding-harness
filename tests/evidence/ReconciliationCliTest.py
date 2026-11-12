@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Public CLI checks with a fixed ledger and a fake GitHub boundary."""
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -13,6 +14,14 @@ CLI = ROOT / 'scripts/evidence/reconcile_1058.py'
 
 
 class ReconciliationCliTest(unittest.TestCase):
+    # Frozen candidate snapshot (#1249): the exact bytes `git show
+    # a4df1a115:docs/research/pi-v1.3.0/1058-consolidated-capability-ledger.json`
+    # produced. The CI checkout uses fetch-depth: 1, so that object is absent
+    # there and the comparison below cannot read it from repository history.
+    HISTORICAL_LEDGER = (ROOT / 'fixtures/pi-v1.3.0/reconciliation-1183'
+                         / '1058-consolidated-capability-ledger-at-a4df1a115.json')
+    HISTORICAL_LEDGER_BLOB = 'b55037071e21c0ee470dee05a23af1fd31fd0402'
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
@@ -124,10 +133,13 @@ print(json.dumps({'data': {'repository': {'issue': issue}}}))
         self.assertIn('missing successor source', result.stderr)
 
     def test_candidate_snapshot_compares_each_group(self):
-        ledger_path = 'docs/research/pi-v1.3.0/1058-consolidated-capability-ledger.json'
-        candidate = subprocess.run(['git', 'show', 'a4df1a115:' + ledger_path], cwd=ROOT,
-                                   text=True, capture_output=True, check=True)
-        self.historical.write_text(candidate.stdout)
+        candidate = self.HISTORICAL_LEDGER.read_bytes()
+        # The fixture is the frozen git object, not a re-serialized copy: the
+        # assertion below fails if the bytes drift from blob b550370.
+        blob = hashlib.sha1(b'blob %d\0' % len(candidate) + candidate).hexdigest()
+        self.assertEqual(blob, self.HISTORICAL_LEDGER_BLOB,
+                         'the frozen ledger fixture is not the a4df1a115 blob')
+        self.historical.write_bytes(candidate)
         result = self.run_cli()
         self.assertEqual(result.returncode, 0, result.stderr)
         historical = json.loads(result.stdout)['historical_group_table']
