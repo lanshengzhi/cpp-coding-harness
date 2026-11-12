@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="(empty)"
+	tests="5"
+	failures="0"
+	disabled="0"
+	skipped="0"
+	hostname=""
+	time="4"
+	timestamp="2026-11-12T16:18:35"
+	>
+	<testcase name="a public codemode caller executes a script against an injected nested tool" classname="a public codemode caller executes a script against an injected nested tool" time="1.17998" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;issue1064;sandbox;spec"/>
+		</properties>
+		<system-out>Filters: "a public codemode caller executes a script against an injected nested tool"
+Randomness seeded to: 3911823056
+===============================================================================
+All tests passed (11 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a public codemode caller keeps prior output when an injected tool rejects" classname="a public codemode caller keeps prior output when an injected tool rejects" time="1.17027" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;issue1064;sandbox;spec"/>
+		</properties>
+		<system-out>Filters: "a public codemode caller keeps prior output when an injected tool rejects"
+Randomness seeded to: 1956308395
+===============================================================================
+All tests passed (7 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="closing codemode settles the run before its worker exit releases admission" classname="closing codemode settles the run before its worker exit releases admission" time="1.14526" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;issue1096;spec;worker"/>
+		</properties>
+		<system-out>Filters: "closing codemode settles the run before its worker exit releases admission"
+Randomness seeded to: 4184309086
+===============================================================================
+All tests passed (14 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="the public codemode start rejects a later run after close with the frozen spelling" classname="the public codemode start rejects a later run after close with the frozen spelling" time="0.0369344" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;issue1192;spec;tool-table"/>
+		</properties>
+		<system-out>Filters: "the public codemode start rejects a later run after close with the frozen spelling"
+Randomness seeded to: 2287887164
+===============================================================================
+All tests passed (5 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="the public codemode tool table registers lists and unregisters with the frozen messages" classname="the public codemode tool table registers lists and unregisters with the frozen messages" time="1.13052" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;issue1192;spec;tool-table"/>
+		</properties>
+		<system-out>Filters: "the public codemode tool table registers lists and unregisters with the frozen messages"
+Randomness seeded to: 3624408915
+===============================================================================
+All tests passed (18 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+</testsuite>

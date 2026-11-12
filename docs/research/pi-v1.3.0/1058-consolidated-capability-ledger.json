@@ -44,7 +44,7 @@
         "inputs": [
           {
             "path": "CMakeLists.txt",
-            "sha256": "bf9f18286f7f73f6a208690978ab0888ba5699c663281da97f40277f66ae6bbe"
+            "sha256": "188aa2efb51c78bfb81dcd9abd80b004ec8444357bee12613916f511e58a65d0"
           },
           {
             "path": "CMakePresets.json",
@@ -72,11 +72,11 @@
           },
           {
             "path": "cmake/tests/McpTests.cmake",
-            "sha256": "ee04ce20f26bf81af1ef236c5e1bf92a9715a49c7049a2597a398f41f090a148"
+            "sha256": "51b19ceae41ad3464fc9926038fa3f97bbff441ec70479439b2566f0b65a14c7"
           },
           {
             "path": "cmake/tests/CodingAgentTests.cmake",
-            "sha256": "4abc90bb29a45ebb81b4d1966659a0b278eb225d2febbfcde79090de1a13c88c"
+            "sha256": "2bd7e22b4902bc7f0c9bb01ed815dcb5ac62830572678dd6e2a72c4a1d12c2d5"
           },
           {
             "path": "src/mcp/Client.cpp",
@@ -263,14 +263,14 @@
             "-j",
             "1",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1101-revalidation-test-tmp-root.xml"
+            "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1090-1101-issue1090-1101-1104-revalidation-1249-gate-placement.xml"
           ],
-          "testedRevision": "d775b8fe8f3cf859d5ac948553a2a06d96597728",
-          "recordedAt": "2026-11-11T10:39:46Z",
+          "testedRevision": "49f2a3a7a908f87afca254880216b74e3ff0ea45",
+          "recordedAt": "2026-11-12T07:20:17Z",
           "selected": 36,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1101-revalidation-test-tmp-root.xml",
-            "sha256": "2ca9ed2b3bca754e2f8da2947a0f409b9ceabb0de59515fa9433fd74cb66fae4"
+            "path": "docs/research/pi-v1.3.0/deliveries/1090-1101-issue1090-1101-1104-revalidation-1249-gate-placement.xml",
+            "sha256": "7671678a451202c6487a1fdc302bdb382cbf2097075efe7a119ecc323690b076"
           }
         },
         "rows": [
@@ -1222,6 +1222,36 @@
               "sha256": "080b903d5c3ab80c18e2490c487b2ecd3743a656b8c2ba73a5db206ae7cbacc3"
             }
           }
+        },
+        "revalidation1249GatePlacement": {
+          "reason": "The #1249 gate-placement change (49f2a3a7a) moved the build-phase Parity Architecture Gate out of the build it gates: `cch_parity_gate_build` left `all`, the 15 per-shard `add_dependencies` lines and the `pike_tests` aggregate's entry were removed, and the POST_BUILD attachment with the seven `CCH_PARITY_BUILD_GATE_*` cache variables was deleted, so the Gate now runs in a build invocation of its own. That changed 3 pinned build inputs of this receipt (CMakeLists.txt, cmake/tests/McpTests.cmake, cmake/tests/CodingAgentTests.cmake), so the receipt's exact recorded selection was rerun on the updated tree at 49f2a3a7a: 36 selected, 36 passed, 0 skipped, 0 failed, 2.23 s of CTest wall time. This selector is shared with receipts 1090, whose recorded selection is the same 36-case set; each references this one artifact, produced by this run. Only those 3 drifted input digests are rebound; no other input is rehashed. Rows, comparison scenarios, discriminating cases, implementationCommits and routingSha256 are unchanged, and the rerun makes no new capability claim. CTest resolves a relative --output-junit path against the test preset's build directory, so the command carries the absolute source-tree path and the artifact is the committed file at junit.path.",
+          "changedInputs": [
+            "CMakeLists.txt",
+            "cmake/tests/McpTests.cmake",
+            "cmake/tests/CodingAgentTests.cmake"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-L",
+              "^(issue1090|issue1101|issue1104)$",
+              "--no-tests=error",
+              "--output-on-failure",
+              "-j",
+              "1",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1101-revalidation-test-tmp-root.xml"
+            ],
+            "testedRevision": "d775b8fe8f3cf859d5ac948553a2a06d96597728",
+            "recordedAt": "2026-11-11T10:39:46Z",
+            "selected": 36,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1101-revalidation-test-tmp-root.xml",
+              "sha256": "2ca9ed2b3bca754e2f8da2947a0f409b9ceabb0de59515fa9433fd74cb66fae4"
+            }
+          }
         }
       },
       {
@@ -1245,14 +1275,14 @@
             "-j",
             "1",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1090-revalidation-upstream-71ad3e83a.xml"
+            "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1090-1101-issue1090-1101-1104-revalidation-1249-gate-placement.xml"
           ],
-          "testedRevision": "c8abe71ba4e8cb988a987ca9337d252acf3c2fe5",
-          "recordedAt": "2026-11-11T07:25:39Z",
+          "testedRevision": "49f2a3a7a908f87afca254880216b74e3ff0ea45",
+          "recordedAt": "2026-11-12T07:20:17Z",
           "selected": 36,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1090-revalidation-upstream-71ad3e83a.xml",
-            "sha256": "d703ed6143e98fe6bc567c1d7fa3cb2b6e23a0b8c0abb7d7ad65c7aebadf9a10"
+            "path": "docs/research/pi-v1.3.0/deliveries/1090-1101-issue1090-1101-1104-revalidation-1249-gate-placement.xml",
+            "sha256": "7671678a451202c6487a1fdc302bdb382cbf2097075efe7a119ecc323690b076"
           }
         },
         "inputs": [
@@ -1262,7 +1292,7 @@
           },
           {
             "path": "cmake/tests/DurableTests.cmake",
-            "sha256": "06ea3896730627f717e7e2eee9a1dfda15b0d3233c84546d35051f76867e4934"
+            "sha256": "9ac09f3fe87f2570663c8873c3e9e696041dad8178d36e8a151f17b1120203da"
           },
           {
             "path": "docs/agents/architecture.md",
@@ -2336,6 +2366,34 @@
           "changedInputs": [
             "tests/Catch2Main.cpp"
           ]
+        },
+        "revalidation1249GatePlacement": {
+          "reason": "The #1249 gate-placement change (49f2a3a7a) moved the build-phase Parity Architecture Gate out of the build it gates: `cch_parity_gate_build` left `all`, the 15 per-shard `add_dependencies` lines and the `pike_tests` aggregate's entry were removed, and the POST_BUILD attachment with the seven `CCH_PARITY_BUILD_GATE_*` cache variables was deleted, so the Gate now runs in a build invocation of its own. That changed 1 pinned build input of this receipt (cmake/tests/DurableTests.cmake), so the receipt's exact recorded selection was rerun on the updated tree at 49f2a3a7a: 36 selected, 36 passed, 0 skipped, 0 failed, 2.23 s of CTest wall time. This selector is shared with receipts 1101, whose recorded selection is the same 36-case set; each references this one artifact, produced by this run. Only those 1 drifted input digest is rebound; no other input is rehashed. Rows, comparison scenarios, discriminating cases, implementationCommits and routingSha256 are unchanged, and the rerun makes no new capability claim. CTest resolves a relative --output-junit path against the test preset's build directory, so the command carries the absolute source-tree path and the artifact is the committed file at junit.path.",
+          "changedInputs": [
+            "cmake/tests/DurableTests.cmake"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-L",
+              "^(issue1090|issue1101|issue1104)$",
+              "--no-tests=error",
+              "--output-on-failure",
+              "-j",
+              "1",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1090-revalidation-upstream-71ad3e83a.xml"
+            ],
+            "testedRevision": "c8abe71ba4e8cb988a987ca9337d252acf3c2fe5",
+            "recordedAt": "2026-11-11T07:25:39Z",
+            "selected": 36,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1090-revalidation-upstream-71ad3e83a.xml",
+              "sha256": "d703ed6143e98fe6bc567c1d7fa3cb2b6e23a0b8c0abb7d7ad65c7aebadf9a10"
+            }
+          }
         }
       },
       {
@@ -2351,7 +2409,7 @@
         "inputs": [
           {
             "path": "CMakeLists.txt",
-            "sha256": "bf9f18286f7f73f6a208690978ab0888ba5699c663281da97f40277f66ae6bbe"
+            "sha256": "188aa2efb51c78bfb81dcd9abd80b004ec8444357bee12613916f511e58a65d0"
           },
           {
             "path": "CMakePresets.json",
@@ -2387,7 +2445,7 @@
           },
           {
             "path": "cmake/tests/CodingAgentTests.cmake",
-            "sha256": "4abc90bb29a45ebb81b4d1966659a0b278eb225d2febbfcde79090de1a13c88c"
+            "sha256": "2bd7e22b4902bc7f0c9bb01ed815dcb5ac62830572678dd6e2a72c4a1d12c2d5"
           },
           {
             "path": "src/codemode/Declarations.cpp",
@@ -2622,17 +2680,18 @@
             "-L",
             "issue1118",
             "--no-tests=error",
-            "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1118-codemode-catalog-revalidation-test-tmp-root.xml",
+            "--output-on-failure",
             "-j",
-            "1"
+            "1",
+            "--output-junit",
+            "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1118-codemode-catalog-revalidation-1249-gate-placement.xml"
           ],
-          "testedRevision": "2ea9ae1c360f2a3221fd1dcf5326bf2ac471627a",
-          "recordedAt": "2026-11-11T11:30:52Z",
+          "testedRevision": "49f2a3a7a908f87afca254880216b74e3ff0ea45",
+          "recordedAt": "2026-11-12T07:20:17Z",
           "selected": 19,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1118-codemode-catalog-revalidation-test-tmp-root.xml",
-            "sha256": "13101cc479266c351a18eaff7ae65c66b575c14fdd552af55c1ab3df9877b637"
+            "path": "docs/research/pi-v1.3.0/deliveries/1118-codemode-catalog-revalidation-1249-gate-placement.xml",
+            "sha256": "0eed88e34e36e7d3638ec1d0ce9cd6fa01c2e9c3b8b40184d670193d9ca25441"
           }
         },
         "rows": [
@@ -3724,6 +3783,34 @@
               "sha256": "d50e1cb0440e3c8b9e5001ce92bd69107cbb1922c986cd554423dd8127cce907"
             }
           }
+        },
+        "revalidation1249GatePlacement": {
+          "reason": "The #1249 gate-placement change (49f2a3a7a) moved the build-phase Parity Architecture Gate out of the build it gates: `cch_parity_gate_build` left `all`, the 15 per-shard `add_dependencies` lines and the `pike_tests` aggregate's entry were removed, and the POST_BUILD attachment with the seven `CCH_PARITY_BUILD_GATE_*` cache variables was deleted, so the Gate now runs in a build invocation of its own. That changed 2 pinned build inputs of this receipt (CMakeLists.txt, cmake/tests/CodingAgentTests.cmake), so the receipt's exact recorded selection was rerun on the updated tree at 49f2a3a7a: 19 selected, 19 passed, 0 skipped, 0 failed, 6.55 s of CTest wall time. Only those 2 drifted input digests are rebound; no other input is rehashed. Rows, comparison scenarios, discriminating cases, implementationCommits and routingSha256 are unchanged, and the rerun makes no new capability claim. CTest resolves a relative --output-junit path against the test preset's build directory, so the command carries the absolute source-tree path and the artifact is the committed file at junit.path.",
+          "changedInputs": [
+            "CMakeLists.txt",
+            "cmake/tests/CodingAgentTests.cmake"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-L",
+              "issue1118",
+              "--no-tests=error",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1118-codemode-catalog-revalidation-test-tmp-root.xml",
+              "-j",
+              "1"
+            ],
+            "testedRevision": "2ea9ae1c360f2a3221fd1dcf5326bf2ac471627a",
+            "recordedAt": "2026-11-11T11:30:52Z",
+            "selected": 19,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1118-codemode-catalog-revalidation-test-tmp-root.xml",
+              "sha256": "13101cc479266c351a18eaff7ae65c66b575c14fdd552af55c1ab3df9877b637"
+            }
+          }
         }
       },
       {
@@ -3772,14 +3859,14 @@
             "-j",
             "1",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1178-chord-comparisons-revalidation-test-tmp-root.xml"
+            "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1178-1185-1186-1188-chord-label-revalidation-1249-gate-placement.xml"
           ],
-          "testedRevision": "2ea9ae1c360f2a3221fd1dcf5326bf2ac471627a",
-          "recordedAt": "2026-11-11T11:30:53Z",
+          "testedRevision": "49f2a3a7a908f87afca254880216b74e3ff0ea45",
+          "recordedAt": "2026-11-12T07:20:17Z",
           "selected": 104,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1178-chord-comparisons-revalidation-test-tmp-root.xml",
-            "sha256": "fe08b9c768d23b6560ff3dd126490f7040f5295e2ec69a808c8019011a6877cd"
+            "path": "docs/research/pi-v1.3.0/deliveries/1178-1185-1186-1188-chord-label-revalidation-1249-gate-placement.xml",
+            "sha256": "a9c918695cb26c6cc1edb2427f4c7019a81e1c8ecdda8504899fbbced40f36e8"
           }
         },
         "rows": [
@@ -4340,7 +4427,7 @@
         "inputs": [
           {
             "path": "CMakeLists.txt",
-            "sha256": "bf9f18286f7f73f6a208690978ab0888ba5699c663281da97f40277f66ae6bbe"
+            "sha256": "188aa2efb51c78bfb81dcd9abd80b004ec8444357bee12613916f511e58a65d0"
           },
           {
             "path": "CMakePresets.json",
@@ -4356,7 +4443,7 @@
           },
           {
             "path": "cmake/tests/ChordTests.cmake",
-            "sha256": "610e08f8cf731fac5d13e57cf0e417b18cb0625d564715053d97402eeeb0f409"
+            "sha256": "c52219085844f72088691e86406406c217bd03ed08f8f03d951750685f304bb7"
           },
           {
             "path": "cmake/tests/TestsSetup.cmake",
@@ -4868,6 +4955,35 @@
               "sha256": "04faa93e89d7bec4aa1ed3df4685ff6220f89e2c9eb76566c2426999c45cd5b6"
             }
           }
+        },
+        "revalidation1249GatePlacement": {
+          "reason": "The #1249 gate-placement change (49f2a3a7a) moved the build-phase Parity Architecture Gate out of the build it gates: `cch_parity_gate_build` left `all`, the 15 per-shard `add_dependencies` lines and the `pike_tests` aggregate's entry were removed, and the POST_BUILD attachment with the seven `CCH_PARITY_BUILD_GATE_*` cache variables was deleted, so the Gate now runs in a build invocation of its own. That changed 2 pinned build inputs of this receipt (CMakeLists.txt, cmake/tests/ChordTests.cmake), so the receipt's exact recorded selection was rerun on the updated tree at 49f2a3a7a: 104 selected, 104 passed, 0 skipped, 0 failed, 0.59 s of CTest wall time. This selector is shared with receipts 1185 and 1186 and 1188, whose recorded selection is the same 104-case set; each references this one artifact, produced by this run. Only those 2 drifted input digests are rebound; no other input is rehashed. Rows, comparison scenarios, discriminating cases, implementationCommits and routingSha256 are unchanged, and the rerun makes no new capability claim. CTest resolves a relative --output-junit path against the test preset's build directory, so the command carries the absolute source-tree path and the artifact is the committed file at junit.path.",
+          "changedInputs": [
+            "CMakeLists.txt",
+            "cmake/tests/ChordTests.cmake"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-L",
+              "chord",
+              "--no-tests=error",
+              "--output-on-failure",
+              "-j",
+              "1",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1178-chord-comparisons-revalidation-test-tmp-root.xml"
+            ],
+            "testedRevision": "2ea9ae1c360f2a3221fd1dcf5326bf2ac471627a",
+            "recordedAt": "2026-11-11T11:30:53Z",
+            "selected": 104,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1178-chord-comparisons-revalidation-test-tmp-root.xml",
+              "sha256": "fe08b9c768d23b6560ff3dd126490f7040f5295e2ec69a808c8019011a6877cd"
+            }
+          }
         }
       },
       {
@@ -4887,7 +5003,7 @@
         "inputs": [
           {
             "path": "CMakeLists.txt",
-            "sha256": "bf9f18286f7f73f6a208690978ab0888ba5699c663281da97f40277f66ae6bbe"
+            "sha256": "188aa2efb51c78bfb81dcd9abd80b004ec8444357bee12613916f511e58a65d0"
           },
           {
             "path": "CMakePresets.json",
@@ -4915,11 +5031,11 @@
           },
           {
             "path": "cmake/tests/McpTests.cmake",
-            "sha256": "ee04ce20f26bf81af1ef236c5e1bf92a9715a49c7049a2597a398f41f090a148"
+            "sha256": "51b19ceae41ad3464fc9926038fa3f97bbff441ec70479439b2566f0b65a14c7"
           },
           {
             "path": "cmake/tests/CodingAgentTests.cmake",
-            "sha256": "4abc90bb29a45ebb81b4d1966659a0b278eb225d2febbfcde79090de1a13c88c"
+            "sha256": "2bd7e22b4902bc7f0c9bb01ed815dcb5ac62830572678dd6e2a72c4a1d12c2d5"
           },
           {
             "path": "src/mcp/Client.cpp",
@@ -5246,14 +5362,14 @@
             "-j",
             "1",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1181-mcp-comparisons-revalidation-test-tmp-root.xml"
+            "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1181-mcp-comparisons-revalidation-1249-gate-placement.xml"
           ],
-          "testedRevision": "2ea9ae1c360f2a3221fd1dcf5326bf2ac471627a",
-          "recordedAt": "2026-11-11T11:30:56Z",
+          "testedRevision": "49f2a3a7a908f87afca254880216b74e3ff0ea45",
+          "recordedAt": "2026-11-12T07:20:17Z",
           "selected": 16,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1181-mcp-comparisons-revalidation-test-tmp-root.xml",
-            "sha256": "f2d86d3f5e46ba471ed69979c535954b1daf4d344d96aa9d20ac4c8c35a5b152"
+            "path": "docs/research/pi-v1.3.0/deliveries/1181-mcp-comparisons-revalidation-1249-gate-placement.xml",
+            "sha256": "aff6b0783aaa9e1e860d87d26f33d584ef71e8d50ed91891bf8e4ce499792766"
           }
         },
         "rows": [
@@ -6305,6 +6421,36 @@
               "sha256": "7376bd1833a9bbfb745686c2db5595765838372fe21d9989deea19e2a3f48d4f"
             }
           }
+        },
+        "revalidation1249GatePlacement": {
+          "reason": "The #1249 gate-placement change (49f2a3a7a) moved the build-phase Parity Architecture Gate out of the build it gates: `cch_parity_gate_build` left `all`, the 15 per-shard `add_dependencies` lines and the `pike_tests` aggregate's entry were removed, and the POST_BUILD attachment with the seven `CCH_PARITY_BUILD_GATE_*` cache variables was deleted, so the Gate now runs in a build invocation of its own. That changed 3 pinned build inputs of this receipt (CMakeLists.txt, cmake/tests/McpTests.cmake, cmake/tests/CodingAgentTests.cmake), so the receipt's exact recorded selection was rerun on the updated tree at 49f2a3a7a: 16 selected, 16 passed, 0 skipped, 0 failed, 3.5 s of CTest wall time. Only those 3 drifted input digests are rebound; no other input is rehashed. Rows, comparison scenarios, discriminating cases, implementationCommits and routingSha256 are unchanged, and the rerun makes no new capability claim. CTest resolves a relative --output-junit path against the test preset's build directory, so the command carries the absolute source-tree path and the artifact is the committed file at junit.path.",
+          "changedInputs": [
+            "CMakeLists.txt",
+            "cmake/tests/McpTests.cmake",
+            "cmake/tests/CodingAgentTests.cmake"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-R",
+              "^(an MCP HTTP URL must be http or https|streamable HTTP transport connects over plain http|connecting an MCP HTTP server lists its tools with the pi naming and schema|a same-origin redirect is followed and keeps the request auth header|cross-origin redirect is followed without Authorization and is rejected|HTTPS transport rejects an untrusted certificate|an authorization code from another issuer never reaches the token endpoint|authorization server metadata naming another issuer stops before any token request|the MCP HTTP transport attaches a credential only when the server needs one|agent session lists MCP resources only on demand and can call tools after a resource failure|the real stdio fixture lists, templates, and reads over `resources/\\*`|a cancelled MCP OAuth discovery stops before any registration or token request|a cancelled MCP OAuth client registration stops before any token request|a browser callback wait cancelled by the sign-in stop token stops sign-in|a pasted redirect URL completes the MCP OAuth sign-in|protected resource discovery retries the bare origin after a path-suffixed miss)$",
+              "--no-tests=error",
+              "--output-on-failure",
+              "-j",
+              "1",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1181-mcp-comparisons-revalidation-test-tmp-root.xml"
+            ],
+            "testedRevision": "2ea9ae1c360f2a3221fd1dcf5326bf2ac471627a",
+            "recordedAt": "2026-11-11T11:30:56Z",
+            "selected": 16,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1181-mcp-comparisons-revalidation-test-tmp-root.xml",
+              "sha256": "f2d86d3f5e46ba471ed69979c535954b1daf4d344d96aa9d20ac4c8c35a5b152"
+            }
+          }
         }
       },
       {
@@ -6347,14 +6493,14 @@
             "-j",
             "1",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1185-chord-delta-ingestion-revalidation-test-tmp-root.xml"
+            "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1178-1185-1186-1188-chord-label-revalidation-1249-gate-placement.xml"
           ],
-          "testedRevision": "2ea9ae1c360f2a3221fd1dcf5326bf2ac471627a",
-          "recordedAt": "2026-11-11T11:30:57Z",
+          "testedRevision": "49f2a3a7a908f87afca254880216b74e3ff0ea45",
+          "recordedAt": "2026-11-12T07:20:17Z",
           "selected": 104,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1185-chord-delta-ingestion-revalidation-test-tmp-root.xml",
-            "sha256": "c12da55b154d3d10f225c3f18517752120689617d8ed89cdf03ae4c86065f19d"
+            "path": "docs/research/pi-v1.3.0/deliveries/1178-1185-1186-1188-chord-label-revalidation-1249-gate-placement.xml",
+            "sha256": "a9c918695cb26c6cc1edb2427f4c7019a81e1c8ecdda8504899fbbced40f36e8"
           }
         },
         "rows": [
@@ -6452,7 +6598,7 @@
         "inputs": [
           {
             "path": "CMakeLists.txt",
-            "sha256": "bf9f18286f7f73f6a208690978ab0888ba5699c663281da97f40277f66ae6bbe"
+            "sha256": "188aa2efb51c78bfb81dcd9abd80b004ec8444357bee12613916f511e58a65d0"
           },
           {
             "path": "CMakePresets.json",
@@ -6468,7 +6614,7 @@
           },
           {
             "path": "cmake/tests/ChordTests.cmake",
-            "sha256": "610e08f8cf731fac5d13e57cf0e417b18cb0625d564715053d97402eeeb0f409"
+            "sha256": "c52219085844f72088691e86406406c217bd03ed08f8f03d951750685f304bb7"
           },
           {
             "path": "cmake/tests/TestsSetup.cmake",
@@ -6849,6 +6995,35 @@
               "sha256": "d69518e01d5d261d851c92eb589fabc407c73daefa9e2c4cd80ed1f5993ed28b"
             }
           }
+        },
+        "revalidation1249GatePlacement": {
+          "reason": "The #1249 gate-placement change (49f2a3a7a) moved the build-phase Parity Architecture Gate out of the build it gates: `cch_parity_gate_build` left `all`, the 15 per-shard `add_dependencies` lines and the `pike_tests` aggregate's entry were removed, and the POST_BUILD attachment with the seven `CCH_PARITY_BUILD_GATE_*` cache variables was deleted, so the Gate now runs in a build invocation of its own. That changed 2 pinned build inputs of this receipt (CMakeLists.txt, cmake/tests/ChordTests.cmake), so the receipt's exact recorded selection was rerun on the updated tree at 49f2a3a7a: 104 selected, 104 passed, 0 skipped, 0 failed, 0.59 s of CTest wall time. This selector is shared with receipts 1178 and 1186 and 1188, whose recorded selection is the same 104-case set; each references this one artifact, produced by this run. Only those 2 drifted input digests are rebound; no other input is rehashed. Rows, comparison scenarios, discriminating cases, implementationCommits and routingSha256 are unchanged, and the rerun makes no new capability claim. CTest resolves a relative --output-junit path against the test preset's build directory, so the command carries the absolute source-tree path and the artifact is the committed file at junit.path.",
+          "changedInputs": [
+            "CMakeLists.txt",
+            "cmake/tests/ChordTests.cmake"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-L",
+              "chord",
+              "--no-tests=error",
+              "--output-on-failure",
+              "-j",
+              "1",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1185-chord-delta-ingestion-revalidation-test-tmp-root.xml"
+            ],
+            "testedRevision": "2ea9ae1c360f2a3221fd1dcf5326bf2ac471627a",
+            "recordedAt": "2026-11-11T11:30:57Z",
+            "selected": 104,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1185-chord-delta-ingestion-revalidation-test-tmp-root.xml",
+              "sha256": "c12da55b154d3d10f225c3f18517752120689617d8ed89cdf03ae4c86065f19d"
+            }
+          }
         }
       },
       {
@@ -6872,14 +7047,14 @@
             "-j",
             "1",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1184-chord-context-cancellation-revalidation-test-tmp-root.xml"
+            "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1184-chord-context-cancellation-revalidation-1249-gate-placement.xml"
           ],
-          "testedRevision": "2ea9ae1c360f2a3221fd1dcf5326bf2ac471627a",
-          "recordedAt": "2026-11-11T11:30:57Z",
+          "testedRevision": "49f2a3a7a908f87afca254880216b74e3ff0ea45",
+          "recordedAt": "2026-11-12T07:20:17Z",
           "selected": 10,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1184-chord-context-cancellation-revalidation-test-tmp-root.xml",
-            "sha256": "b81ca867ab50d54f7bad5b3c75566f543a88513b51d48f52baf421250f8c37c1"
+            "path": "docs/research/pi-v1.3.0/deliveries/1184-chord-context-cancellation-revalidation-1249-gate-placement.xml",
+            "sha256": "85d12c8c3e3924cf91f4e3f9d828b75080adb10505a371b29e17b4cd7bbaab00"
           }
         },
         "rows": [
@@ -6956,7 +7131,7 @@
         "inputs": [
           {
             "path": "CMakeLists.txt",
-            "sha256": "bf9f18286f7f73f6a208690978ab0888ba5699c663281da97f40277f66ae6bbe"
+            "sha256": "188aa2efb51c78bfb81dcd9abd80b004ec8444357bee12613916f511e58a65d0"
           },
           {
             "path": "CMakePresets.json",
@@ -6976,11 +7151,11 @@
           },
           {
             "path": "cmake/tests/ChordTests.cmake",
-            "sha256": "610e08f8cf731fac5d13e57cf0e417b18cb0625d564715053d97402eeeb0f409"
+            "sha256": "c52219085844f72088691e86406406c217bd03ed08f8f03d951750685f304bb7"
           },
           {
             "path": "cmake/tests/DurableTests.cmake",
-            "sha256": "06ea3896730627f717e7e2eee9a1dfda15b0d3233c84546d35051f76867e4934"
+            "sha256": "9ac09f3fe87f2570663c8873c3e9e696041dad8178d36e8a151f17b1120203da"
           },
           {
             "path": "cmake/tests/TestsSetup.cmake",
@@ -7394,6 +7569,36 @@
               "sha256": "6c15d708b02d45559280c990890c3624e0322b9e8d6651eb0a45e36c607ce2ec"
             }
           }
+        },
+        "revalidation1249GatePlacement": {
+          "reason": "The #1249 gate-placement change (49f2a3a7a) moved the build-phase Parity Architecture Gate out of the build it gates: `cch_parity_gate_build` left `all`, the 15 per-shard `add_dependencies` lines and the `pike_tests` aggregate's entry were removed, and the POST_BUILD attachment with the seven `CCH_PARITY_BUILD_GATE_*` cache variables was deleted, so the Gate now runs in a build invocation of its own. That changed 3 pinned build inputs of this receipt (CMakeLists.txt, cmake/tests/ChordTests.cmake, cmake/tests/DurableTests.cmake), so the receipt's exact recorded selection was rerun on the updated tree at 49f2a3a7a: 10 selected, 10 passed, 0 skipped, 0 failed, 0.2 s of CTest wall time. Only those 3 drifted input digests are rebound; no other input is rehashed. Rows, comparison scenarios, discriminating cases, implementationCommits and routingSha256 are unchanged, and the rerun makes no new capability claim. CTest resolves a relative --output-junit path against the test preset's build directory, so the command carries the absolute source-tree path and the artifact is the committed file at junit.path.",
+          "changedInputs": [
+            "CMakeLists.txt",
+            "cmake/tests/ChordTests.cmake",
+            "cmake/tests/DurableTests.cmake"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-L",
+              "issue1184",
+              "--no-tests=error",
+              "--output-on-failure",
+              "-j",
+              "1",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1184-chord-context-cancellation-revalidation-test-tmp-root.xml"
+            ],
+            "testedRevision": "2ea9ae1c360f2a3221fd1dcf5326bf2ac471627a",
+            "recordedAt": "2026-11-11T11:30:57Z",
+            "selected": 10,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1184-chord-context-cancellation-revalidation-test-tmp-root.xml",
+              "sha256": "b81ca867ab50d54f7bad5b3c75566f543a88513b51d48f52baf421250f8c37c1"
+            }
+          }
         }
       },
       {
@@ -7435,14 +7640,14 @@
             "-j",
             "1",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1186-chord-typed-json-revalidation-test-tmp-root.xml"
+            "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1178-1185-1186-1188-chord-label-revalidation-1249-gate-placement.xml"
           ],
-          "testedRevision": "2ea9ae1c360f2a3221fd1dcf5326bf2ac471627a",
-          "recordedAt": "2026-11-11T11:30:58Z",
+          "testedRevision": "49f2a3a7a908f87afca254880216b74e3ff0ea45",
+          "recordedAt": "2026-11-12T07:20:17Z",
           "selected": 104,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1186-chord-typed-json-revalidation-test-tmp-root.xml",
-            "sha256": "b6c33e3299126cbdad5aae06490c764aa1e2c9cb130cb4bd090303fcad8788c8"
+            "path": "docs/research/pi-v1.3.0/deliveries/1178-1185-1186-1188-chord-label-revalidation-1249-gate-placement.xml",
+            "sha256": "a9c918695cb26c6cc1edb2427f4c7019a81e1c8ecdda8504899fbbced40f36e8"
           }
         },
         "rows": [
@@ -7554,7 +7759,7 @@
         "inputs": [
           {
             "path": "CMakeLists.txt",
-            "sha256": "bf9f18286f7f73f6a208690978ab0888ba5699c663281da97f40277f66ae6bbe"
+            "sha256": "188aa2efb51c78bfb81dcd9abd80b004ec8444357bee12613916f511e58a65d0"
           },
           {
             "path": "CMakePresets.json",
@@ -7570,7 +7775,7 @@
           },
           {
             "path": "cmake/tests/ChordTests.cmake",
-            "sha256": "610e08f8cf731fac5d13e57cf0e417b18cb0625d564715053d97402eeeb0f409"
+            "sha256": "c52219085844f72088691e86406406c217bd03ed08f8f03d951750685f304bb7"
           },
           {
             "path": "cmake/tests/TestsSetup.cmake",
@@ -8463,6 +8668,35 @@
               "sha256": "ad649941179e533ead6265d4002fd347ea01dfac9f6bcb29ac20fee3eca3d050"
             }
           }
+        },
+        "revalidation1249GatePlacement": {
+          "reason": "The #1249 gate-placement change (49f2a3a7a) moved the build-phase Parity Architecture Gate out of the build it gates: `cch_parity_gate_build` left `all`, the 15 per-shard `add_dependencies` lines and the `pike_tests` aggregate's entry were removed, and the POST_BUILD attachment with the seven `CCH_PARITY_BUILD_GATE_*` cache variables was deleted, so the Gate now runs in a build invocation of its own. That changed 2 pinned build inputs of this receipt (CMakeLists.txt, cmake/tests/ChordTests.cmake), so the receipt's exact recorded selection was rerun on the updated tree at 49f2a3a7a: 104 selected, 104 passed, 0 skipped, 0 failed, 0.59 s of CTest wall time. This selector is shared with receipts 1178 and 1185 and 1188, whose recorded selection is the same 104-case set; each references this one artifact, produced by this run. Only those 2 drifted input digests are rebound; no other input is rehashed. Rows, comparison scenarios, discriminating cases, implementationCommits and routingSha256 are unchanged, and the rerun makes no new capability claim. CTest resolves a relative --output-junit path against the test preset's build directory, so the command carries the absolute source-tree path and the artifact is the committed file at junit.path.",
+          "changedInputs": [
+            "CMakeLists.txt",
+            "cmake/tests/ChordTests.cmake"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-L",
+              "chord",
+              "--no-tests=error",
+              "--output-on-failure",
+              "-j",
+              "1",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1186-chord-typed-json-revalidation-test-tmp-root.xml"
+            ],
+            "testedRevision": "2ea9ae1c360f2a3221fd1dcf5326bf2ac471627a",
+            "recordedAt": "2026-11-11T11:30:58Z",
+            "selected": 104,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1186-chord-typed-json-revalidation-test-tmp-root.xml",
+              "sha256": "b6c33e3299126cbdad5aae06490c764aa1e2c9cb130cb4bd090303fcad8788c8"
+            }
+          }
         }
       },
       {
@@ -8505,14 +8739,14 @@
             "-j",
             "1",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1188-chord-observer-serialization-revalidation-test-tmp-root.xml"
+            "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1178-1185-1186-1188-chord-label-revalidation-1249-gate-placement.xml"
           ],
-          "testedRevision": "2ea9ae1c360f2a3221fd1dcf5326bf2ac471627a",
-          "recordedAt": "2026-11-11T11:30:58Z",
+          "testedRevision": "49f2a3a7a908f87afca254880216b74e3ff0ea45",
+          "recordedAt": "2026-11-12T07:20:17Z",
           "selected": 104,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1188-chord-observer-serialization-revalidation-test-tmp-root.xml",
-            "sha256": "565e6e114115fa7e00c4dc09e316f145883d26775710c7f0c4d92b69c6d2ee12"
+            "path": "docs/research/pi-v1.3.0/deliveries/1178-1185-1186-1188-chord-label-revalidation-1249-gate-placement.xml",
+            "sha256": "a9c918695cb26c6cc1edb2427f4c7019a81e1c8ecdda8504899fbbced40f36e8"
           }
         },
         "rows": [
@@ -8587,7 +8821,7 @@
         "inputs": [
           {
             "path": "CMakeLists.txt",
-            "sha256": "bf9f18286f7f73f6a208690978ab0888ba5699c663281da97f40277f66ae6bbe"
+            "sha256": "188aa2efb51c78bfb81dcd9abd80b004ec8444357bee12613916f511e58a65d0"
           },
           {
             "path": "CMakePresets.json",
@@ -8603,7 +8837,7 @@
           },
           {
             "path": "cmake/tests/ChordTests.cmake",
-            "sha256": "610e08f8cf731fac5d13e57cf0e417b18cb0625d564715053d97402eeeb0f409"
+            "sha256": "c52219085844f72088691e86406406c217bd03ed08f8f03d951750685f304bb7"
           },
           {
             "path": "cmake/tests/TestsSetup.cmake",
@@ -9477,6 +9711,35 @@
               "sha256": "92bfe2775d69cdb1eabb8a4d36d6c82fb2b22d424a442bb6394843171f4f5aaa"
             }
           }
+        },
+        "revalidation1249GatePlacement": {
+          "reason": "The #1249 gate-placement change (49f2a3a7a) moved the build-phase Parity Architecture Gate out of the build it gates: `cch_parity_gate_build` left `all`, the 15 per-shard `add_dependencies` lines and the `pike_tests` aggregate's entry were removed, and the POST_BUILD attachment with the seven `CCH_PARITY_BUILD_GATE_*` cache variables was deleted, so the Gate now runs in a build invocation of its own. That changed 2 pinned build inputs of this receipt (CMakeLists.txt, cmake/tests/ChordTests.cmake), so the receipt's exact recorded selection was rerun on the updated tree at 49f2a3a7a: 104 selected, 104 passed, 0 skipped, 0 failed, 0.59 s of CTest wall time. This selector is shared with receipts 1178 and 1185 and 1186, whose recorded selection is the same 104-case set; each references this one artifact, produced by this run. Only those 2 drifted input digests are rebound; no other input is rehashed. Rows, comparison scenarios, discriminating cases, implementationCommits and routingSha256 are unchanged, and the rerun makes no new capability claim. CTest resolves a relative --output-junit path against the test preset's build directory, so the command carries the absolute source-tree path and the artifact is the committed file at junit.path.",
+          "changedInputs": [
+            "CMakeLists.txt",
+            "cmake/tests/ChordTests.cmake"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-L",
+              "chord",
+              "--no-tests=error",
+              "--output-on-failure",
+              "-j",
+              "1",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1188-chord-observer-serialization-revalidation-test-tmp-root.xml"
+            ],
+            "testedRevision": "2ea9ae1c360f2a3221fd1dcf5326bf2ac471627a",
+            "recordedAt": "2026-11-11T11:30:58Z",
+            "selected": 104,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1188-chord-observer-serialization-revalidation-test-tmp-root.xml",
+              "sha256": "565e6e114115fa7e00c4dc09e316f145883d26775710c7f0c4d92b69c6d2ee12"
+            }
+          }
         }
       },
       {
@@ -9499,20 +9762,20 @@
             "-j",
             "1",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1187-chord-progress-pacing-revalidation-test-tmp-root.xml"
+            "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1187-chord-progress-pacing-revalidation-1249-gate-placement.xml"
           ],
-          "testedRevision": "2ea9ae1c360f2a3221fd1dcf5326bf2ac471627a",
-          "recordedAt": "2026-11-11T11:30:58Z",
+          "testedRevision": "49f2a3a7a908f87afca254880216b74e3ff0ea45",
+          "recordedAt": "2026-11-12T07:20:17Z",
           "selected": 4,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1187-chord-progress-pacing-revalidation-test-tmp-root.xml",
-            "sha256": "738327ad78f98a892504381b7817048abf2a4aee9ed43f2c46673faba1a56d41"
+            "path": "docs/research/pi-v1.3.0/deliveries/1187-chord-progress-pacing-revalidation-1249-gate-placement.xml",
+            "sha256": "9de5335b7377f70caf619db69a9801058c3fc47d8572f1b8f9d81498af67f2c8"
           }
         },
         "inputs": [
           {
             "path": "CMakeLists.txt",
-            "sha256": "bf9f18286f7f73f6a208690978ab0888ba5699c663281da97f40277f66ae6bbe"
+            "sha256": "188aa2efb51c78bfb81dcd9abd80b004ec8444357bee12613916f511e58a65d0"
           },
           {
             "path": "CMakePresets.json",
@@ -9528,7 +9791,7 @@
           },
           {
             "path": "cmake/tests/ChordTests.cmake",
-            "sha256": "610e08f8cf731fac5d13e57cf0e417b18cb0625d564715053d97402eeeb0f409"
+            "sha256": "c52219085844f72088691e86406406c217bd03ed08f8f03d951750685f304bb7"
           },
           {
             "path": "cmake/tests/TestsSetup.cmake",
@@ -9783,6 +10046,35 @@
               "sha256": "99b42719d9294c7807f1ebfbaa6b6cf1bc7fabef579b89132d6aefecada3103a"
             }
           }
+        },
+        "revalidation1249GatePlacement": {
+          "reason": "The #1249 gate-placement change (49f2a3a7a) moved the build-phase Parity Architecture Gate out of the build it gates: `cch_parity_gate_build` left `all`, the 15 per-shard `add_dependencies` lines and the `pike_tests` aggregate's entry were removed, and the POST_BUILD attachment with the seven `CCH_PARITY_BUILD_GATE_*` cache variables was deleted, so the Gate now runs in a build invocation of its own. That changed 2 pinned build inputs of this receipt (CMakeLists.txt, cmake/tests/ChordTests.cmake), so the receipt's exact recorded selection was rerun on the updated tree at 49f2a3a7a: 4 selected, 4 passed, 0 skipped, 0 failed, 0.15 s of CTest wall time. Only those 2 drifted input digests are rebound; no other input is rehashed. Rows, comparison scenarios, discriminating cases, implementationCommits and routingSha256 are unchanged, and the rerun makes no new capability claim. CTest resolves a relative --output-junit path against the test preset's build directory, so the command carries the absolute source-tree path and the artifact is the committed file at junit.path.",
+          "changedInputs": [
+            "CMakeLists.txt",
+            "cmake/tests/ChordTests.cmake"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-L",
+              "issue1187",
+              "--no-tests=error",
+              "--output-on-failure",
+              "-j",
+              "1",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1187-chord-progress-pacing-revalidation-test-tmp-root.xml"
+            ],
+            "testedRevision": "2ea9ae1c360f2a3221fd1dcf5326bf2ac471627a",
+            "recordedAt": "2026-11-11T11:30:58Z",
+            "selected": 4,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1187-chord-progress-pacing-revalidation-test-tmp-root.xml",
+              "sha256": "738327ad78f98a892504381b7817048abf2a4aee9ed43f2c46673faba1a56d41"
+            }
+          }
         }
       },
       {
@@ -9804,14 +10096,14 @@
             "-j",
             "1",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1182-tui-comparisons-revalidation-test-tmp-root.xml"
+            "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1182-tui-comparisons-revalidation-1249-gate-placement.xml"
           ],
-          "testedRevision": "2ea9ae1c360f2a3221fd1dcf5326bf2ac471627a",
-          "recordedAt": "2026-11-11T11:31:06Z",
+          "testedRevision": "49f2a3a7a908f87afca254880216b74e3ff0ea45",
+          "recordedAt": "2026-11-12T07:20:17Z",
           "selected": 13,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1182-tui-comparisons-revalidation-test-tmp-root.xml",
-            "sha256": "50936ddd0bd03f33da2619e023fb4f9ed48ed6d9a36cfdcd60c9b909f20907b3"
+            "path": "docs/research/pi-v1.3.0/deliveries/1182-tui-comparisons-revalidation-1249-gate-placement.xml",
+            "sha256": "65d2b7b95af96085773fe30d7bc31ccd50f774fc5db8c3991b80c02ca35de0f6"
           }
         },
         "rows": [
@@ -9938,7 +10230,7 @@
         "inputs": [
           {
             "path": "CMakeLists.txt",
-            "sha256": "bf9f18286f7f73f6a208690978ab0888ba5699c663281da97f40277f66ae6bbe"
+            "sha256": "188aa2efb51c78bfb81dcd9abd80b004ec8444357bee12613916f511e58a65d0"
           },
           {
             "path": "CMakePresets.json",
@@ -9950,7 +10242,7 @@
           },
           {
             "path": "cmake/tests/TuiTests.cmake",
-            "sha256": "b33f9d2abb59f1a9326649aedef3d133d83626f47608c0c32797d2ca5d80752b"
+            "sha256": "a9783d414beec40835a9c550560f81fc1846a0f43908910449a48a78d38ddb65"
           },
           {
             "path": "cmake/tests/EvidenceTests.cmake",
@@ -10912,6 +11204,35 @@
               "sha256": "ffcf17753c43ddf6a6692ee8472506120c1b4cbca6ef5028f56a2744ceff4330"
             }
           }
+        },
+        "revalidation1249GatePlacement": {
+          "reason": "The #1249 gate-placement change (49f2a3a7a) moved the build-phase Parity Architecture Gate out of the build it gates: `cch_parity_gate_build` left `all`, the 15 per-shard `add_dependencies` lines and the `pike_tests` aggregate's entry were removed, and the POST_BUILD attachment with the seven `CCH_PARITY_BUILD_GATE_*` cache variables was deleted, so the Gate now runs in a build invocation of its own. That changed 2 pinned build inputs of this receipt (CMakeLists.txt, cmake/tests/TuiTests.cmake), so the receipt's exact recorded selection was rerun on the updated tree at 49f2a3a7a: 13 selected, 13 passed, 0 skipped, 0 failed, 8.07 s of CTest wall time. Only those 2 drifted input digests are rebound; no other input is rehashed. Rows, comparison scenarios, discriminating cases, implementationCommits and routingSha256 are unchanged, and the rerun makes no new capability claim. CTest resolves a relative --output-junit path against the test preset's build directory, so the command carries the absolute source-tree path and the artifact is the committed file at junit.path.",
+          "changedInputs": [
+            "CMakeLists.txt",
+            "cmake/tests/TuiTests.cmake"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-L",
+              "issue1182",
+              "--no-tests=error",
+              "--output-on-failure",
+              "-j",
+              "1",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1182-tui-comparisons-revalidation-test-tmp-root.xml"
+            ],
+            "testedRevision": "2ea9ae1c360f2a3221fd1dcf5326bf2ac471627a",
+            "recordedAt": "2026-11-11T11:31:06Z",
+            "selected": 13,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1182-tui-comparisons-revalidation-test-tmp-root.xml",
+              "sha256": "50936ddd0bd03f33da2619e023fb4f9ed48ed6d9a36cfdcd60c9b909f20907b3"
+            }
+          }
         }
       },
       {
@@ -10936,7 +11257,7 @@
         "inputs": [
           {
             "path": "CMakeLists.txt",
-            "sha256": "bf9f18286f7f73f6a208690978ab0888ba5699c663281da97f40277f66ae6bbe"
+            "sha256": "188aa2efb51c78bfb81dcd9abd80b004ec8444357bee12613916f511e58a65d0"
           },
           {
             "path": "CMakePresets.json",
@@ -10952,11 +11273,11 @@
           },
           {
             "path": "cmake/tests/CodemodeTests.cmake",
-            "sha256": "fbc4c60f65065558bed9a8039e1cc6a1e3667de1c113962cb4c1b249185b261f"
+            "sha256": "89fe02b25454b591fd3e513cc13638cbdb77a17d67961b5646b50d0241d39978"
           },
           {
             "path": "cmake/tests/CodingAgentTests.cmake",
-            "sha256": "4abc90bb29a45ebb81b4d1966659a0b278eb225d2febbfcde79090de1a13c88c"
+            "sha256": "2bd7e22b4902bc7f0c9bb01ed815dcb5ac62830572678dd6e2a72c4a1d12c2d5"
           },
           {
             "path": "cmake/tests/TestsSetup.cmake",
@@ -12085,18 +12406,18 @@
             "-R",
             "^(Remote deterministic execution applies reversed answers by result number|Remote deterministic execution runs the script remotely and answers through deliver|RemoteCodemodeSandbox batches output instead of making one exchange per line|RemoteCodemodeSandbox caps the interrupt budget and memory at the remote's limits|RemoteCodemodeSandbox discriminating abort check: does not block on slow remote exit|RemoteCodemodeSandbox reports failing, silent or unreachable remote as sandbox error with transport reason|RemoteCodemodeSandbox runs tools in the caller and the script on the remote|RemoteCodemodeSandbox tells the remote to stop when caller aborts and settles immediately|a normal codemode run is not deterministic while start is|a public codemode caller aborting while a tool waits keeps partial output and cancels the call|a public codemode caller applies reversed answers by result number not arrival order|a public codemode caller binds a dotted global into its frozen namespace and spreads arguments|a public codemode caller catches unknown tools and thrown tool errors with error call status|a public codemode caller collects mixed output in order with the console marker and image MIME|a public codemode caller counts the interrupt budget across tool waits|a public codemode caller fails the run when the guest hits its output item limit|a public codemode caller gets UTC and no WeakRef in a deterministic run|a public codemode caller gets an uncatchable abort and a cancelled record in a deterministic run|a public codemode caller gets during for the result the VM was processing when the script ended|a public codemode caller gets illegal start options refused before any VM exists|a public codemode caller gets the fingerprint before the first call and a reused result number is refused|a public codemode caller keeps a call waiting when its answer cannot be serialized|a public codemode caller numbers globals with tools and gets rejection properties on the script Error|a public codemode caller reads a store snapshot across calls and drops failed writes|a public codemode caller records an unawaited call as cancelled and aborts it|a public codemode caller records settled calls with ok and error statuses|a public codemode caller rejects a reused result number a non-finite clock and an unknown call deterministically|a public codemode caller rejects invalid globals at construction with the frozen errors|a public codemode caller replays a deterministic run from the same start seed and answers|a public codemode caller reports a pre-aborted run with the abort reason and never starts it|a public codemode caller reports a script error with its name message stack and prior output|a public codemode caller reports guest memory exhaustion as an out-of-memory script error|a public codemode caller reports non-Error throws BigInt returns and syntax errors as script errors|a public codemode caller reports the deadline when a tool waits past it and keeps partial output|a public codemode caller returns its value and text output from a successful budgeted run|a public codemode caller sees a seed mismatch change randomness without changing the start time|a public codemode caller stops pure computation with the interrupt budget, not the deadline|a public codemode caller stringifies text and accepts image blocks with the frozen type errors|a public codemode caller treats exit\\(\\) as success with prior output and the write set|a run-supplied jsName overrides the derived script name|an over-limit script is interrupted with a timeout error|codemode worker admission follows wasm load and releases a failed start once|codemode worker results settle before exit while admission stays bounded|the public codemode declaration covers the frozen schema renderings|the public codemode declaration groups tools globals and namespaces with doc comments|the public codemode declaration preserves the relocated tool identifiers|the public codemode declaration renders frozen schema types|the public codemode declaration renders frozen tool signatures samples and blocks|the public codemode prelude is the frozen sandbox prelude with output and store limits|the public codemode source parser keeps only a first-line options command|the public codemode source parser rejects a misplaced options line with its line number|the public codemode source parser rejects invalid options and empty input with typed errors)$",
             "--no-tests=error",
-            "--output-junit",
-            "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1179-codemode-comparisons-revalidation-1232-closeout.xml",
+            "--output-on-failure",
             "-j",
             "1",
-            "--output-on-failure"
+            "--output-junit",
+            "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1179-codemode-comparisons-revalidation-1249-gate-placement.xml"
           ],
-          "testedRevision": "b81daa42673e94a35bd24a0584e87e42e3bb2345",
-          "recordedAt": "2026-11-11T17:30:50Z",
+          "testedRevision": "49f2a3a7a908f87afca254880216b74e3ff0ea45",
+          "recordedAt": "2026-11-12T07:20:17Z",
           "selected": 52,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1179-codemode-comparisons-revalidation-1232-closeout.xml",
-            "sha256": "c8c981129c972f4a2bf79dc408868905c28f72d4375f6a031fb6cf557ebf02d7"
+            "path": "docs/research/pi-v1.3.0/deliveries/1179-codemode-comparisons-revalidation-1249-gate-placement.xml",
+            "sha256": "43599658474fd8032f61561664a534eeed734d732e32d63f91bf9f29d796fe28"
           }
         },
         "revalidation1179m": {
@@ -12843,6 +13164,36 @@
               "sha256": "7fa7cda0c893d0d8c18dfb8e33268534feb8c85b6c4d9f87c41feceedeba0b56"
             }
           }
+        },
+        "revalidation1249GatePlacement": {
+          "reason": "The #1249 gate-placement change (49f2a3a7a) moved the build-phase Parity Architecture Gate out of the build it gates: `cch_parity_gate_build` left `all`, the 15 per-shard `add_dependencies` lines and the `pike_tests` aggregate's entry were removed, and the POST_BUILD attachment with the seven `CCH_PARITY_BUILD_GATE_*` cache variables was deleted, so the Gate now runs in a build invocation of its own. That changed 3 pinned build inputs of this receipt (CMakeLists.txt, cmake/tests/CodemodeTests.cmake, cmake/tests/CodingAgentTests.cmake), so the receipt's exact recorded selection was rerun on the updated tree at 49f2a3a7a: 52 selected, 52 passed, 0 skipped, 0 failed, 105.89 s of CTest wall time. Only those 3 drifted input digests are rebound; no other input is rehashed. Rows, comparison scenarios, discriminating cases, implementationCommits and routingSha256 are unchanged, and the rerun makes no new capability claim. CTest resolves a relative --output-junit path against the test preset's build directory, so the command carries the absolute source-tree path and the artifact is the committed file at junit.path.",
+          "changedInputs": [
+            "CMakeLists.txt",
+            "cmake/tests/CodemodeTests.cmake",
+            "cmake/tests/CodingAgentTests.cmake"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-R",
+              "^(Remote deterministic execution applies reversed answers by result number|Remote deterministic execution runs the script remotely and answers through deliver|RemoteCodemodeSandbox batches output instead of making one exchange per line|RemoteCodemodeSandbox caps the interrupt budget and memory at the remote's limits|RemoteCodemodeSandbox discriminating abort check: does not block on slow remote exit|RemoteCodemodeSandbox reports failing, silent or unreachable remote as sandbox error with transport reason|RemoteCodemodeSandbox runs tools in the caller and the script on the remote|RemoteCodemodeSandbox tells the remote to stop when caller aborts and settles immediately|a normal codemode run is not deterministic while start is|a public codemode caller aborting while a tool waits keeps partial output and cancels the call|a public codemode caller applies reversed answers by result number not arrival order|a public codemode caller binds a dotted global into its frozen namespace and spreads arguments|a public codemode caller catches unknown tools and thrown tool errors with error call status|a public codemode caller collects mixed output in order with the console marker and image MIME|a public codemode caller counts the interrupt budget across tool waits|a public codemode caller fails the run when the guest hits its output item limit|a public codemode caller gets UTC and no WeakRef in a deterministic run|a public codemode caller gets an uncatchable abort and a cancelled record in a deterministic run|a public codemode caller gets during for the result the VM was processing when the script ended|a public codemode caller gets illegal start options refused before any VM exists|a public codemode caller gets the fingerprint before the first call and a reused result number is refused|a public codemode caller keeps a call waiting when its answer cannot be serialized|a public codemode caller numbers globals with tools and gets rejection properties on the script Error|a public codemode caller reads a store snapshot across calls and drops failed writes|a public codemode caller records an unawaited call as cancelled and aborts it|a public codemode caller records settled calls with ok and error statuses|a public codemode caller rejects a reused result number a non-finite clock and an unknown call deterministically|a public codemode caller rejects invalid globals at construction with the frozen errors|a public codemode caller replays a deterministic run from the same start seed and answers|a public codemode caller reports a pre-aborted run with the abort reason and never starts it|a public codemode caller reports a script error with its name message stack and prior output|a public codemode caller reports guest memory exhaustion as an out-of-memory script error|a public codemode caller reports non-Error throws BigInt returns and syntax errors as script errors|a public codemode caller reports the deadline when a tool waits past it and keeps partial output|a public codemode caller returns its value and text output from a successful budgeted run|a public codemode caller sees a seed mismatch change randomness without changing the start time|a public codemode caller stops pure computation with the interrupt budget, not the deadline|a public codemode caller stringifies text and accepts image blocks with the frozen type errors|a public codemode caller treats exit\\(\\) as success with prior output and the write set|a run-supplied jsName overrides the derived script name|an over-limit script is interrupted with a timeout error|codemode worker admission follows wasm load and releases a failed start once|codemode worker results settle before exit while admission stays bounded|the public codemode declaration covers the frozen schema renderings|the public codemode declaration groups tools globals and namespaces with doc comments|the public codemode declaration preserves the relocated tool identifiers|the public codemode declaration renders frozen schema types|the public codemode declaration renders frozen tool signatures samples and blocks|the public codemode prelude is the frozen sandbox prelude with output and store limits|the public codemode source parser keeps only a first-line options command|the public codemode source parser rejects a misplaced options line with its line number|the public codemode source parser rejects invalid options and empty input with typed errors)$",
+              "--no-tests=error",
+              "--output-junit",
+              "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1179-codemode-comparisons-revalidation-1232-closeout.xml",
+              "-j",
+              "1",
+              "--output-on-failure"
+            ],
+            "testedRevision": "b81daa42673e94a35bd24a0584e87e42e3bb2345",
+            "recordedAt": "2026-11-11T17:30:50Z",
+            "selected": 52,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1179-codemode-comparisons-revalidation-1232-closeout.xml",
+              "sha256": "c8c981129c972f4a2bf79dc408868905c28f72d4375f6a031fb6cf557ebf02d7"
+            }
+          }
         }
       },
       {
@@ -12855,7 +13206,7 @@
         "inputs": [
           {
             "path": "CMakeLists.txt",
-            "sha256": "bf9f18286f7f73f6a208690978ab0888ba5699c663281da97f40277f66ae6bbe"
+            "sha256": "188aa2efb51c78bfb81dcd9abd80b004ec8444357bee12613916f511e58a65d0"
           },
           {
             "path": "CMakePresets.json",
@@ -12867,7 +13218,7 @@
           },
           {
             "path": "cmake/tests/AgentTests.cmake",
-            "sha256": "cb02c34923ee55d16924748ed720a91d65d2c5ed7b4045abdd7181f8b42a53cb"
+            "sha256": "0e5a7d7312a6a64bfef97d7531cda7dac1051ea2c468af67bca0024f490cac7e"
           },
           {
             "path": "cmake/tests/TestsSetup.cmake",
@@ -12950,14 +13301,14 @@
             "-j",
             "1",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1176-agent-comparisons-revalidation-test-tmp-root.xml"
+            "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1176-agent-comparisons-revalidation-1249-gate-placement.xml"
           ],
-          "testedRevision": "2ea9ae1c360f2a3221fd1dcf5326bf2ac471627a",
-          "recordedAt": "2026-11-11T11:32:54Z",
+          "testedRevision": "49f2a3a7a908f87afca254880216b74e3ff0ea45",
+          "recordedAt": "2026-11-12T07:20:17Z",
           "selected": 5,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1176-agent-comparisons-revalidation-test-tmp-root.xml",
-            "sha256": "f00f81d5902378ece2d6f79edc8f757c93c833076eb292658989b57c3784ee6a"
+            "path": "docs/research/pi-v1.3.0/deliveries/1176-agent-comparisons-revalidation-1249-gate-placement.xml",
+            "sha256": "ab3c7ed6cb9765745bc69b58b19a36bce98bc661bc7e598fb18082bea50eadaa"
           }
         },
         "rows": [
@@ -13655,6 +14006,35 @@
               "sha256": "39eaa2fbc3d3547705a0caff27aa4bffcd4b702422a85431f008481f845c7ab8"
             }
           }
+        },
+        "revalidation1249GatePlacement": {
+          "reason": "The #1249 gate-placement change (49f2a3a7a) moved the build-phase Parity Architecture Gate out of the build it gates: `cch_parity_gate_build` left `all`, the 15 per-shard `add_dependencies` lines and the `pike_tests` aggregate's entry were removed, and the POST_BUILD attachment with the seven `CCH_PARITY_BUILD_GATE_*` cache variables was deleted, so the Gate now runs in a build invocation of its own. That changed 2 pinned build inputs of this receipt (CMakeLists.txt, cmake/tests/AgentTests.cmake), so the receipt's exact recorded selection was rerun on the updated tree at 49f2a3a7a: 5 selected, 5 passed, 0 skipped, 0 failed, 0.2 s of CTest wall time. Only those 2 drifted input digests are rebound; no other input is rehashed. Rows, comparison scenarios, discriminating cases, implementationCommits and routingSha256 are unchanged, and the rerun makes no new capability claim. CTest resolves a relative --output-junit path against the test preset's build directory, so the command carries the absolute source-tree path and the artifact is the committed file at junit.path.",
+          "changedInputs": [
+            "CMakeLists.txt",
+            "cmake/tests/AgentTests.cmake"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-R",
+              "^(reset restores the System Message baseline and clears queues while retaining live policy|run_tool_call executes successfully and records execute-only duration|run_tool_call returns error outcome for blocked tool call without executing|stateful Agent queue peek prefers steering and clear removes both queues|stateful Agent rejects a second prompt while its active run is suspended)$",
+              "--no-tests=error",
+              "--output-on-failure",
+              "-j",
+              "1",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1176-agent-comparisons-revalidation-test-tmp-root.xml"
+            ],
+            "testedRevision": "2ea9ae1c360f2a3221fd1dcf5326bf2ac471627a",
+            "recordedAt": "2026-11-11T11:32:54Z",
+            "selected": 5,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1176-agent-comparisons-revalidation-test-tmp-root.xml",
+              "sha256": "f00f81d5902378ece2d6f79edc8f757c93c833076eb292658989b57c3784ee6a"
+            }
+          }
         }
       },
       {
@@ -13667,7 +14047,7 @@
         "inputs": [
           {
             "path": "CMakeLists.txt",
-            "sha256": "bf9f18286f7f73f6a208690978ab0888ba5699c663281da97f40277f66ae6bbe"
+            "sha256": "188aa2efb51c78bfb81dcd9abd80b004ec8444357bee12613916f511e58a65d0"
           },
           {
             "path": "CMakePresets.json",
@@ -13679,7 +14059,7 @@
           },
           {
             "path": "cmake/tests/CodingAgentTests.cmake",
-            "sha256": "4abc90bb29a45ebb81b4d1966659a0b278eb225d2febbfcde79090de1a13c88c"
+            "sha256": "2bd7e22b4902bc7f0c9bb01ed815dcb5ac62830572678dd6e2a72c4a1d12c2d5"
           },
           {
             "path": "cmake/tests/TestsSetup.cmake",
@@ -13778,14 +14158,14 @@
             "-j",
             "1",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1177-application-comparisons-revalidation-test-tmp-root.xml"
+            "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1177-application-comparisons-revalidation-1249-gate-placement.xml"
           ],
-          "testedRevision": "2ea9ae1c360f2a3221fd1dcf5326bf2ac471627a",
-          "recordedAt": "2026-11-11T11:32:57Z",
+          "testedRevision": "49f2a3a7a908f87afca254880216b74e3ff0ea45",
+          "recordedAt": "2026-11-12T07:20:17Z",
           "selected": 9,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1177-application-comparisons-revalidation-test-tmp-root.xml",
-            "sha256": "33f733520fbb4da9b33da5ce5ea5fd29ef01be92d643fa65315ee4bbc24e2f53"
+            "path": "docs/research/pi-v1.3.0/deliveries/1177-application-comparisons-revalidation-1249-gate-placement.xml",
+            "sha256": "088fbbed36c19e67ac16f082de579825316477eb238b37401fd6d0cf83d55006"
           }
         },
         "rows": [
@@ -14514,6 +14894,35 @@
               "sha256": "487e840f14ae7747e424a932838a743583abf638e1d4418745f4945891a1d82e"
             }
           }
+        },
+        "revalidation1249GatePlacement": {
+          "reason": "The #1249 gate-placement change (49f2a3a7a) moved the build-phase Parity Architecture Gate out of the build it gates: `cch_parity_gate_build` left `all`, the 15 per-shard `add_dependencies` lines and the `pike_tests` aggregate's entry were removed, and the POST_BUILD attachment with the seven `CCH_PARITY_BUILD_GATE_*` cache variables was deleted, so the Gate now runs in a build invocation of its own. That changed 2 pinned build inputs of this receipt (CMakeLists.txt, cmake/tests/CodingAgentTests.cmake), so the receipt's exact recorded selection was rerun on the updated tree at 49f2a3a7a: 9 selected, 9 passed, 0 skipped, 0 failed, 2.82 s of CTest wall time. Only those 2 drifted input digests are rebound; no other input is rehashed. Rows, comparison scenarios, discriminating cases, implementationCommits and routingSha256 are unchanged, and the rerun makes no new capability claim. CTest resolves a relative --output-junit path against the test preset's build directory, so the command carries the absolute source-tree path and the artifact is the committed file at junit.path.",
+          "changedInputs": [
+            "CMakeLists.txt",
+            "cmake/tests/CodingAgentTests.cmake"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-R",
+              "^(a\\ real\\ session's\\ next\\ request\\ lists\\ MCP\\ tools\\ registered\\ late\\ and\\ executes\\ them|a\\ settings\\ document\\ the\\ schema\\ accepts\\ reshapes\\ the\\ request\\ and\\ reload\\ re\\-reads\\ it|an\\ inline\\ budget\\ omits\\ a\\ namespace's\\ tools\\ with\\ pi's\\ marker|disabling\\ a\\ server\\ and\\ changing\\ its\\ exposure\\ reshape\\ the\\ next\\ request's\\ catalog|namespaces\\ group\\ sections\\ and\\ the\\ inline\\ budget\\ omits\\ tools\\ with\\ an\\ explicit\\ marker|the\\ empty\\ codemode\\ catalog\\ matches\\ the\\ frozen\\ pi\\-v1\\.3\\.0\\ description|the\\ on\\ loadout\\ lists\\ only\\ non\\-direct\\ callable\\ tools\\ and\\ adds\\ script\\-call\\ descriptions|the\\ only\\ loadout\\ lists\\ every\\ callable\\ tool\\ and\\ hides\\ direct\\ declarations|the\\ theme\\ token\\ set\\ matches\\ the\\ frozen\\ pi\\-v1\\.3\\.0\\ capture)$",
+              "--no-tests=error",
+              "--output-on-failure",
+              "-j",
+              "1",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1177-application-comparisons-revalidation-test-tmp-root.xml"
+            ],
+            "testedRevision": "2ea9ae1c360f2a3221fd1dcf5326bf2ac471627a",
+            "recordedAt": "2026-11-11T11:32:57Z",
+            "selected": 9,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1177-application-comparisons-revalidation-test-tmp-root.xml",
+              "sha256": "33f733520fbb4da9b33da5ce5ea5fd29ef01be92d643fa65315ee4bbc24e2f53"
+            }
+          }
         }
       },
       {
@@ -14531,7 +14940,7 @@
           },
           {
             "path": "cmake/tests/CodemodeTests.cmake",
-            "sha256": "fbc4c60f65065558bed9a8039e1cc6a1e3667de1c113962cb4c1b249185b261f"
+            "sha256": "89fe02b25454b591fd3e513cc13638cbdb77a17d67961b5646b50d0241d39978"
           },
           {
             "path": "src/codemode/Sandbox.cpp",
@@ -14564,18 +14973,18 @@
             "-R",
             "^(a public codemode caller executes a script against an injected nested tool|a public codemode caller keeps prior output when an injected tool rejects|the public codemode tool table registers lists and unregisters with the frozen messages|the public codemode start rejects a later run after close with the frozen spelling|closing codemode settles the run before its worker exit releases admission)$",
             "--no-tests=error",
-            "--output-junit",
-            "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1192-codemode-tool-table-close-revalidation-1232-closeout.xml",
+            "--output-on-failure",
             "-j",
             "1",
-            "--output-on-failure"
+            "--output-junit",
+            "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1192-codemode-tool-table-close-revalidation-1249-gate-placement.xml"
           ],
-          "testedRevision": "b81daa42673e94a35bd24a0584e87e42e3bb2345",
-          "recordedAt": "2026-11-11T17:30:50Z",
+          "testedRevision": "49f2a3a7a908f87afca254880216b74e3ff0ea45",
+          "recordedAt": "2026-11-12T07:20:17Z",
           "selected": 5,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1192-codemode-tool-table-close-revalidation-1232-closeout.xml",
-            "sha256": "a8d2fbbed262e3995c9b4c8555b8b57aaa131961117955c7ba111df6a82b5b1f"
+            "path": "docs/research/pi-v1.3.0/deliveries/1192-codemode-tool-table-close-revalidation-1249-gate-placement.xml",
+            "sha256": "ffd3b172bdc225d66c8c916533566b30b9534c60c3a6e12c77cb651c4b73c9d7"
           }
         },
         "rows": [
@@ -14696,6 +15105,36 @@
               "sha256": "63611617fce06d4e6c7ea8bc998dac091743db1139fd05f39ab648b3d96a4081"
             }
           }
+        },
+        "revalidation1249GatePlacement": {
+          "reason": "The #1249 gate-placement change (49f2a3a7a) moved the build-phase Parity Architecture Gate out of the build it gates: `cch_parity_gate_build` left `all`, the 15 per-shard `add_dependencies` lines and the `pike_tests` aggregate's entry were removed, and the POST_BUILD attachment with the seven `CCH_PARITY_BUILD_GATE_*` cache variables was deleted, so the Gate now runs in a build invocation of its own. That changed 1 pinned build input of this receipt (cmake/tests/CodemodeTests.cmake), so the receipt's exact recorded selection was rerun on the updated tree at 49f2a3a7a: 5 selected, 5 passed, 0 skipped, 0 failed, 4.8 s of CTest wall time. Only those 1 drifted input digest is rebound; no other input is rehashed. Rows, comparison scenarios, discriminating cases, implementationCommits and routingSha256 are unchanged, and the rerun makes no new capability claim. CTest resolves a relative --output-junit path against the test preset's build directory, so the command carries the absolute source-tree path and the artifact is the committed file at junit.path.",
+          "changedInputs": [
+            "cmake/tests/CodemodeTests.cmake"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-LE",
+              "architecture",
+              "-R",
+              "^(a public codemode caller executes a script against an injected nested tool|a public codemode caller keeps prior output when an injected tool rejects|the public codemode tool table registers lists and unregisters with the frozen messages|the public codemode start rejects a later run after close with the frozen spelling|closing codemode settles the run before its worker exit releases admission)$",
+              "--no-tests=error",
+              "--output-junit",
+              "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1192-codemode-tool-table-close-revalidation-1232-closeout.xml",
+              "-j",
+              "1",
+              "--output-on-failure"
+            ],
+            "testedRevision": "b81daa42673e94a35bd24a0584e87e42e3bb2345",
+            "recordedAt": "2026-11-11T17:30:50Z",
+            "selected": 5,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1192-codemode-tool-table-close-revalidation-1232-closeout.xml",
+              "sha256": "a8d2fbbed262e3995c9b4c8555b8b57aaa131961117955c7ba111df6a82b5b1f"
+            }
+          }
         }
       },
       {
@@ -14713,7 +15152,7 @@
           },
           {
             "path": "cmake/tests/CodemodeTests.cmake",
-            "sha256": "fbc4c60f65065558bed9a8039e1cc6a1e3667de1c113962cb4c1b249185b261f"
+            "sha256": "89fe02b25454b591fd3e513cc13638cbdb77a17d67961b5646b50d0241d39978"
           },
           {
             "path": "src/codemode/Portable.cpp",
@@ -14754,17 +15193,18 @@
             "-L",
             "issue1194",
             "--no-tests=error",
-            "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1194-revalidation-1232-frame-join.xml",
+            "--output-on-failure",
             "-j",
-            "1"
+            "1",
+            "--output-junit",
+            "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1194-codemode-portable-entry-revalidation-1249-gate-placement.xml"
           ],
-          "testedRevision": "44d0fa5c1d52bb834a54b812265b250424ba6844",
-          "recordedAt": "2026-11-11T06:53:11Z",
+          "testedRevision": "49f2a3a7a908f87afca254880216b74e3ff0ea45",
+          "recordedAt": "2026-11-12T07:20:17Z",
           "selected": 1,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1194-revalidation-1232-frame-join.xml",
-            "sha256": "39ec7e19bc288ef2816554aa0b818e13baa1dc7b75ff0202bd85667584cd94fc"
+            "path": "docs/research/pi-v1.3.0/deliveries/1194-codemode-portable-entry-revalidation-1249-gate-placement.xml",
+            "sha256": "8e9610e07f4cfdbdb92c809ffaedf21db8188cd68f9fdd55235297428a04912c"
           }
         },
         "rows": [
@@ -14821,6 +15261,35 @@
           "changedInputs": [
             "tests/Catch2Main.cpp"
           ]
+        },
+        "revalidation1249GatePlacement": {
+          "reason": "The #1249 gate-placement change (49f2a3a7a) moved the build-phase Parity Architecture Gate out of the build it gates: `cch_parity_gate_build` left `all`, the 15 per-shard `add_dependencies` lines and the `pike_tests` aggregate's entry were removed, and the POST_BUILD attachment with the seven `CCH_PARITY_BUILD_GATE_*` cache variables was deleted, so the Gate now runs in a build invocation of its own. That changed 1 pinned build input of this receipt (cmake/tests/CodemodeTests.cmake), so the receipt's exact recorded selection was rerun on the updated tree at 49f2a3a7a: 1 selected, 1 passed, 0 skipped, 0 failed, 0.16 s of CTest wall time. Only those 1 drifted input digest is rebound; no other input is rehashed. Rows, comparison scenarios, discriminating cases, implementationCommits and routingSha256 are unchanged, and the rerun makes no new capability claim. CTest resolves a relative --output-junit path against the test preset's build directory, so the command carries the absolute source-tree path and the artifact is the committed file at junit.path.",
+          "changedInputs": [
+            "cmake/tests/CodemodeTests.cmake"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-LE",
+              "architecture",
+              "-L",
+              "issue1194",
+              "--no-tests=error",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1194-revalidation-1232-frame-join.xml",
+              "-j",
+              "1"
+            ],
+            "testedRevision": "44d0fa5c1d52bb834a54b812265b250424ba6844",
+            "recordedAt": "2026-11-11T06:53:11Z",
+            "selected": 1,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1194-revalidation-1232-frame-join.xml",
+              "sha256": "39ec7e19bc288ef2816554aa0b818e13baa1dc7b75ff0202bd85667584cd94fc"
+            }
+          }
         }
       },
       {
@@ -15007,7 +15476,7 @@
           },
           {
             "path": "cmake/tests/CodingAgentTests.cmake",
-            "sha256": "4abc90bb29a45ebb81b4d1966659a0b278eb225d2febbfcde79090de1a13c88c"
+            "sha256": "2bd7e22b4902bc7f0c9bb01ed815dcb5ac62830572678dd6e2a72c4a1d12c2d5"
           },
           {
             "path": "fixtures/pi-v1.3.0/audit-1201/terminal-colors.json",
@@ -15047,17 +15516,19 @@
             "architecture",
             "-L",
             "issue1201",
-            "--output-junit",
-            "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1201-terminal-primitives-revalidation-1245-review.xml",
+            "--no-tests=error",
+            "--output-on-failure",
             "-j",
-            "1"
+            "1",
+            "--output-junit",
+            "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1201-terminal-primitives-revalidation-1249-gate-placement.xml"
           ],
-          "testedRevision": "51c90d0880947771c3b321a502d6803c8f5dfd7f",
-          "recordedAt": "2026-11-06T18:44:49Z",
+          "testedRevision": "49f2a3a7a908f87afca254880216b74e3ff0ea45",
+          "recordedAt": "2026-11-12T07:20:17Z",
           "selected": 9,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1201-terminal-primitives-revalidation-1245-review.xml",
-            "sha256": "ea09227e02139bb9cb3ee4c9520d0a36dbefd66d5c95f4c9c6086369626a2a29"
+            "path": "docs/research/pi-v1.3.0/deliveries/1201-terminal-primitives-revalidation-1249-gate-placement.xml",
+            "sha256": "ad7f44ce9161fbac6b3b8b1aa00b8e05aa6a1e4d26a86b887b71f4ec6d8c7e52"
           }
         },
         "rows": [
@@ -16130,6 +16601,34 @@
           "changedInputs": [
             "tests/Catch2Main.cpp"
           ]
+        },
+        "revalidation1249GatePlacement": {
+          "reason": "The #1249 gate-placement change (49f2a3a7a) moved the build-phase Parity Architecture Gate out of the build it gates: `cch_parity_gate_build` left `all`, the 15 per-shard `add_dependencies` lines and the `pike_tests` aggregate's entry were removed, and the POST_BUILD attachment with the seven `CCH_PARITY_BUILD_GATE_*` cache variables was deleted, so the Gate now runs in a build invocation of its own. That changed 1 pinned build input of this receipt (cmake/tests/CodingAgentTests.cmake), so the receipt's exact recorded selection was rerun on the updated tree at 49f2a3a7a: 9 selected, 9 passed, 0 skipped, 0 failed, 2.05 s of CTest wall time. Only those 1 drifted input digest is rebound; no other input is rehashed. Rows, comparison scenarios, discriminating cases, implementationCommits and routingSha256 are unchanged, and the rerun makes no new capability claim. CTest resolves a relative --output-junit path against the test preset's build directory, so the command carries the absolute source-tree path and the artifact is the committed file at junit.path.",
+          "changedInputs": [
+            "cmake/tests/CodingAgentTests.cmake"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-LE",
+              "architecture",
+              "-L",
+              "issue1201",
+              "--output-junit",
+              "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1201-terminal-primitives-revalidation-1245-review.xml",
+              "-j",
+              "1"
+            ],
+            "testedRevision": "51c90d0880947771c3b321a502d6803c8f5dfd7f",
+            "recordedAt": "2026-11-06T18:44:49Z",
+            "selected": 9,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1201-terminal-primitives-revalidation-1245-review.xml",
+              "sha256": "ea09227e02139bb9cb3ee4c9520d0a36dbefd66d5c95f4c9c6086369626a2a29"
+            }
+          }
         }
       },
       {
