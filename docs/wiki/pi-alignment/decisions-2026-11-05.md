@@ -41,7 +41,7 @@ not as a local hack.
 - Consequence for verification: the durable `Storage:jsonl:sidecar` and `:ordering`
   rows proceed through #1180's delivery receipt contract at a new testedRevision;
   the two-sidecar frozen capture is registered as
-  [fixtures/pi-v1.3.0/audit-1180/sidecar-order.json](../../fixtures/pi-v1.3.0/audit-1180/sidecar-order.json)
+  [fixtures/pi-v1.3.0/audit-1180/sidecar-order.json](../../../fixtures/pi-v1.3.0/audit-1180/sidecar-order.json)
   and the C++ encoder is aligned to frozen write order. #1180 remains open for the
   broader durable packet.
 

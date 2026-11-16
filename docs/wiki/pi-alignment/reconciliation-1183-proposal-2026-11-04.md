@@ -223,6 +223,13 @@ go through the [delivery evidence contract](../../research/pi-v1.3.0/1058-delive
    successor vs #1180); (g) whether closed slices with no report (e.g. #1081) get report backfill
    as a condition for E2.
 
+   **Later state, 2026-11-05.** Item (b) was settled by the owner's decision B — funded alignment
+   with frozen pi under ADR 0076 — and item (c)'s fail-closed downgrade landed on 2026-11-04, with
+   the thirteen disputed rows re-anchored at `71064c7dc` and returned to verified; see
+   [decisions-2026-11-05](decisions-2026-11-05.md) and [evidence history](evidence-and-delivery-history.md).
+   (a) is recorded as committed in §1.4 and (d) as settled in [decisions-2026-11-04](decisions-2026-11-04.md);
+   this page records no later disposition for (e), (f) or (g).
+
 ## 4. Acceptance checks and the minimal reconciliation script
 
 Checks that must pass before this reconciliation is accepted (the documentation/ledger delta needs

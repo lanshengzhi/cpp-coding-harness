@@ -29,7 +29,7 @@ After the symlink fix, all 16 CLI tests and the incremental full build passed in
 
 ## Delivery receipt drift (2026-11-11)
 
-The same command now also reads `docs/research/pi-v1.3.0/*-deliveries.json` and compares every pinned input's digest with the committed blob and the working-tree file. No flag is needed; the check is part of the snapshot.
+The same command now also reads `docs/research/pi-v1.3.0/*-deliveries.json` and compares every pinned input's digest with the committed blob and the working-tree file. No flag is needed; the check is part of the snapshot. This narrows the earlier rule that the report prints no paths: pinned receipt paths are printed, while a path taken from Git status stays suppressed ([design](lane-preflight-design-2026-11-09.md#delivery-receipt-drift-check-2026-11-11)).
 
 ```sh
 python3 scripts/dev/lane-preflight.py --lane lane-example \

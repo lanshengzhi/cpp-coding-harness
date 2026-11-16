@@ -186,6 +186,14 @@ No code, issues, or files outside `docs/research/pi-v1.3.0` and `docs/wiki` were
 was pushed. The E1 working-tree changes (deliveries/ledger/frontier rebuild, both withdrawal
 preservation files' successors, and the wiki updates) are uncommitted for the serial merger's review.
 
+## Later state, appended 2026-11-16
+
+Three conclusions above were overtaken after this page was written; the text above stays as the 2026-11-04 state.
+
+- **§3's symlink blocker: settled 2026-11-05** by the owner's decision B (funded alignment with frozen pi, ADR 0076): see [decisions-2026-11-05](decisions-2026-11-05.md). The *Still undetermined* bullet repeating "owner input required" describes the 2026-11-04 state.
+- **The 13 disputed rows at the end of the execution note: re-anchored 2026-11-05** at `71064c7dc`; the four `1202-withdrawn-*-claims.json` records were removed and the rows returned to verified ([evidence history](evidence-and-delivery-history.md)). "Remain receipt-backed but disputed" is that day's earlier state.
+- **E1 was executed 2026-11-05** in `224af8544900b51f6153c386d3b33bec2841c214`, the checked-in `ticketMappings` channel; see the [reconciliation proposal](reconciliation-1183-proposal-2026-11-04.md) execution notes. E2 and E4 have no applied record on that page.
+
 Related: [open questions](open-questions.md), [goals](goals.md),
 [reconciliation proposal](reconciliation-1183-proposal-2026-11-04.md),
 [residual-gap audit](residual-gap-audit-2026-11-04.md), [index](index.md).

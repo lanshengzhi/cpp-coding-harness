@@ -152,7 +152,7 @@ flagged above for the owning shard to resolve.
 name+path matcher over comment-stripped source, quoted-include closure under `tests/`) plus
 `tests/evidence/ReceiptBoundaryTest.py` (19 tests: matcher true/false positives, sub-directory
 path forms, fail-closed unknown claims, CLI exit codes). Recorded in
-[consolidation README](../../fixtures/pi-v1.3.0/consolidation-1058/README.md). Nothing pushed;
+[consolidation README](../../../fixtures/pi-v1.3.0/consolidation-1058/README.md). Nothing pushed;
 ledger/deliveries untouched.
 
 **First full run, all 14 active receipts, `--baseline pi-v1.3.0`:** exit **1** (fail-closed, as
