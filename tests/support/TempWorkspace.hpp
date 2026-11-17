@@ -1,20 +1,19 @@
 #pragma once
 
-#include <chrono>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
-#include <random>
 #include <string>
+#include <utility>
 
 namespace cch::tests {
 
 class TempWorkspace {
 public:
     TempWorkspace() {
-        auto base = std::filesystem::temp_directory_path();
-        auto stamp = std::chrono::steady_clock::now().time_since_epoch().count();
-        path_ = base / ("cpp-harness-test-" + std::to_string(stamp));
-        std::filesystem::create_directories(path_);
+        auto pattern = (std::filesystem::temp_directory_path() / "cpp-harness-test-XXXXXX").string();
+        if (::mkdtemp(pattern.data()) == nullptr) std::abort();
+        path_ = std::move(pattern);
     }
 
     TempWorkspace(const TempWorkspace&) = delete;

@@ -527,23 +527,36 @@ TEST_CASE("resumed session renders message content containing DEL", "[coding_age
                                          "after escapedDELmarker",
             workspace.path(),
             true);
-    tests::RuntimeLoopDriver runtime_driver(fixture->runtime);
-    tui::VirtualTerminal terminal({.columns = 72, .rows = 52});
-    boost::asio::io_context io;
-    auto run_result = std::make_shared<std::optional<support::ExpectedVoid>>();
-    boost::asio::co_spawn(io,
-            coding_agent::tui::run_interactive_mode(terminal, make_run(*fixture->session, fixture->config.path())),
-            [run_result](std::exception_ptr exception, support::ExpectedVoid result) {
-                CHECK(exception == nullptr);
-                run_result->emplace(std::move(result));
-            });
-    drain_ready(io);
-    CHECK_FALSE(run_result->has_value());
-    CHECK(visible_screen(terminal).find("beforeafter escapedmarker") != std::string::npos);
-    REQUIRE(terminal.inject_input("\x04"));
-    drain_ready(io);
-    REQUIRE(run_result->has_value());
-    CHECK(**run_result);
+    bool was_running = false;
+    bool rendered = false;
+    bool injected = false;
+    bool completed = false;
+    bool no_exception = false;
+    std::optional<support::ExpectedVoid> run_result;
+    {
+        tests::RuntimeLoopDriver runtime_driver(fixture->runtime);
+        tui::VirtualTerminal terminal({.columns = 72, .rows = 52});
+        boost::asio::io_context io;
+        boost::asio::co_spawn(io,
+                coding_agent::tui::run_interactive_mode(terminal, make_run(*fixture->session, fixture->config.path())),
+                [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                    no_exception = exception == nullptr;
+                    run_result.emplace(std::move(result));
+                });
+        drain_ready(io);
+        was_running = !run_result.has_value();
+        rendered = visible_screen(terminal).find("beforeafter escapedmarker") != std::string::npos;
+        injected = terminal.inject_input("\x04").has_value();
+        completed = tests::pump_until(io, [&] { return run_result.has_value(); });
+    }
+    fixture.reset();
+    CHECK(was_running);
+    CHECK(rendered);
+    CHECK(injected);
+    CHECK(completed);
+    CHECK(no_exception);
+    REQUIRE(run_result.has_value());
+    CHECK(*run_result);
 }
 
 TEST_CASE("rendering golden: the full message pipeline renders in pi's shapes",

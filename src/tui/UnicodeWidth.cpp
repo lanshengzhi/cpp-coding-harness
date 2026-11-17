@@ -228,6 +228,9 @@ namespace {
                 terminator_length = 2;
                 break;
             }
+            if (byte < 0x20 || byte == 0x7F) {
+                return std::unexpected(invalid_terminal_text("Unsupported control in APC sequence"));
+            }
             ++cursor;
         }
         if (terminator_length == 0) {
@@ -458,7 +461,10 @@ support::Expected<std::vector<TerminalToken>> tokenize_terminal_output(std::stri
             auto ansi = parse_supported_ansi(text, position);
             if (!ansi) return std::unexpected(ansi.error());
             TerminalTokenKind token_kind = TerminalTokenKind::Sgr;
-            if (ansi->code.starts_with("\x1b[?") && (ansi->code.ends_with('h') || ansi->code.ends_with('l'))) {
+            if (ansi->code.starts_with("\x1b]4;") || ansi->code.starts_with("\x1b]10;") ||
+                    ansi->code.starts_with("\x1b]11;")) {
+                token_kind = TerminalTokenKind::TerminalColorControl;
+            } else if (ansi->code.starts_with("\x1b[?") && (ansi->code.ends_with('h') || ansi->code.ends_with('l'))) {
                 token_kind = TerminalTokenKind::PrivateModeControl;
             } else if (ansi->code.ends_with('A') || ansi->code.ends_with('B') || ansi->code.ends_with('G') ||
                        ansi->code.ends_with('H')) {
@@ -744,7 +750,8 @@ support::Expected<std::string> normalize_terminal_output(std::string_view text) 
     std::string result;
     for (const auto& token : *tokens) {
         if (token.kind == TerminalTokenKind::CursorMove || token.kind == TerminalTokenKind::ClearLine ||
-                token.kind == TerminalTokenKind::PrivateModeControl) {
+                token.kind == TerminalTokenKind::PrivateModeControl ||
+                token.kind == TerminalTokenKind::TerminalColorControl) {
             return std::unexpected(invalid_terminal_text("Terminal control not allowed in component text"));
         }
         if (token.kind == TerminalTokenKind::CarriageReturn) {
@@ -760,7 +767,8 @@ support::Expected<PreparedRenderedLine> prepare_rendered_line(std::string_view l
     auto tokens = tokenize_terminal_output(line);
     if (!tokens) return std::unexpected(tokens.error());
     for (const auto& token : *tokens) {
-        if (token.kind == TerminalTokenKind::PrivateModeControl) {
+        if (token.kind == TerminalTokenKind::PrivateModeControl ||
+                token.kind == TerminalTokenKind::TerminalColorControl) {
             return std::unexpected(invalid_terminal_text("Terminal control not allowed in component text"));
         }
         if (token.kind == TerminalTokenKind::CursorMove || token.kind == TerminalTokenKind::ClearLine) {

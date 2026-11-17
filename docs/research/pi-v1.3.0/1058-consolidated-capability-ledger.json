@@ -2601,7 +2601,7 @@
           },
           {
             "path": "tests/support/TempWorkspace.hpp",
-            "sha256": "4c3811b22c3abae96d3261a54d401899033ffb80fcc325a5ac5dd2c9f8f75140"
+            "sha256": "0917bd5e7ca0d7cad64d8eb1a3eb38823cd882e8243d30f606ddc1de59102c98"
           },
           {
             "path": "tests/support/EnvVarGuard.hpp",
@@ -2684,14 +2684,14 @@
             "-j",
             "1",
             "--output-junit",
-            "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1118-codemode-catalog-revalidation-1249-gate-placement.xml"
+            "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1118-codemode-catalog-revalidation-725-temp-workspace.xml"
           ],
-          "testedRevision": "49f2a3a7a908f87afca254880216b74e3ff0ea45",
-          "recordedAt": "2026-11-12T07:20:17Z",
+          "testedRevision": "45cbc3a7f4acbe9124e444ca56d4afd949a749ed",
+          "recordedAt": "2026-11-17T13:16:51Z",
           "selected": 19,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1118-codemode-catalog-revalidation-1249-gate-placement.xml",
-            "sha256": "0eed88e34e36e7d3638ec1d0ce9cd6fa01c2e9c3b8b40184d670193d9ca25441"
+            "path": "docs/research/pi-v1.3.0/deliveries/1118-codemode-catalog-revalidation-725-temp-workspace.xml",
+            "sha256": "e3dc6b4d8f53af6304fba497c59fc8cf7eb92b73ca683d0fe6958e33a90d7b9c"
           }
         },
         "rows": [
@@ -3781,6 +3781,34 @@
             "junit": {
               "path": "docs/research/pi-v1.3.0/deliveries/1118-revalidation-1232-frame-join.xml",
               "sha256": "d50e1cb0440e3c8b9e5001ce92bd69107cbb1922c986cd554423dd8127cce907"
+            }
+          }
+        },
+        "revalidation725TempWorkspace": {
+          "reason": "The shared TempWorkspace now creates a unique directory atomically with mkdtemp. The original exact CTest selection was rerun with this changed test helper; the test selection, frozen scenario mappings, discriminators and capability claims remain unchanged.",
+          "changedInputs": [
+            "tests/support/TempWorkspace.hpp"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-L",
+              "issue1118",
+              "--no-tests=error",
+              "--output-on-failure",
+              "-j",
+              "1",
+              "--output-junit",
+              "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1118-codemode-catalog-revalidation-1249-gate-placement.xml"
+            ],
+            "testedRevision": "49f2a3a7a908f87afca254880216b74e3ff0ea45",
+            "recordedAt": "2026-11-12T07:20:17Z",
+            "selected": 19,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1118-codemode-catalog-revalidation-1249-gate-placement.xml",
+              "sha256": "0eed88e34e36e7d3638ec1d0ce9cd6fa01c2e9c3b8b40184d670193d9ca25441"
             }
           }
         },
@@ -5283,7 +5311,7 @@
           },
           {
             "path": "tests/support/TempWorkspace.hpp",
-            "sha256": "4c3811b22c3abae96d3261a54d401899033ffb80fcc325a5ac5dd2c9f8f75140"
+            "sha256": "0917bd5e7ca0d7cad64d8eb1a3eb38823cd882e8243d30f606ddc1de59102c98"
           },
           {
             "path": "tests/support/EnvVarGuard.hpp",
@@ -5362,14 +5390,14 @@
             "-j",
             "1",
             "--output-junit",
-            "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1181-mcp-comparisons-revalidation-1249-gate-placement.xml"
+            "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1181-mcp-comparisons-revalidation-725-temp-workspace.xml"
           ],
-          "testedRevision": "49f2a3a7a908f87afca254880216b74e3ff0ea45",
-          "recordedAt": "2026-11-12T07:20:17Z",
+          "testedRevision": "45cbc3a7f4acbe9124e444ca56d4afd949a749ed",
+          "recordedAt": "2026-11-17T13:16:51Z",
           "selected": 16,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1181-mcp-comparisons-revalidation-1249-gate-placement.xml",
-            "sha256": "aff6b0783aaa9e1e860d87d26f33d584ef71e8d50ed91891bf8e4ce499792766"
+            "path": "docs/research/pi-v1.3.0/deliveries/1181-mcp-comparisons-revalidation-725-temp-workspace.xml",
+            "sha256": "a390fd5cf586a55dae8d902b8550942428ff25c0d6ba18a6e7d2aab0e722e982"
           }
         },
         "rows": [
@@ -6419,6 +6447,34 @@
             "junit": {
               "path": "docs/research/pi-v1.3.0/deliveries/1181-revalidation-upstream-71ad3e83a.xml",
               "sha256": "7376bd1833a9bbfb745686c2db5595765838372fe21d9989deea19e2a3f48d4f"
+            }
+          }
+        },
+        "revalidation725TempWorkspace": {
+          "reason": "The shared TempWorkspace now creates a unique directory atomically with mkdtemp. The original exact CTest selection was rerun with this changed test helper; the test selection, frozen scenario mappings, discriminators and capability claims remain unchanged.",
+          "changedInputs": [
+            "tests/support/TempWorkspace.hpp"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-R",
+              "^(an MCP HTTP URL must be http or https|streamable HTTP transport connects over plain http|connecting an MCP HTTP server lists its tools with the pi naming and schema|a same-origin redirect is followed and keeps the request auth header|cross-origin redirect is followed without Authorization and is rejected|HTTPS transport rejects an untrusted certificate|an authorization code from another issuer never reaches the token endpoint|authorization server metadata naming another issuer stops before any token request|the MCP HTTP transport attaches a credential only when the server needs one|agent session lists MCP resources only on demand and can call tools after a resource failure|the real stdio fixture lists, templates, and reads over `resources/\\*`|a cancelled MCP OAuth discovery stops before any registration or token request|a cancelled MCP OAuth client registration stops before any token request|a browser callback wait cancelled by the sign-in stop token stops sign-in|a pasted redirect URL completes the MCP OAuth sign-in|protected resource discovery retries the bare origin after a path-suffixed miss)$",
+              "--no-tests=error",
+              "--output-on-failure",
+              "-j",
+              "1",
+              "--output-junit",
+              "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1181-mcp-comparisons-revalidation-1249-gate-placement.xml"
+            ],
+            "testedRevision": "49f2a3a7a908f87afca254880216b74e3ff0ea45",
+            "recordedAt": "2026-11-12T07:20:17Z",
+            "selected": 16,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1181-mcp-comparisons-revalidation-1249-gate-placement.xml",
+              "sha256": "aff6b0783aaa9e1e860d87d26f33d584ef71e8d50ed91891bf8e4ce499792766"
             }
           }
         },

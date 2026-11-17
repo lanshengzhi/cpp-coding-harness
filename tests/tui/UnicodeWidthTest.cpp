@@ -233,6 +233,18 @@ TEST_CASE("DEL is removed before terminal sequences are validated", "[tui][issue
     CHECK_FALSE(prepare_rendered_line("\x1b_Ga=T;data\x1b\\\x1b[?25l", 10));
 }
 
+TEST_CASE("terminal component text rejects palette changes and embedded APC controls", "[tui][issue725][security]") {
+    const std::string palette = "\x1b]4;\x7f"
+                                "0;rgb:ff/00/00\x07";
+    const std::string embedded = "\x1b\x7f_pi:\x1b[?25l\x1b\\";
+    CHECK_FALSE(normalize_terminal_output(palette));
+    CHECK_FALSE(prepare_rendered_line(palette, 80));
+    CHECK_FALSE(normalize_terminal_output(embedded));
+    CHECK_FALSE(prepare_rendered_line(embedded, 80));
+    CHECK(normalize_terminal_output("\x1b_pi:c\x07"));
+    CHECK(normalize_terminal_output("\x1b_Gi=31;AAAA\x1b\\"));
+}
+
 TEST_CASE("normalize_terminal_output rejects unsafe terminal controls", "[tui][issue46][unicode][spec]") {
     CHECK_FALSE(normalize_terminal_output("\x1b[10Gx"));
     CHECK_FALSE(normalize_terminal_output("\x1b"
