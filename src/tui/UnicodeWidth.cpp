@@ -446,7 +446,8 @@ support::Expected<std::vector<TerminalToken>> tokenize_terminal_output(std::stri
     // DEL is ignored by terminals even inside escape sequences. Remove it before
     // parsing so every resulting sequence still goes through the normal guards.
     std::string without_del;
-    if (text.find('\x7f') != std::string_view::npos) {
+    const bool had_del = text.find('\x7f') != std::string_view::npos;
+    if (had_del) {
         without_del.assign(text);
         std::erase(without_del, '\x7f');
         text = without_del;
@@ -460,9 +461,27 @@ support::Expected<std::vector<TerminalToken>> tokenize_terminal_output(std::stri
         if (byte == 0x1B) {
             auto ansi = parse_supported_ansi(text, position);
             if (!ansi) return std::unexpected(ansi.error());
+            if (had_del && ansi->code.starts_with("\x1b_G")) {
+                const std::string_view code = ansi->code;
+                const auto end = code.find_first_of(";\x1b\x07", 3);
+                auto parameters = code.substr(3, end - 3);
+                bool deletes_image = false;
+                while (!parameters.empty()) {
+                    const auto separator = parameters.find(',');
+                    if (parameters.substr(0, separator) == "a=d") deletes_image = true;
+                    if (separator == std::string_view::npos) break;
+                    parameters.remove_prefix(separator + 1);
+                }
+                if (deletes_image) {
+                    position += ansi->length;
+                    continue;
+                }
+            }
             TerminalTokenKind token_kind = TerminalTokenKind::Sgr;
-            if (ansi->code.starts_with("\x1b]4;") || ansi->code.starts_with("\x1b]10;") ||
-                    ansi->code.starts_with("\x1b]11;")) {
+            if (ansi->code.starts_with("\x1b[") && ansi->code.ends_with('c')) {
+                token_kind = TerminalTokenKind::PrivateModeControl;
+            } else if (ansi->code.starts_with("\x1b]4;") || ansi->code.starts_with("\x1b]10;") ||
+                       ansi->code.starts_with("\x1b]11;")) {
                 token_kind = TerminalTokenKind::TerminalColorControl;
             } else if (ansi->code.starts_with("\x1b[?") && (ansi->code.ends_with('h') || ansi->code.ends_with('l'))) {
                 token_kind = TerminalTokenKind::PrivateModeControl;

@@ -245,6 +245,31 @@ TEST_CASE("terminal component text rejects palette changes and embedded APC cont
     CHECK(normalize_terminal_output("\x1b_Gi=31;AAAA\x1b\\"));
 }
 
+TEST_CASE("DEL cannot introduce Kitty deletion or device attribute controls", "[tui][issue725][security]") {
+    const std::string deletion = "\x1b_Ga=d,d=A\x1b\\";
+    for (const auto& text : {"\x7f" + deletion, deletion + "\x7f", std::string{"\x1b_Ga=d,d=A\x7f\x1b\\"}}) {
+        const auto normalized = normalize_terminal_output(text);
+        REQUIRE(normalized);
+        CHECK(normalized->empty());
+        const auto line = prepare_rendered_line(text, 80);
+        REQUIRE(line);
+        CHECK(line->text.empty());
+    }
+    CHECK_FALSE(normalize_terminal_output("\x1b[\x7f"
+                                          "c"));
+    CHECK_FALSE(prepare_rendered_line("\x1b[\x7f"
+                                      "c",
+            80));
+    CHECK_FALSE(normalize_terminal_output("\x1b[?1;2c"));
+    CHECK_FALSE(prepare_rendered_line("\x1b[?1;2c", 80));
+    CHECK(normalize_terminal_output("\x1b_pi:\x7f"
+                                    "c\x07"));
+    CHECK(prepare_rendered_line("\x1b_Gi=31;AA\x7f"
+                                "AA\x1b\\\x1b[1G",
+            80));
+    CHECK(normalize_terminal_output(deletion));
+}
+
 TEST_CASE("normalize_terminal_output rejects unsafe terminal controls", "[tui][issue46][unicode][spec]") {
     CHECK_FALSE(normalize_terminal_output("\x1b[10Gx"));
     CHECK_FALSE(normalize_terminal_output("\x1b"

@@ -48,6 +48,8 @@
 #include <cch/support/Error.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include <boost/asio/bind_cancellation_slot.hpp>
+#include <boost/asio/cancellation_signal.hpp>
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/redirect_error.hpp>
@@ -142,18 +144,16 @@ struct PipelineSession {
 [[nodiscard]] std::unique_ptr<PipelineSession> make_pipeline_session(std::string resume_text = "resume request",
         const std::filesystem::path& workspace = {},
         bool escaped_del = false) {
-    auto fixture = std::make_unique<PipelineSession>();
-    fixture->workspace = workspace.empty() ? rendering_workspace_path("message-pipeline") : workspace;
-    const auto session_file = fixture->workspace / "message-pipeline.jsonl";
-    auto store = harness::session::SessionStore::create_new(
-        session_file,
-        {
-            .session_id = "message-pipeline",
-            .created_at = "2026-08-10T00:00:00Z",
-            .workspace = fixture->workspace,
-            .provider = "fake",
-            .model = "fake-model",
-        });
+    const auto session_workspace = workspace.empty() ? rendering_workspace_path("message-pipeline") : workspace;
+    const auto session_file = session_workspace / "message-pipeline.jsonl";
+    auto store = harness::session::SessionStore::create_new(session_file,
+            {
+                    .session_id = "message-pipeline",
+                    .created_at = "2026-08-10T00:00:00Z",
+                    .workspace = session_workspace,
+                    .provider = "fake",
+                    .model = "fake-model",
+            });
     REQUIRE(store);
 
     REQUIRE(store->append(ai::MessageVariant{
@@ -229,6 +229,8 @@ struct PipelineSession {
         REQUIRE(output);
     }
 
+    auto fixture = std::make_unique<PipelineSession>();
+    fixture->workspace = session_workspace;
     coding_agent::runtime::AgentSessionCreationRequest resume;
     resume.session_target =
         coding_agent::ExplicitResumeSessionTarget{session_file};
@@ -238,6 +240,7 @@ struct PipelineSession {
     resume.session_facts.no_prompt_templates = true;
     auto created = fixture->runtime.run(coding_agent::create_agent_session_async(
             std::move(resume), std::nullopt, cch::tests::cli_fake_overrides(tests::make_scripted_fake_models())));
+    if (!created) fixture.reset();
     REQUIRE(created);
     fixture->session = std::move(created->session);
     return fixture;
@@ -522,6 +525,9 @@ struct InterruptSession {
 } // namespace
 
 TEST_CASE("resumed session renders message content containing DEL", "[coding_agent][tui][issue725]") {
+    bool force_timeout = false;
+    SECTION("normal exit") {}
+    SECTION("cancel a timed out run") { force_timeout = true; }
     tests::TempWorkspace workspace;
     auto fixture = make_pipeline_session("before\x7f"
                                          "after escapedDELmarker",
@@ -537,26 +543,41 @@ TEST_CASE("resumed session renders message content containing DEL", "[coding_age
         tests::RuntimeLoopDriver runtime_driver(fixture->runtime);
         tui::VirtualTerminal terminal({.columns = 72, .rows = 52});
         boost::asio::io_context io;
+        boost::asio::cancellation_signal cancellation;
         boost::asio::co_spawn(io,
                 coding_agent::tui::run_interactive_mode(terminal, make_run(*fixture->session, fixture->config.path())),
-                [&](std::exception_ptr exception, support::ExpectedVoid result) {
-                    no_exception = exception == nullptr;
-                    run_result.emplace(std::move(result));
-                });
+                boost::asio::bind_cancellation_slot(
+                        cancellation.slot(), [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                            no_exception = exception == nullptr;
+                            run_result.emplace(std::move(result));
+                        }));
         drain_ready(io);
         was_running = !run_result.has_value();
         rendered = visible_screen(terminal).find("beforeafter escapedmarker") != std::string::npos;
-        injected = terminal.inject_input("\x04").has_value();
-        completed = tests::pump_until(io, [&] { return run_result.has_value(); });
+        if (!force_timeout) injected = terminal.inject_input("\x04").has_value();
+        completed = tests::pump_until(
+                io,
+                [&] { return run_result.has_value(); },
+                force_timeout ? std::chrono::milliseconds{0} : std::chrono::milliseconds{60000});
+        if (!completed) {
+            // Request the engine's normal close first: finish() cancels its flows
+            // and waits for quiescence before releasing the borrowed terminal.
+            (void)terminal.inject_input("\x04");
+            if (!tests::pump_until(io, [&] { return run_result.has_value(); })) {
+                cancellation.emit(boost::asio::cancellation_type::all);
+                // A stuck run cannot safely release its borrowed objects.
+                std::terminate();
+            }
+        }
     }
     fixture.reset();
     CHECK(was_running);
     CHECK(rendered);
-    CHECK(injected);
-    CHECK(completed);
-    CHECK(no_exception);
+    CHECK(completed != force_timeout);
     REQUIRE(run_result.has_value());
+    CHECK(no_exception);
     CHECK(*run_result);
+    if (!force_timeout) CHECK(injected);
 }
 
 TEST_CASE("rendering golden: the full message pipeline renders in pi's shapes",
