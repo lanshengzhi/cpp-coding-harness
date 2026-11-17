@@ -207,6 +207,25 @@ TEST_CASE("normalize_terminal_output normalizes CRLF and lone CR", "[tui][issue4
     CHECK(*result == "a\nb\nc");
 }
 
+TEST_CASE("DEL is removed before terminal sequences are validated", "[tui][issue725][unicode]") {
+    const auto hyperlink = normalize_terminal_output("\x1b]8;;https://exa\x7f"
+                                                     "mple.com\x07link\x1b]8;;\x07");
+    REQUIRE(hyperlink);
+    CHECK(*hyperlink == "\x1b]8;;https://example.com\x07link\x1b]8;;\x07");
+
+    const auto sgr = normalize_terminal_output("\x1b[3\x7f"
+                                               "1mred\x1b[0m");
+    REQUIRE(sgr);
+    CHECK(*sgr == "\x1b[31mred\x1b[0m");
+
+    CHECK_FALSE(normalize_terminal_output("\x1b]0;ti\x7ftle\x07"));
+    CHECK_FALSE(normalize_terminal_output("\x1b[1\x7f"
+                                          "0G"));
+    CHECK_FALSE(normalize_terminal_output("\x1b]8;;url\x7f\x01\x07"));
+    CHECK_FALSE(normalize_terminal_output("\x1b[5\x7f"
+                                          "3m"));
+}
+
 TEST_CASE("normalize_terminal_output rejects unsafe terminal controls", "[tui][issue46][unicode][spec]") {
     CHECK_FALSE(normalize_terminal_output("\x1b[10Gx"));
     CHECK_FALSE(normalize_terminal_output("\x1b"

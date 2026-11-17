@@ -515,15 +515,15 @@ TEST_CASE("resumed session renders message content containing DEL", "[coding_age
     tests::RuntimeLoopDriver runtime_driver(fixture->runtime);
     tui::VirtualTerminal terminal({.columns = 72, .rows = 52});
     boost::asio::io_context io;
-    std::optional<support::ExpectedVoid> run_result;
+    auto run_result = std::make_shared<std::optional<support::ExpectedVoid>>();
     boost::asio::co_spawn(io,
             coding_agent::tui::run_interactive_mode(terminal, make_run(*fixture->session, fixture->config.path())),
-            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+            [run_result](std::exception_ptr exception, support::ExpectedVoid result) {
                 CHECK(exception == nullptr);
-                run_result.emplace(std::move(result));
+                run_result->emplace(std::move(result));
             });
     drain_ready(io);
-    CHECK_FALSE(run_result.has_value());
+    CHECK_FALSE(run_result->has_value());
     CHECK(visible_screen(terminal).find("beforeafter") != std::string::npos);
 }
 

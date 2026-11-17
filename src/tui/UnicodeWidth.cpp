@@ -440,6 +440,14 @@ std::optional<AnsiCode> extract_ansi_code(std::string_view text, std::size_t pos
 }
 
 support::Expected<std::vector<TerminalToken>> tokenize_terminal_output(std::string_view text, TokenizeMode mode) {
+    // DEL is ignored by terminals even inside escape sequences. Remove it before
+    // parsing so every resulting sequence still goes through the normal guards.
+    std::string without_del;
+    if (text.find('\x7f') != std::string_view::npos) {
+        without_del.assign(text);
+        std::erase(without_del, '\x7f');
+        text = without_del;
+    }
     std::vector<TerminalToken> tokens;
     tokens.reserve(text.size());
     const bool preserve_text = mode == TokenizeMode::PreserveText;
@@ -521,10 +529,6 @@ support::Expected<std::vector<TerminalToken>> tokenize_terminal_output(std::stri
             } else {
                 tokens.push_back({.kind = TerminalTokenKind::Grapheme, .text = {}, .width = 1});
             }
-            position += bytes;
-            continue;
-        }
-        if (codepoint == 0x7F) {
             position += bytes;
             continue;
         }
