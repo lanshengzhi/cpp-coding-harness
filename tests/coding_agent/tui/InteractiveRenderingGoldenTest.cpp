@@ -139,9 +139,10 @@ struct PipelineSession {
     std::unique_ptr<coding_agent::AgentSession> session;
 };
 
-[[nodiscard]] std::unique_ptr<PipelineSession> make_pipeline_session() {
+[[nodiscard]] std::unique_ptr<PipelineSession> make_pipeline_session(
+        std::string resume_text = "resume request", std::string_view workspace_name = "message-pipeline") {
     auto fixture = std::make_unique<PipelineSession>();
-    fixture->workspace = rendering_workspace_path("message-pipeline");
+    fixture->workspace = rendering_workspace_path(workspace_name);
     const auto session_file = fixture->workspace / "message-pipeline.jsonl";
     auto store = harness::session::SessionStore::create_new(
         session_file,
@@ -156,8 +157,7 @@ struct PipelineSession {
 
     REQUIRE(store->append(ai::MessageVariant{
         ai::user_text_message("before compaction", 1'700'000'000'000)}));
-    REQUIRE(store->append(ai::MessageVariant{
-        ai::user_text_message("resume request", 1'700'000'000'001)}));
+    REQUIRE(store->append(ai::MessageVariant{ai::user_text_message(std::move(resume_text), 1'700'000'000'001)}));
     auto loaded = harness::session::SessionStore::load(session_file);
     REQUIRE(loaded);
     REQUIRE(loaded->entries.size() >= 3);
@@ -507,6 +507,25 @@ struct InterruptSession {
 }
 
 } // namespace
+
+TEST_CASE("resumed session renders message content containing DEL", "[coding_agent][tui][issue725]") {
+    auto fixture = make_pipeline_session("before\x7f"
+                                         "after",
+            "message-del");
+    tests::RuntimeLoopDriver runtime_driver(fixture->runtime);
+    tui::VirtualTerminal terminal({.columns = 72, .rows = 52});
+    boost::asio::io_context io;
+    std::optional<support::ExpectedVoid> run_result;
+    boost::asio::co_spawn(io,
+            coding_agent::tui::run_interactive_mode(terminal, make_run(*fixture->session, fixture->config.path())),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                CHECK(exception == nullptr);
+                run_result.emplace(std::move(result));
+            });
+    drain_ready(io);
+    CHECK_FALSE(run_result.has_value());
+    CHECK(visible_screen(terminal).find("beforeafter") != std::string::npos);
+}
 
 TEST_CASE("rendering golden: the full message pipeline renders in pi's shapes",
         "[coding_agent][tui][rendering][issue422][compat-pi]") {

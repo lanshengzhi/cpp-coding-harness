@@ -524,7 +524,11 @@ support::Expected<std::vector<TerminalToken>> tokenize_terminal_output(std::stri
             position += bytes;
             continue;
         }
-        if ((codepoint < 0x20) || codepoint == 0x7F || (codepoint >= 0x80 && codepoint <= 0x9F)) {
+        if (codepoint == 0x7F) {
+            position += bytes;
+            continue;
+        }
+        if ((codepoint < 0x20) || (codepoint >= 0x80 && codepoint <= 0x9F)) {
             return std::unexpected(invalid_terminal_text("Unsupported control character in terminal text",
                     std::format("U+{:04X}", static_cast<unsigned>(codepoint))));
         }

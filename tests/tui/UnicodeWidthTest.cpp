@@ -214,8 +214,6 @@ TEST_CASE("normalize_terminal_output rejects unsafe terminal controls", "[tui][i
     CHECK_FALSE(normalize_terminal_output("\x1b_X\x1b\\"));
     CHECK_FALSE(normalize_terminal_output("\x1b]0;title\x07"));
     CHECK_FALSE(normalize_terminal_output("\x1b[999999999999999999999m"));
-    CHECK_FALSE(normalize_terminal_output("a\x7f"
-                                          "b"));
     CHECK_FALSE(normalize_terminal_output("a\xc2\x85"
                                           "b"));
 }
