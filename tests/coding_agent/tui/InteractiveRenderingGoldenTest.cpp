@@ -139,10 +139,11 @@ struct PipelineSession {
     std::unique_ptr<coding_agent::AgentSession> session;
 };
 
-[[nodiscard]] std::unique_ptr<PipelineSession> make_pipeline_session(
-        std::string resume_text = "resume request", std::string_view workspace_name = "message-pipeline") {
+[[nodiscard]] std::unique_ptr<PipelineSession> make_pipeline_session(std::string resume_text = "resume request",
+        const std::filesystem::path& workspace = {},
+        bool escaped_del = false) {
     auto fixture = std::make_unique<PipelineSession>();
-    fixture->workspace = rendering_workspace_path(workspace_name);
+    fixture->workspace = workspace.empty() ? rendering_workspace_path("message-pipeline") : workspace;
     const auto session_file = fixture->workspace / "message-pipeline.jsonl";
     auto store = harness::session::SessionStore::create_new(
         session_file,
@@ -215,6 +216,18 @@ struct PipelineSession {
         .from_id = "branch-entry",
         .timestamp = 1'700'000'000'006,
     }}));
+
+    if (escaped_del) {
+        auto persisted = read_text_file(session_file);
+        const auto marker = persisted.find("escapedDELmarker");
+        REQUIRE(marker != std::string::npos);
+        persisted.replace(marker, std::string_view{"escapedDELmarker"}.size(), "escaped\\u007fmarker");
+        std::ofstream output{session_file, std::ios::binary | std::ios::trunc};
+        REQUIRE(output);
+        output << persisted;
+        output.close();
+        REQUIRE(output);
+    }
 
     coding_agent::runtime::AgentSessionCreationRequest resume;
     resume.session_target =
@@ -509,9 +522,11 @@ struct InterruptSession {
 } // namespace
 
 TEST_CASE("resumed session renders message content containing DEL", "[coding_agent][tui][issue725]") {
+    tests::TempWorkspace workspace;
     auto fixture = make_pipeline_session("before\x7f"
-                                         "after",
-            "message-del");
+                                         "after escapedDELmarker",
+            workspace.path(),
+            true);
     tests::RuntimeLoopDriver runtime_driver(fixture->runtime);
     tui::VirtualTerminal terminal({.columns = 72, .rows = 52});
     boost::asio::io_context io;
@@ -524,7 +539,11 @@ TEST_CASE("resumed session renders message content containing DEL", "[coding_age
             });
     drain_ready(io);
     CHECK_FALSE(run_result->has_value());
-    CHECK(visible_screen(terminal).find("beforeafter") != std::string::npos);
+    CHECK(visible_screen(terminal).find("beforeafter escapedmarker") != std::string::npos);
+    REQUIRE(terminal.inject_input("\x04"));
+    drain_ready(io);
+    REQUIRE(run_result->has_value());
+    CHECK(**run_result);
 }
 
 TEST_CASE("rendering golden: the full message pipeline renders in pi's shapes",

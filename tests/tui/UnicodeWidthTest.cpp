@@ -224,6 +224,13 @@ TEST_CASE("DEL is removed before terminal sequences are validated", "[tui][issue
     CHECK_FALSE(normalize_terminal_output("\x1b]8;;url\x7f\x01\x07"));
     CHECK_FALSE(normalize_terminal_output("\x1b[5\x7f"
                                           "3m"));
+    CHECK_FALSE(normalize_terminal_output("\x1b[?25\x7f"
+                                          "l"));
+    CHECK_FALSE(normalize_terminal_output("\x1b[?25h"));
+    CHECK_FALSE(prepare_rendered_line("\x1b[?25\x7f"
+                                      "l",
+            10));
+    CHECK_FALSE(prepare_rendered_line("\x1b_Ga=T;data\x1b\\\x1b[?25l", 10));
 }
 
 TEST_CASE("normalize_terminal_output rejects unsafe terminal controls", "[tui][issue46][unicode][spec]") {

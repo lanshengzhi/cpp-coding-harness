@@ -58,6 +58,7 @@ enum class TerminalTokenKind {
     CursorMove,
     CarriageReturn,
     ClearLine,
+    PrivateModeControl,
 };
 
 enum class TokenizeMode {
