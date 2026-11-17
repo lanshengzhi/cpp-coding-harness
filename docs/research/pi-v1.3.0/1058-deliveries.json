@@ -46,7 +46,7 @@
     },
     {
      "path": "cmake/tests/CodingAgentTests.cmake",
-     "sha256": "b3a1ae9c58753f4994b05a31018aa60fad4b454217f46f816862866fa5b78005"
+     "sha256": "7927fde1eeae0ffa4fdc37c20651989df6b9e8b5bc78bec91c6d01acee0aaa84"
     },
     {
      "path": "src/mcp/Client.cpp",
@@ -1224,7 +1224,7 @@
     }
    },
    "revalidation725Timeout": {
-    "reason": "CTest discovery isolates the issue725 DEL resume case and gives it a 90-second hard timeout. The other discovery passes retain their existing cases and resource lock. This build registration change does not alter the receipt cases, frozen scenario mappings, discriminators or capability claims; no new claim is made.",
+    "reason": "CTest discovery moves the issue725 DEL resume case out of the first non-E2E pass into a dedicated pass with a hard 240-second timeout covering both Catch2 sections in one process: up to 130 seconds for the normal section and 70 seconds for the forced-timeout section, plus 40 seconds for setup and teardown; the first pass now excludes [issue725], while the E2E pass keeps its cases and resource lock. This is CTest registration only - no C++ source, test logic, frozen scenario mapping, discriminator or capability claim changes - and each receipt's exact CTest selection re-listed with ctest -N at this change selects exactly the cases recorded in its pinned JUnit artifact, none of them the moved issue725 case, so no JUnit rerun is required and no new claim is made.",
     "changedInputs": [
      "cmake/tests/CodingAgentTests.cmake"
     ]
@@ -2421,7 +2421,7 @@
     },
     {
      "path": "cmake/tests/CodingAgentTests.cmake",
-     "sha256": "b3a1ae9c58753f4994b05a31018aa60fad4b454217f46f816862866fa5b78005"
+     "sha256": "7927fde1eeae0ffa4fdc37c20651989df6b9e8b5bc78bec91c6d01acee0aaa84"
     },
     {
      "path": "src/codemode/Declarations.cpp",
@@ -3817,7 +3817,7 @@
     }
    },
    "revalidation725Timeout": {
-    "reason": "CTest discovery isolates the issue725 DEL resume case and gives it a 90-second hard timeout. The other discovery passes retain their existing cases and resource lock. This build registration change does not alter the receipt cases, frozen scenario mappings, discriminators or capability claims; no new claim is made.",
+    "reason": "CTest discovery moves the issue725 DEL resume case out of the first non-E2E pass into a dedicated pass with a hard 240-second timeout covering both Catch2 sections in one process: up to 130 seconds for the normal section and 70 seconds for the forced-timeout section, plus 40 seconds for setup and teardown; the first pass now excludes [issue725], while the E2E pass keeps its cases and resource lock. This is CTest registration only - no C++ source, test logic, frozen scenario mapping, discriminator or capability claim changes - and each receipt's exact CTest selection re-listed with ctest -N at this change selects exactly the cases recorded in its pinned JUnit artifact, none of them the moved issue725 case, so no JUnit rerun is required and no new claim is made.",
     "changedInputs": [
      "cmake/tests/CodingAgentTests.cmake"
     ]
@@ -5045,7 +5045,7 @@
     },
     {
      "path": "cmake/tests/CodingAgentTests.cmake",
-     "sha256": "b3a1ae9c58753f4994b05a31018aa60fad4b454217f46f816862866fa5b78005"
+     "sha256": "7927fde1eeae0ffa4fdc37c20651989df6b9e8b5bc78bec91c6d01acee0aaa84"
     },
     {
      "path": "src/mcp/Client.cpp",
@@ -6520,7 +6520,7 @@
     }
    },
    "revalidation725Timeout": {
-    "reason": "CTest discovery isolates the issue725 DEL resume case and gives it a 90-second hard timeout. The other discovery passes retain their existing cases and resource lock. This build registration change does not alter the receipt cases, frozen scenario mappings, discriminators or capability claims; no new claim is made.",
+    "reason": "CTest discovery moves the issue725 DEL resume case out of the first non-E2E pass into a dedicated pass with a hard 240-second timeout covering both Catch2 sections in one process: up to 130 seconds for the normal section and 70 seconds for the forced-timeout section, plus 40 seconds for setup and teardown; the first pass now excludes [issue725], while the E2E pass keeps its cases and resource lock. This is CTest registration only - no C++ source, test logic, frozen scenario mapping, discriminator or capability claim changes - and each receipt's exact CTest selection re-listed with ctest -N at this change selects exactly the cases recorded in its pinned JUnit artifact, none of them the moved issue725 case, so no JUnit rerun is required and no new claim is made.",
     "changedInputs": [
      "cmake/tests/CodingAgentTests.cmake"
     ]
@@ -11551,7 +11551,7 @@
     },
     {
      "path": "cmake/tests/CodingAgentTests.cmake",
-     "sha256": "b3a1ae9c58753f4994b05a31018aa60fad4b454217f46f816862866fa5b78005"
+     "sha256": "7927fde1eeae0ffa4fdc37c20651989df6b9e8b5bc78bec91c6d01acee0aaa84"
     },
     {
      "path": "cmake/tests/TestsSetup.cmake",
@@ -13470,7 +13470,7 @@
     }
    },
    "revalidation725Timeout": {
-    "reason": "CTest discovery isolates the issue725 DEL resume case and gives it a 90-second hard timeout. The other discovery passes retain their existing cases and resource lock. This build registration change does not alter the receipt cases, frozen scenario mappings, discriminators or capability claims; no new claim is made.",
+    "reason": "CTest discovery moves the issue725 DEL resume case out of the first non-E2E pass into a dedicated pass with a hard 240-second timeout covering both Catch2 sections in one process: up to 130 seconds for the normal section and 70 seconds for the forced-timeout section, plus 40 seconds for setup and teardown; the first pass now excludes [issue725], while the E2E pass keeps its cases and resource lock. This is CTest registration only - no C++ source, test logic, frozen scenario mapping, discriminator or capability claim changes - and each receipt's exact CTest selection re-listed with ctest -N at this change selects exactly the cases recorded in its pinned JUnit artifact, none of them the moved issue725 case, so no JUnit rerun is required and no new claim is made.",
     "changedInputs": [
      "cmake/tests/CodingAgentTests.cmake"
     ]
@@ -14367,7 +14367,7 @@
     },
     {
      "path": "cmake/tests/CodingAgentTests.cmake",
-     "sha256": "b3a1ae9c58753f4994b05a31018aa60fad4b454217f46f816862866fa5b78005"
+     "sha256": "7927fde1eeae0ffa4fdc37c20651989df6b9e8b5bc78bec91c6d01acee0aaa84"
     },
     {
      "path": "cmake/tests/TestsSetup.cmake",
@@ -15233,7 +15233,7 @@
     }
    },
    "revalidation725Timeout": {
-    "reason": "CTest discovery isolates the issue725 DEL resume case and gives it a 90-second hard timeout. The other discovery passes retain their existing cases and resource lock. This build registration change does not alter the receipt cases, frozen scenario mappings, discriminators or capability claims; no new claim is made.",
+    "reason": "CTest discovery moves the issue725 DEL resume case out of the first non-E2E pass into a dedicated pass with a hard 240-second timeout covering both Catch2 sections in one process: up to 130 seconds for the normal section and 70 seconds for the forced-timeout section, plus 40 seconds for setup and teardown; the first pass now excludes [issue725], while the E2E pass keeps its cases and resource lock. This is CTest registration only - no C++ source, test logic, frozen scenario mapping, discriminator or capability claim changes - and each receipt's exact CTest selection re-listed with ctest -N at this change selects exactly the cases recorded in its pinned JUnit artifact, none of them the moved issue725 case, so no JUnit rerun is required and no new claim is made.",
     "changedInputs": [
      "cmake/tests/CodingAgentTests.cmake"
     ]
@@ -15790,7 +15790,7 @@
     },
     {
      "path": "cmake/tests/CodingAgentTests.cmake",
-     "sha256": "b3a1ae9c58753f4994b05a31018aa60fad4b454217f46f816862866fa5b78005"
+     "sha256": "7927fde1eeae0ffa4fdc37c20651989df6b9e8b5bc78bec91c6d01acee0aaa84"
     },
     {
      "path": "fixtures/pi-v1.3.0/audit-1201/terminal-colors.json",
@@ -16945,7 +16945,7 @@
     }
    },
    "revalidation725Timeout": {
-    "reason": "CTest discovery isolates the issue725 DEL resume case and gives it a 90-second hard timeout. The other discovery passes retain their existing cases and resource lock. This build registration change does not alter the receipt cases, frozen scenario mappings, discriminators or capability claims; no new claim is made.",
+    "reason": "CTest discovery moves the issue725 DEL resume case out of the first non-E2E pass into a dedicated pass with a hard 240-second timeout covering both Catch2 sections in one process: up to 130 seconds for the normal section and 70 seconds for the forced-timeout section, plus 40 seconds for setup and teardown; the first pass now excludes [issue725], while the E2E pass keeps its cases and resource lock. This is CTest registration only - no C++ source, test logic, frozen scenario mapping, discriminator or capability claim changes - and each receipt's exact CTest selection re-listed with ctest -N at this change selects exactly the cases recorded in its pinned JUnit artifact, none of them the moved issue725 case, so no JUnit rerun is required and no new claim is made.",
     "changedInputs": [
      "cmake/tests/CodingAgentTests.cmake"
     ]

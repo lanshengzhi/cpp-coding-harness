@@ -252,9 +252,12 @@ include_guard(GLOBAL)
     # executable's cases by the `E2E: ` name prefix and the issue725 tag.
     catch_discover_tests(cch_tests_coding_agent_interactive ADD_TAGS_AS_LABELS
         TEST_SPEC "~\"E2E: *\"~[issue725]")
-    # The DEL resume case has a 60-second internal wait; CTest bounds the whole process.
+    # Catch2 runs both sections in one process. The normal section can use
+    # a 10-second drain and two 60-second waits; the forced-timeout section
+    # can use another 10-second drain and 60-second recovery wait. Allow
+    # 200 seconds for those bounded waits and 40 for setup and teardown.
     catch_discover_tests(cch_tests_coding_agent_interactive ADD_TAGS_AS_LABELS
-        TEST_SPEC "[issue725]" PROPERTIES TIMEOUT 90)
+        TEST_SPEC "[issue725]" PROPERTIES TIMEOUT 240)
     catch_discover_tests(cch_tests_coding_agent_interactive ADD_TAGS_AS_LABELS
         TEST_SPEC "E2E: *"
         PROPERTIES RESOURCE_LOCK "cch-interactive-boot-e2e-workspace")
