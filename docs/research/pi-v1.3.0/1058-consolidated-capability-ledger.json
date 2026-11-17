@@ -76,7 +76,7 @@
           },
           {
             "path": "cmake/tests/CodingAgentTests.cmake",
-            "sha256": "2bd7e22b4902bc7f0c9bb01ed815dcb5ac62830572678dd6e2a72c4a1d12c2d5"
+            "sha256": "b3a1ae9c58753f4994b05a31018aa60fad4b454217f46f816862866fa5b78005"
           },
           {
             "path": "src/mcp/Client.cpp",
@@ -1252,6 +1252,12 @@
               "sha256": "2ca9ed2b3bca754e2f8da2947a0f409b9ceabb0de59515fa9433fd74cb66fae4"
             }
           }
+        },
+        "revalidation725Timeout": {
+          "reason": "CTest discovery isolates the issue725 DEL resume case and gives it a 90-second hard timeout. The other discovery passes retain their existing cases and resource lock. This build registration change does not alter the receipt cases, frozen scenario mappings, discriminators or capability claims; no new claim is made.",
+          "changedInputs": [
+            "cmake/tests/CodingAgentTests.cmake"
+          ]
         }
       },
       {
@@ -2445,7 +2451,7 @@
           },
           {
             "path": "cmake/tests/CodingAgentTests.cmake",
-            "sha256": "2bd7e22b4902bc7f0c9bb01ed815dcb5ac62830572678dd6e2a72c4a1d12c2d5"
+            "sha256": "b3a1ae9c58753f4994b05a31018aa60fad4b454217f46f816862866fa5b78005"
           },
           {
             "path": "src/codemode/Declarations.cpp",
@@ -3839,6 +3845,12 @@
               "sha256": "13101cc479266c351a18eaff7ae65c66b575c14fdd552af55c1ab3df9877b637"
             }
           }
+        },
+        "revalidation725Timeout": {
+          "reason": "CTest discovery isolates the issue725 DEL resume case and gives it a 90-second hard timeout. The other discovery passes retain their existing cases and resource lock. This build registration change does not alter the receipt cases, frozen scenario mappings, discriminators or capability claims; no new claim is made.",
+          "changedInputs": [
+            "cmake/tests/CodingAgentTests.cmake"
+          ]
         }
       },
       {
@@ -5063,7 +5075,7 @@
           },
           {
             "path": "cmake/tests/CodingAgentTests.cmake",
-            "sha256": "2bd7e22b4902bc7f0c9bb01ed815dcb5ac62830572678dd6e2a72c4a1d12c2d5"
+            "sha256": "b3a1ae9c58753f4994b05a31018aa60fad4b454217f46f816862866fa5b78005"
           },
           {
             "path": "src/mcp/Client.cpp",
@@ -6507,6 +6519,12 @@
               "sha256": "f2d86d3f5e46ba471ed69979c535954b1daf4d344d96aa9d20ac4c8c35a5b152"
             }
           }
+        },
+        "revalidation725Timeout": {
+          "reason": "CTest discovery isolates the issue725 DEL resume case and gives it a 90-second hard timeout. The other discovery passes retain their existing cases and resource lock. This build registration change does not alter the receipt cases, frozen scenario mappings, discriminators or capability claims; no new claim is made.",
+          "changedInputs": [
+            "cmake/tests/CodingAgentTests.cmake"
+          ]
         }
       },
       {
@@ -11534,7 +11552,7 @@
           },
           {
             "path": "cmake/tests/CodingAgentTests.cmake",
-            "sha256": "2bd7e22b4902bc7f0c9bb01ed815dcb5ac62830572678dd6e2a72c4a1d12c2d5"
+            "sha256": "b3a1ae9c58753f4994b05a31018aa60fad4b454217f46f816862866fa5b78005"
           },
           {
             "path": "cmake/tests/TestsSetup.cmake",
@@ -13451,6 +13469,12 @@
               "sha256": "c8c981129c972f4a2bf79dc408868905c28f72d4375f6a031fb6cf557ebf02d7"
             }
           }
+        },
+        "revalidation725Timeout": {
+          "reason": "CTest discovery isolates the issue725 DEL resume case and gives it a 90-second hard timeout. The other discovery passes retain their existing cases and resource lock. This build registration change does not alter the receipt cases, frozen scenario mappings, discriminators or capability claims; no new claim is made.",
+          "changedInputs": [
+            "cmake/tests/CodingAgentTests.cmake"
+          ]
         }
       },
       {
@@ -14344,7 +14368,7 @@
           },
           {
             "path": "cmake/tests/CodingAgentTests.cmake",
-            "sha256": "2bd7e22b4902bc7f0c9bb01ed815dcb5ac62830572678dd6e2a72c4a1d12c2d5"
+            "sha256": "b3a1ae9c58753f4994b05a31018aa60fad4b454217f46f816862866fa5b78005"
           },
           {
             "path": "cmake/tests/TestsSetup.cmake",
@@ -15208,6 +15232,12 @@
               "sha256": "33f733520fbb4da9b33da5ce5ea5fd29ef01be92d643fa65315ee4bbc24e2f53"
             }
           }
+        },
+        "revalidation725Timeout": {
+          "reason": "CTest discovery isolates the issue725 DEL resume case and gives it a 90-second hard timeout. The other discovery passes retain their existing cases and resource lock. This build registration change does not alter the receipt cases, frozen scenario mappings, discriminators or capability claims; no new claim is made.",
+          "changedInputs": [
+            "cmake/tests/CodingAgentTests.cmake"
+          ]
         }
       },
       {
@@ -15761,7 +15791,7 @@
           },
           {
             "path": "cmake/tests/CodingAgentTests.cmake",
-            "sha256": "2bd7e22b4902bc7f0c9bb01ed815dcb5ac62830572678dd6e2a72c4a1d12c2d5"
+            "sha256": "b3a1ae9c58753f4994b05a31018aa60fad4b454217f46f816862866fa5b78005"
           },
           {
             "path": "fixtures/pi-v1.3.0/audit-1201/terminal-colors.json",
@@ -16914,6 +16944,12 @@
               "sha256": "ea09227e02139bb9cb3ee4c9520d0a36dbefd66d5c95f4c9c6086369626a2a29"
             }
           }
+        },
+        "revalidation725Timeout": {
+          "reason": "CTest discovery isolates the issue725 DEL resume case and gives it a 90-second hard timeout. The other discovery passes retain their existing cases and resource lock. This build registration change does not alter the receipt cases, frozen scenario mappings, discriminators or capability claims; no new claim is made.",
+          "changedInputs": [
+            "cmake/tests/CodingAgentTests.cmake"
+          ]
         }
       },
       {

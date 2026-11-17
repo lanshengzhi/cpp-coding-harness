@@ -248,10 +248,13 @@ include_guard(GLOBAL)
     # workspace directory the CLI-level goldens render (#529): discover them
     # separately so they carry a RESOURCE_LOCK that serializes the sibling
     # processes under the parallel ctest default, while everything else
-    # discovers without the lock. The two discovery passes partition the
-    # executable's cases by the cases' unique `E2E: ` name prefix.
+    # discovers without the lock. The discovery passes partition the
+    # executable's cases by the `E2E: ` name prefix and the issue725 tag.
     catch_discover_tests(cch_tests_coding_agent_interactive ADD_TAGS_AS_LABELS
-        TEST_SPEC "~E2E: *")
+        TEST_SPEC "~\"E2E: *\"~[issue725]")
+    # The DEL resume case has a 60-second internal wait; CTest bounds the whole process.
+    catch_discover_tests(cch_tests_coding_agent_interactive ADD_TAGS_AS_LABELS
+        TEST_SPEC "[issue725]" PROPERTIES TIMEOUT 90)
     catch_discover_tests(cch_tests_coding_agent_interactive ADD_TAGS_AS_LABELS
         TEST_SPEC "E2E: *"
         PROPERTIES RESOURCE_LOCK "cch-interactive-boot-e2e-workspace")
